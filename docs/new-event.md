@@ -9,7 +9,7 @@
 ## 2. フォルダを作る
 
 ```sh
-pnpm new-event 2030-05-05-mycon --name "5/5 マイコン" --date 2030-05-05 --venue "○○会館" \
+uv run caimawaru new-event 2030-05-05-mycon --name "5/5 マイコン" --date 2030-05-05 --venue "○○会館" \
   --sockbase https://list.sockbase.net/circle-lists/xxxx --map   # Sockbase 以外なら --sockbase は付けない
 ```
 
@@ -32,8 +32,8 @@ pnpm new-event 2030-05-05-mycon --name "5/5 マイコン" --date 2030-05-05 --ve
 主催の元データを `sources/` に置き、`event.json` の `sources` に形式を書いて取り込みます（[importers.md](importers.md)）。
 
 ```sh
-pnpm import-circles <eventId> --fetch --dry-run   # Sockbase なら取得もまとめて。まず差分を確認
-pnpm import-circles <eventId> --fetch
+uv run caimawaru import <eventId> --fetch --dry-run   # Sockbase なら取得もまとめて。まず差分を確認
+uv run caimawaru import <eventId> --fetch
 ```
 
 - Sockbase 以外（配布 CSV・JSON など）は、元データを `sources/` に保存して `type` と `columns` を書く
@@ -48,13 +48,13 @@ pnpm import-circles <eventId> --fetch
 ## 6. 確かめる
 
 ```sh
-pnpm data <eventId>
+uv run caimawaru data <eventId>
 pnpm dev <eventId>     # スマホ幅（〜400px）と PC 幅の両方で見る
-pnpm test                 # 全サークルのスペースが配置図にあるか等
+pnpm test                 # ページから見た circles.json の形
 pnpm build <eventId>
 ```
 
 ## 7. 公開・当日の更新
 
 - `dist/<outDir>/` を公開先に置く（README の「公開」）
-- お品書きは `pnpm menu <eventId> <URL>` で追加し、`pnpm build <eventId>` か `data/circles.json` の差し替えで反映
+- お品書きは `uv run caimawaru menu <eventId> <URL>` で追加し、`pnpm build <eventId>` か `data/circles.json` の差し替えで反映

@@ -5,8 +5,8 @@ CAIMawaru は、それを **取得 → 変換 → イベントデータ** の3�
 
 | 段階 | 置き場所 | 誰が・何で |
 |---|---|---|
-| 取得 | `events/<eventId>/sources/` | 人が保存する／インポーターの `fetch`（`pnpm import-circles --fetch`）／エージェントが取得する |
-| 変換 | `tools/importers/`・イベントごとの Python | `pnpm import-circles`（インポーターの `read`） |
+| 取得 | `events/<eventId>/sources/` | 人が保存する／インポーターの `fetch`（`uv run caimawaru import --fetch`）／エージェントが取得する |
+| 変換 | `tools/caimawaru/importers/`・イベントごとの Python | `uv run caimawaru import`（インポーターの `read`） |
 | イベントデータ | `events/<eventId>/data/*.csv` | 取り込み結果。人・エージェントが直接編集してもよい |
 
 ## 使い方
@@ -14,10 +14,10 @@ CAIMawaru は、それを **取得 → 変換 → イベントデータ** の3�
 `event.json` の `sources` に取り込み元を書き、取り込みます。
 
 ```sh
-pnpm import-circles <eventId> --dry-run   # 何が変わるかだけ表示
-pnpm import-circles <eventId>             # sources/ の元データから取り込む → pnpm data まで実行
-pnpm import-circles <eventId> --fetch     # 元データを取得してから取り込む（fetch に対応したインポーターのみ）
-pnpm import-circles <eventId> --list      # 使えるインポーター
+uv run caimawaru import <eventId> --dry-run   # 何が変わるかだけ表示
+uv run caimawaru import <eventId>             # sources/ の元データから取り込む → uv run caimawaru data まで実行
+uv run caimawaru import <eventId> --fetch     # 元データを取得してから取り込む（fetch に対応したインポーターのみ）
+uv run caimawaru import <eventId> --list      # 使えるインポーター
 ```
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きします。返さなかった列（多くは `tags`・`notes` など）は直接編集した値が残ります
@@ -87,7 +87,7 @@ def fetch(source, path):  # 任意。--fetch で呼ばれる
 ```
 
 - 返す行のキーは circles.csv の列名と `menus`。`id` か `space` は必須。値の正規化は共通処理が行う
-- 何度も使う形式になったら、`tools/importers/<type>.py` に組み込みとして移し、テスト（`tools/tests/`）を足す
+- 何度も使う形式になったら、`tools/caimawaru/importers/<type>.py` に組み込みとして移し、テスト（`tools/tests/`）を足す
 
 ## エージェントによる取得
 

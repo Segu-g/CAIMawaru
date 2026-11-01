@@ -5,7 +5,8 @@ import react from '@vitejs/plugin-react';
 
 // どのイベントを開発・ビルドするかは、pnpm dev <eventId> / pnpm build <eventId> で指定する。
 // scripts/vite.mjs・scripts/build-all.mjs が内部用の環境変数 CAIMAWARU_EVENT_ID で渡す（利用者が設定するものではない）。
-// イベントの設定は events/<eventId>/event.json、配置図は events/<eventId>/layout.json（なければ配置図なし）。
+// 読むのは events/<eventId>/event.json（storeId・title・outDir）と、Python の caimawaru data が書いた
+// public/data/circles.json だけ（Python は呼ばない。依存関係は docs/architecture.md）。
 const root = import.meta.dirname;
 // テスト（vitest）はイベントに依存しないのでイベントの指定がなくてもよい
 const testing = !!process.env.VITEST;
@@ -24,10 +25,17 @@ const config = (eventId ? JSON.parse(readFileSync(resolve(dir, 'event.json'), 'u
 };
 if (!config.storeId || !config.title) throw new Error(`events/${eventId}/event.json に storeId と title が必要です`);
 
+// ページが読むデータ。なければ先に Python 側で作る
+const dataJson = resolve(dir, 'public', 'data', 'circles.json');
+if (eventId && !existsSync(dataJson)) {
+  throw new Error(`events/${eventId}/public/data/circles.json がありません。先に uv run caimawaru data ${eventId} で作ってください`);
+}
+const hasMap = !!eventId && !!(JSON.parse(readFileSync(dataJson, 'utf-8')) as { layout?: unknown }).layout;
+
 // index.html の %VITE_TITLE% とアプリの import.meta.env に渡す
 process.env.VITE_STORE_ID = config.storeId;
 process.env.VITE_TITLE = config.title;
-process.env.VITE_HAS_MAP = String(existsSync(resolve(dir, 'layout.json')));
+process.env.VITE_HAS_MAP = String(hasMap);
 
 // ビルドごとに assets のファイル名を変える。公開前に新しいファイル名の URL が一度でも
 // 取得されると、CDN（Cloudflare など）がその 404 をキャッシュしてページが壊れることがあるため、

@@ -5,7 +5,7 @@ CAIMawaru がページを作るときに読むのは、この文書で決めた�
 
 ```
 主催の元データ（任意の形式）            イベントデータ（この文書）              ページ
-events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/event.json      ──pnpm data──▶  public/data/circles.json
+events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/event.json      ──uv run caimawaru data──▶  public/data/circles.json
                           pnpm import-    events/<eventId>/layout.json
                           circles         events/<eventId>/data/circles.csv
                                           events/<eventId>/data/menus.csv
@@ -15,7 +15,7 @@ events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/eve
   コマンドでは `pnpm dev <eventId>` のように指定し、`storeId` と出力先（`dist/<eventId>/`）の既定値にもなる
 - イベントデータは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）
 - `public/data/circles.json` は生成物で、直接編集しない
-- 検証は `pnpm data <eventId> --check`（`tools/build.py`）。エラーがあると `circles.json` は更新されない
+- 検証は `uv run caimawaru data <eventId> --check`（`tools/caimawaru/build.py`）。エラーがあると `circles.json` は更新されない
 
 ## event.json
 

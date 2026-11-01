@@ -10,12 +10,11 @@ import { useTheme } from './useTheme';
 import { useMediaQuery } from './useMediaQuery';
 import SpaceMap from './components/SpaceMap';
 import MenuDialog from './components/MenuDialog';
-import { buildLayout } from './layout';
 import { slotColorCss } from './slotColors';
 
 // これ以上の幅（PC・タブレット横）では配置図と一覧を横に並べる。style.css の同じ値と合わせる
 const WIDE_QUERY = '(min-width: 900px)';
-// 配置図を載せるイベントか（events/<eventId>/layout.json があるか。vite.config.ts が設定）。載せない場合は一覧とマイリストだけ
+// 配置図を載せるイベントか（circles.json に layout があるか。vite.config.ts が設定）。載せない場合は一覧とマイリストだけ
 const HAS_MAP = import.meta.env.VITE_HAS_MAP !== 'false';
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/circles.json`;
@@ -55,8 +54,7 @@ export default function App() {
 
   const circles = load.status === 'ready' ? load.data.circles : [];
   const event = load.status === 'ready' ? load.data.event : undefined;
-  const layoutSpec = load.status === 'ready' ? load.data.layout : undefined;
-  const layout = useMemo(() => (layoutSpec ? buildLayout(layoutSpec) : undefined), [layoutSpec]);
+  const layout = load.status === 'ready' ? load.data.layout : undefined;
   const tags = useMemo(() => allTags(circles), [circles]);
   const events = useMemo(() => allEvents(circles), [circles]);
   const visible = useMemo(

@@ -1,36 +1,24 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 // @ts-ignore scripts/ は型定義のない Node 用の JS
-import { knownEvents, takeEvent } from './lib.mjs';
+import { knownEvents, requireEvent } from './lib.mjs';
 
-// tools/tests/test_eventargs.py と同じ規則を確かめる
 const known = ['example', 'other'];
 
-describe('takeEvent（イベントの指定）', () => {
+describe('requireEvent（pnpm dev / preview のイベントの指定）', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('events/ にサンプルがある', () => {
     expect(knownEvents()).toContain('example');
   });
 
-  it('最初の引数がイベント名なら取り出す', () => {
-    expect(takeEvent(['example', '--check'], known)).toMatchObject({ eventId: 'example', rest: ['--check'] });
+  it('最初の引数を eventId として取り出し、残りは Vite に渡す', () => {
+    expect(requireEvent(['example', '--host'], 'pnpm dev <eventId>', known)).toEqual({ eventId: 'example', rest: ['--host'] });
   });
 
-  it('--event <eventId> と --event=<eventId> はどの位置でもよい', () => {
-    expect(takeEvent(['--check', '--event', 'example'], known)).toMatchObject({ eventId: 'example', rest: ['--check'] });
-    expect(takeEvent(['--event=example', '--port', '1'], known)).toMatchObject({ eventId: 'example', rest: ['--port', '1'] });
-  });
-
-  it('両方で同じイベントなら可、違えばエラー', () => {
-    expect(takeEvent(['example', '--event', 'example'], known)).toMatchObject({ eventId: 'example', rest: [] });
-    expect(takeEvent(['other', '--event', 'example'], known).error).toMatch(/2つ/);
-    expect(takeEvent(['--event'], known).error).toBeDefined();
-  });
-
-  it('環境変数は使わない。イベント名でない引数は残す', () => {
-    process.env.EVENT = 'example';
-    try {
-      expect(takeEvent(['https://example.com/'], known)).toMatchObject({ eventId: undefined, rest: ['https://example.com/'] });
-    } finally {
-      delete process.env.EVENT;
-    }
+  it.each([[[]], [['--host']], [['nosuch']]])('指定がない・不明なイベントなら終了する: %j', (args) => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`exit ${code}`); }) as never);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => requireEvent(args, 'pnpm dev <eventId>', known)).toThrow('exit 1');
+    expect(exit).toHaveBeenCalledWith(1);
   });
 });

@@ -17,7 +17,7 @@ event.json:
 import json as _json
 from pathlib import Path
 
-from importers.csv import map_record
+from caimawaru.importers.csv import map_record
 
 DESCRIPTION = "JSON（パスの対応表で読み取る）"
 

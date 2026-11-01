@@ -5,7 +5,9 @@
 同人誌即売会の **サークルリスト＋会場配置図** のページを、イベントごとの設定ファイルと CSV から作る静的サイトです。
 スマホで当日会場を回ることを前提に、配置図・検索・★／タグ／購入済みのチェック・お品書きリンクをまとめて表示します。
 
-- Vite + React + TypeScript（ページ）／ Python 3（データの生成・検証・取り込み。標準ライブラリのみ）
+- **ページ**: Vite + React + TypeScript（`pnpm`）
+- **イベントデータの CLI `caimawaru`**: Python 3（標準ライブラリのみ。`uv run caimawaru`）。データの検証・生成・取り込み
+- 2つは互いを呼び出さない。境界はファイル（`circles.json`）だけ（[docs/architecture.md](docs/architecture.md)）
 - イベントに依存する情報はすべて `events/<eventId>/` に置き、コードには書かない
 - 出力は相対パスの静的ファイルなので、GitHub Pages・nginx などどこにでも置ける
 
@@ -13,17 +15,17 @@
 手元の `events/<eventId>/` に置いて使います（必要なら別の非公開リポジトリで管理してください）。
 
 ```sh
+uv run caimawaru data example     # イベントデータを検証し、ページが読む circles.json を作る（Python）
 pnpm install
-pnpm data example     # CSV → circles.json を生成・検証
-pnpm dev example      # 開発サーバ
+pnpm dev example                  # ページの開発サーバ（Node）
 ```
 
 ## 必要なもの
 
-- Node.js（`.node-version`。fnm などで合わせる）と pnpm
-- Python 3.10 以上（`python3` → `python` → `py -3` の順に探す。環境変数 `PYTHON` で指定も可）
-- Linux・macOS・Windows で動く（コマンドはシェルに依存しない。CI で3つの OS を確かめている）
+- ページ: Node.js（`.node-version`。fnm などで合わせる）と pnpm
+- イベントデータの CLI: [uv](https://docs.astral.sh/uv/)（Python 3.10 以上を自動で用意する）。uv を使わない場合は `pip install -e .` で `caimawaru` コマンドが入る
 - Sockbase から取得する場合は Google Chrome（headless で描画済み HTML を保存するため）
+- Linux・macOS・Windows で動く（CI で3つの OS を確かめている）
 
 ## イベントの置き方
 
@@ -37,43 +39,52 @@ events/<eventId>/
   data/circles.csv           サークル情報                            │ （docs/event-data.md）
   data/menus.csv             お品書きのURL                           ┘
   sources/                   主催の元データ（Sockbase の HTML・配布 CSV など。任意の形式）
-  public/data/circles.json   ページが読み込むデータ（pnpm data が生成。直接編集しない）
+  public/data/circles.json   ページが読み込むデータ（uv run caimawaru data が生成。直接編集しない）
 ```
 
 - [docs/event-data.md](docs/event-data.md) — イベントデータの仕様（event.json・circles.csv・menus.csv）
 - [docs/importers.md](docs/importers.md) — 元データの取得と変換（Sockbase・CSV・JSON・独自形式）
 - [docs/layout.md](docs/layout.md) — 配置図の書き方
-- [docs/new-event.md](docs/new-event.md) — 新しいイベントを追加する手順（`pnpm new-event <eventId>` で雛形を作る）
+- [docs/new-event.md](docs/new-event.md) — 新しいイベントを追加する手順（`uv run caimawaru new-event <eventId>` で雛形を作る）
 
 ## コマンド
 
-イベントを対象にするコマンドは、最初の引数にイベントのフォルダ名（`<eventId>`）を指定します。
-`--event <eventId>` でも指定できます（最初の引数と両方で違うイベントを指定するとエラー）。環境変数では指定しません。
+### イベントデータ（Python: `uv run caimawaru <command>`）
 
 | コマンド | 内容 |
 |---|---|
-| `pnpm new-event <eventId> [--map] [--sockbase URL] …` | イベントのフォルダを作る |
-| `pnpm import-circles <eventId> [--fetch] [--dry-run]` | 主催の元データ（sources）をイベントデータに取り込む |
-| `pnpm data <eventId>` | CSV・設定・配置図を検証して `circles.json` を生成（`--check` で検証のみ） |
-| `pnpm dev <eventId> [Vite のオプション]` | 開発サーバ（例: `pnpm dev example --host`） |
-| `pnpm preview <eventId>` | ビルド結果の確認（先に `pnpm build <eventId>`） |
-| `pnpm menu <eventId> <URL>…` | お品書きを登録（下記） |
-| `pnpm build [<eventId>…]` | 型チェック・データ検証のうえ全イベント（または指定イベント）を `dist/` にビルド |
-| `pnpm check` | 全イベントのデータを検証 |
-| `pnpm test` | テスト（ページ: 配置図・検索・保存形式など、生成済みの全イベントの配置図／ツール: 取り込み・イベントの指定） |
+| `uv run caimawaru list` | イベントの一覧 |
+| `uv run caimawaru new-event <eventId> [--map] [--sockbase URL] …` | イベントのフォルダを作る |
+| `uv run caimawaru import <eventId> [--fetch] [--dry-run]` | 主催の元データ（sources）をイベントデータに取り込む |
+| `uv run caimawaru importers` | 使えるインポーターの一覧 |
+| `uv run caimawaru menu <eventId> <URL>…` | お品書きを登録（下記） |
+| `uv run caimawaru data <eventId> [--check]` | イベントデータを検証し、ページが読む `circles.json` を生成（`--check` は検証のみ） |
+| `uv run caimawaru check [<eventId>…]` | イベントデータを検証（省略すると全イベント） |
+| `uv run python -m unittest discover -s tools/tests` | テスト（配置図の展開・取り込み・CLI） |
 
-Python のツールは直接起動してもよい（例: `python3 tools/build.py example --check`）。
+`<eventId>` はイベントのフォルダ名（`events/` の下）。プロジェクトのフォルダの中ならどこから実行してもよい（`--root` で指定も可）。
+
+### ページ（Node: `pnpm <command>`）
+
+| コマンド | 内容 |
+|---|---|
+| `pnpm dev <eventId> [Vite のオプション]` | 開発サーバ（例: `pnpm dev example --host`） |
+| `pnpm build [<eventId>…]` | 型チェックのうえ全イベント（または指定イベント）を `dist/` にビルド |
+| `pnpm preview <eventId>` | ビルド結果の確認（先に `pnpm build <eventId>`） |
+| `pnpm test` | テスト（検索・保存形式・配置図の操作など、生成済みの `circles.json` の形） |
+
+ページのコマンドは `circles.json` を読むだけで、Python は呼びません。`circles.json` がなければ、先に `uv run caimawaru data <eventId>` を実行するよう知らせて止まります。
 
 ### お品書きを登録する
 
 ```sh
-pnpm menu <eventId> https://x.com/<ID>/status/<番号>             # 投稿したアカウントからサークルを自動判定
-pnpm menu <eventId> URL1 URL2 URL3                               # まとめて
-pnpm menu <eventId> --circle A-05 --note 新刊 https://booth.pm/… # X 以外はサークルを指定
-pnpm menu <eventId> -                                            # 1行ずつ貼り付け。Ctrl+D で終了
+uv run caimawaru menu <eventId> https://x.com/<ID>/status/<番号>             # 投稿したアカウントからサークルを自動判定
+uv run caimawaru menu <eventId> URL1 URL2 URL3                               # まとめて
+uv run caimawaru menu <eventId> --circle A-05 --note 新刊 https://booth.pm/… # X 以外はサークルを指定
+uv run caimawaru menu <eventId> -                                            # 1行ずつ貼り付け。Ctrl+D（Windows は Ctrl+Z → Enter）で終了
 ```
 
-サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `pnpm data` まで自動で実行します。
+サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `uv run caimawaru data` まで自動で実行します。
 
 ## 情報の集め方（方針）
 
@@ -87,7 +98,7 @@ pnpm menu <eventId> -                                            # 1行ずつ貼
 
 ## 公開
 
-`pnpm build` で `dist/<outDir>/` ができるので、それを公開先に置きます（相対パス出力なのでサブパスでも可）。
+`uv run caimawaru data <eventId>` でデータを作ってから `pnpm build` すると `dist/<outDir>/` ができるので、それを公開先に置きます（相対パス出力なのでサブパスでも可）。
 データだけの更新なら、公開先の `data/circles.json` を差し替えるだけでも反映されます（ページは `no-cache` で読み込む）。
 
 - CDN を挟む場合、公開前に **まだ置いていないファイルの公開 URL を開かない** でください。404 がキャッシュされてページが壊れることがあります（assets のファイル名にはビルドごとの接尾辞を付けて、事故を減らしています）
@@ -96,20 +107,25 @@ pnpm menu <eventId> -                                            # 1行ずつ貼
 
 ## 構成
 
-| パス | 役割 |
-|---|---|
-| `events/` | イベントごとの設定とデータ |
-| `src/` | ページ本体（React）。イベント固有の値は持たない |
-| `src/layout.ts` | `layout.json` から配置図のセル・ラベルを組み立てる |
-| `src/filter.ts` | 検索・絞り込み・並べ替え |
-| `src/useMine.ts` | 閲覧者の ★・タグ・メモ（localStorage のみに保存） |
-| `src/components/SpaceMap.tsx` | 配置図の描画とタッチ操作 |
-| `tools/build.py` | イベントデータの検証と `circles.json` の生成 |
-| `tools/import_circles.py` | 取り込みの共通処理（正規化・既存データとの合流） |
-| `tools/importers/` | 元データの形式ごとのインポーター（sockbase・csv・json） |
-| `tools/add_menu.py` | お品書き URL の登録 |
-| `tools/new_event.py` | イベントの雛形作成 |
-| `scripts/` | コマンドの入り口（イベントの指定・Python の検出・全イベントのビルドと検証） |
+依存関係（どれがどれを呼ぶか・どのファイルを読み書きするか）は [docs/architecture.md](docs/architecture.md)。
+
+| パス | 言語 | 役割 |
+|---|---|---|
+| `events/` | — | イベントごとのイベントデータと元データ |
+| `src/` | TS | ページ本体（React）。イベント固有の値は持たない |
+| `src/layout.ts` | TS | 配置図の型（展開済みのセルを描くだけ） |
+| `src/filter.ts` | TS | 検索・絞り込み・並べ替え |
+| `src/useMine.ts` | TS | 閲覧者の ★・タグ・メモ（localStorage のみに保存） |
+| `src/components/SpaceMap.tsx` | TS | 配置図の描画とタッチ操作 |
+| `scripts/` | JS | `pnpm dev / build / preview` の入り口（イベントの指定、全イベントのビルド） |
+| `tools/caimawaru/cli.py` | Python | `caimawaru` コマンドの入り口 |
+| `tools/caimawaru/build.py` | Python | イベントデータの検証と `circles.json` の生成 |
+| `tools/caimawaru/layout.py` | Python | `layout.json` の展開（島の番号の振り方・記号の位置・表示範囲） |
+| `tools/caimawaru/importing.py` | Python | 取り込みの共通処理（正規化・既存データとの合流） |
+| `tools/caimawaru/importers/` | Python | 元データの形式ごとのインポーター（sockbase・csv・json） |
+| `tools/caimawaru/menu.py` | Python | お品書き URL の登録 |
+| `tools/caimawaru/new_event.py` | Python | イベントの雛形作成 |
+| `tools/tests/` | Python | CLI・配置図の展開・取り込みのテスト |
 
 ## 閲覧者向けの機能
 

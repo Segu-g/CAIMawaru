@@ -7,7 +7,7 @@
     def read(source: dict, path: Path) -> list[dict]:
         '''path の元データを読み、イベントデータの列名をキーにした行を返す。'''
     def fetch(source: dict, path: Path) -> None:   # 任意
-        '''元データを取得して path に保存する（pnpm import-circles --fetch）。'''
+        '''元データを取得して path に保存する（caimawaru import <eventId> --fetch）。'''
 
 read が返す行:
     - キーは circles.csv の列名（id, space, event, name, kana, penNames, tags, adult, x, pixiv, booth, web, notes, source）の一部
@@ -37,7 +37,7 @@ def load(source: dict, event_dir: Path):
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
     elif kind in BUILTIN:
-        mod = importlib.import_module(f"importers.{kind}")
+        mod = importlib.import_module(f"caimawaru.importers.{kind}")
     else:
         raise ValueError(f"不明な type です: {kind!r}（{', '.join(BUILTIN)}, python のどれか）")
     if not callable(getattr(mod, "read", None)):

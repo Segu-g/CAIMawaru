@@ -1,6 +1,6 @@
 """取り込み（tools/import_circles.py と tools/importers/）のテスト。データはすべて架空。
 
-    python3 -m unittest discover -s tools/tests -t tools   （pnpm test に含まれる）
+    uv run python -m unittest discover -s tools/tests
 """
 import html
 import json
@@ -8,11 +8,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import importers
-import import_circles as ic
-from importers import csv as csv_importer
-from importers import json as json_importer
-from importers import sockbase
+from caimawaru import importers
+from caimawaru import importing as ic
+from caimawaru.importers import csv as csv_importer
+from caimawaru.importers import json as json_importer
+from caimawaru.importers import sockbase
 
 
 def tmpfile(name, text):
