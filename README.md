@@ -31,12 +31,12 @@ CAIMawaru が読む **イベントデータ** を分けています。
 
 ```
 events/<slug>/
-  event.json                 設定とイベント情報（手で編集）          ┐
+  event.json                 設定とイベント情報（直接編集）          ┐
   layout.json                会場配置図（任意。なければ配置図なし）  │ イベントデータ
   data/circles.csv           サークル情報                            │ （docs/event-data.md）
   data/menus.csv             お品書きのURL                           ┘
   sources/                   主催の元データ（Sockbase の HTML・配布 CSV など。任意の形式）
-  public/data/circles.json   ページが読み込むデータ（pnpm data が生成。手で編集しない）
+  public/data/circles.json   ページが読み込むデータ（pnpm data が生成。直接編集しない）
 ```
 
 - [docs/event-data.md](docs/event-data.md) — イベントデータの仕様（event.json・circles.csv・menus.csv）

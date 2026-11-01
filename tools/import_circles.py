@@ -11,8 +11,8 @@ data/circles.csv と data/menus.csv に取り込む。
     EVENT=<slug> pnpm import-circles --input <ファイル>   # source が1つのとき、元データのファイルを直接指定する
     EVENT=<slug> pnpm import-circles --list       # 使えるインポーターの一覧
 
-- 取り込んだ列（インポーターが返した列）は毎回上書きする。返さなかった列（tags / notes など）は手で書いた値を残す
-- menus.csv は取り込んだお品書き URL を追加し、手で追加した行は残す
+- 取り込んだ列（インポーターが返した列）は毎回上書きする。返さなかった列（tags / notes など）は直接編集した値を残す
+- menus.csv は取り込んだお品書き URL を追加し、直接追加した行は残す
 - 公式リストから消えたサークルは知らせる（配置変更・参加取り消しの可能性。menus.csv に残った行は build.py がエラーにする）
 - 書き込んだあと build.py で検証・生成する（--no-build で省略）
 """
@@ -177,7 +177,7 @@ def run(args):
             print(f"{label}: 取得しています → {path.relative_to(events.ROOT) if path.is_relative_to(events.ROOT) else path}")
             mod.fetch(source, path)
         if not path.exists():
-            sys.exit(f"{label}: 元データ {path} がありません（--fetch で取得するか、手で置いてください）")
+            sys.exit(f"{label}: 元データ {path} がありません（--fetch で取得するか、ここに置いてください）")
 
         try:
             raws = mod.read(source, path)
@@ -198,7 +198,7 @@ def run(args):
     for w in warnings:
         print(f"警告: {w}", file=sys.stderr)
     print(f"サークル {len(circles)} 件（新規 {len(report['added'])}・変更 {len(report['changed'])}）、お品書きの追加 {report['added_menus']} 件")
-    print(f"手で書く列（既存の値を残す）: {', '.join(report['manual_cols']) or 'なし'}")
+    print(f"直接編集する列（既存の値を残す）: {', '.join(report['manual_cols']) or 'なし'}")
     if report["removed"]:
         print(f"取り込み元から消えた id: {', '.join(report['removed'])}", file=sys.stderr)
     if report["orphan_menus"]:

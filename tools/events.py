@@ -3,11 +3,11 @@
     EVENT=example python3 tools/build.py
 
 events/<slug>/
-    event.json            設定とイベント情報（手で編集）
+    event.json            設定とイベント情報（直接編集）
     layout.json           配置図（任意。なければ配置図なし）
     sources/              主催が配る元データ（任意の形式。pnpm import-circles が data/ に変換する）
-    data/circles.csv      サークル情報（イベントデータ。手で編集・pnpm import-circles）
-    data/menus.csv        お品書きのURL（イベントデータ。手で編集・pnpm menu・pnpm import-circles）
+    data/circles.csv      サークル情報（イベントデータ。直接編集・pnpm import-circles）
+    data/menus.csv        お品書きのURL（イベントデータ。直接編集・pnpm menu・pnpm import-circles）
     public/data/circles.json  ページが読み込むデータ（build.py が生成）
 
 イベントデータの仕様は docs/event-data.md。

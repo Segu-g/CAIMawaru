@@ -58,11 +58,11 @@ class NormalizeTest(unittest.TestCase):
 
 class MergeTest(unittest.TestCase):
     def test_manual_columns_kept_and_imported_columns_overwritten(self):
-        existing = [{**{c: "" for c in ic.CIRCLE_COLS}, "id": "a-01", "space": "A-01", "name": "旧名", "tags": "手書きタグ", "notes": "メモ"}]
+        existing = [{**{c: "" for c in ic.CIRCLE_COLS}, "id": "a-01", "space": "A-01", "name": "旧名", "tags": "既存タグ", "notes": "メモ"}]
         imported = [({"id": "a-01", "space": "A-01", "name": "新名", "source": "s"}, [], {"id", "space", "name", "source"})]
         circles, _, report = ic.merge(imported, existing, [], "2030-01-01")
         self.assertEqual(circles[0]["name"], "新名")
-        self.assertEqual(circles[0]["tags"], "手書きタグ")
+        self.assertEqual(circles[0]["tags"], "既存タグ")
         self.assertEqual(circles[0]["notes"], "メモ")
         self.assertEqual(report["changed"], ["a-01"])
         self.assertIn("tags", report["manual_cols"])

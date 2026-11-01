@@ -7,7 +7,7 @@
     （= pnpm new-event <slug> ...）
 
     --sockbase を付けると、取り込み元（sources）に Sockbase の公式リストを入れる。
-    ほかの形式（CSV・JSON・独自形式）は event.json の sources に手で書く（docs/importers.md）。
+    ほかの形式（CSV・JSON・独自形式）は event.json の sources に書く（docs/importers.md）。
 
     <slug> は英数字・ハイフン（例: 2027-03-21-mycon）。★・タグの保存先（storeId）の既定値にもなる。
     --map を付けると配置図の雛形 layout.json も作る（主催が配置図の二次利用を認めているときだけ載せる）。

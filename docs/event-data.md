@@ -12,12 +12,12 @@ events/<slug>/sources/…   ──取り込み──▶  events/<slug>/event.jso
 ```
 
 - イベントデータは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）
-- `public/data/circles.json` は生成物で、手で編集しない
+- `public/data/circles.json` は生成物で、直接編集しない
 - 検証は `EVENT=<slug> pnpm data --check`（`tools/build.py`）。エラーがあると `circles.json` は更新されない
 
 ## event.json
 
-イベントの設定とページに出すイベント情報。手で書く。
+イベントの設定とページに出すイベント情報。取り込みや生成では作られないので、人かエージェントが直接編集する。
 
 | キー | 必須 | 内容 |
 |---|---|---|

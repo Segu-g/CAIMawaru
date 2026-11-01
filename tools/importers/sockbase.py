@@ -63,7 +63,7 @@ def fetch(source, path):
         raise ValueError(f"Sockbase の公式リストの URL ではありません: {url!r}")
     chrome = next((c for c in ("google-chrome", "chromium", "chromium-browser") if shutil.which(c)), None)
     if not chrome:
-        raise RuntimeError("Google Chrome（または Chromium）が見つかりません。手で HTML を保存して file に置いてください")
+        raise RuntimeError("Google Chrome（または Chromium）が見つかりません。ブラウザで描画済みの HTML を保存して file に置いてください")
     out = subprocess.run(
         [chrome, "--headless=new", "--disable-gpu", "--virtual-time-budget=15000", "--dump-dom", url],
         check=True, capture_output=True, text=True, timeout=120,

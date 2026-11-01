@@ -14,7 +14,7 @@ read が返す行:
     - 加えて "menus": お品書きの URL のリスト（文字列か {"url", "note"}）
     - 値は文字列のほか、penNames / tags は list、adult は bool でもよい（共通処理で正規化する）
     - id か space のどちらかは必須
-    - 返さなかった列は「手で書く列」として、既存の circles.csv の値が残る
+    - 返さなかった列は「直接編集する列」として、既存の circles.csv の値が残る
 
 イベント固有の形式には、events/<slug>/ に置いた Python ファイルを type "python" で指定できる（同じ read / fetch を定義する）。
 """
