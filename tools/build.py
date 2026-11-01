@@ -248,10 +248,11 @@ def main():
     out = {"event": info, "circles": circles}
     if layout is not None:
         out["layout"] = layout
-    # 中身が変わったときだけ「サークル情報の更新」日を今日にする
+    # 「サークル情報の更新」日は、サークル情報（お品書きを含む）が変わったときだけ今日にする。
+    # event.json のイベント情報や配置図だけの変更では変えない
     prev = json.loads(OUT_JSON.read_text(encoding="utf-8")) if OUT_JSON.exists() else {}
-    prev_updated = prev.get("event", {}).pop("updatedAt", None)
-    unchanged = prev == out and prev_updated
+    prev_updated = prev.get("event", {}).get("updatedAt")
+    unchanged = prev.get("circles") == circles and prev_updated
     info["updatedAt"] = prev_updated if unchanged else date.today().isoformat()
     out = {"event": info, "circles": circles, **({"layout": layout} if layout is not None else {})}
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
