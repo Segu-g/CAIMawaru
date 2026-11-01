@@ -8,13 +8,13 @@
     "dev": "vite",
     "build": "node scripts/build-all.mjs",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && python3 -m unittest discover -s tools/tests -t tools",
     "typecheck": "tsc && tsc -p tsconfig.node.json",
     "check": "node scripts/check-all.mjs",
     "data": "python3 tools/build.py",
     "menu": "python3 tools/add_menu.py",
     "new-event": "python3 tools/new_event.py",
-    "import:sockbase": "python3 -I tools/import_sockbase.py"
+    "import-circles": "python3 -I tools/import_circles.py"
   },
   "dependencies": {
     "react": "^19.3.1",

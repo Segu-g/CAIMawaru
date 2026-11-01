@@ -165,6 +165,22 @@ def check_config(errors, warnings):
     for n in (info.get("slotColors") or {}):
         if n not in ("1", "2", "3", "4", "5"):
             errors.append(f"{where}: info.slotColors の枠 {n} は 1〜5 にしてください")
+    sources = CONFIG.get("sources", [])
+    if "sockbase" in CONFIG:
+        errors.append(f'{where}: sockbase キーは sources に変わりました: "sources": [{{"type": "sockbase", "url": "..."}}]')
+    if not isinstance(sources, list):
+        errors.append(f"{where}: sources は配列にしてください")
+        sources = []
+    for i, s in enumerate(sources):
+        kind = s.get("type") if isinstance(s, dict) else None
+        if kind not in ("sockbase", "csv", "json", "python"):
+            errors.append(f"{where}: sources[{i}].type は sockbase / csv / json / python のどれかにしてください: {kind!r}")
+        elif kind == "python" and not s.get("module"):
+            errors.append(f"{where}: sources[{i}] は type python なので module（Python ファイル）が必要です")
+        elif kind in ("csv", "json") and not s.get("file"):
+            errors.append(f"{where}: sources[{i}] は type {kind} なので file（元データ）が必要です")
+        if isinstance(s, dict) and s.get("url") and not is_http_url(s["url"]):
+            errors.append(f"{where}: sources[{i}].url が不正です: {s['url']}")
     contact = info.get("contact")
     if contact and not is_http_url(contact.get("url", "")):
         errors.append(f"{where}: info.contact.url が不正です: {contact}")

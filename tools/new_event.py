@@ -6,6 +6,9 @@
                                       [--sockbase URL] [--out-dir 公開先] [--map]
     （= pnpm new-event <slug> ...）
 
+    --sockbase を付けると、取り込み元（sources）に Sockbase の公式リストを入れる。
+    ほかの形式（CSV・JSON・独自形式）は event.json の sources に手で書く（docs/importers.md）。
+
     <slug> は英数字・ハイフン（例: 2027-03-21-mycon）。★・タグの保存先（storeId）の既定値にもなる。
     --map を付けると配置図の雛形 layout.json も作る（主催が配置図の二次利用を認めているときだけ載せる）。
 
@@ -51,7 +54,7 @@ def main():
         "storeId": a.slug,
         "title": f"{name} サークルリスト",
         **({"outDir": a.out_dir} if a.out_dir else {}),
-        **({"sockbase": a.sockbase} if a.sockbase else {}),
+        "sources": [{"type": "sockbase", "url": a.sockbase}] if a.sockbase else [],
         "info": {
             "name": name,
             "date": a.date,
@@ -63,6 +66,7 @@ def main():
         },
     }
     (d / "data").mkdir(parents=True)
+    (d / "sources").mkdir()
     (d / "public" / "data").mkdir(parents=True)
     (d / "event.json").write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     for path, cols in ((d / "data" / "circles.csv", CIRCLE_COLS), (d / "data" / "menus.csv", MENU_COLS)):
@@ -85,9 +89,10 @@ def main():
     print(f"events/{a.slug}/ を作りました。次に:")
     print(f"  1. events/{a.slug}/event.json を埋める（storeId は公開後に変えない）")
     if a.sockbase:
-        print(f"  2. 公式リストを取り込む: docs/new-event.md の「Sockbase から取り込む」")
+        print(f"  2. 公式リストを取得して取り込む: EVENT={a.slug} pnpm import-circles --fetch")
     else:
-        print(f"  2. events/{a.slug}/data/circles.csv にサークルを入れる")
+        print(f"  2. 主催の元データを events/{a.slug}/sources/ に置いて event.json の sources に書き、EVENT={a.slug} pnpm import-circles")
+        print(f"     （または events/{a.slug}/data/circles.csv に直接書く）")
     print(f"  3. EVENT={a.slug} pnpm data && EVENT={a.slug} pnpm dev")
 
 
