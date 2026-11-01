@@ -22,51 +22,27 @@ EVENT=example pnpm dev      # 開発サーバ
 
 - Node.js（`.node-version`。fnm などで合わせる）と pnpm
 - Python 3.10 以上
-- Sockbase から取り込む場合は Google Chrome（headless で描画済み HTML を保存するため）
+- Sockbase から取得する場合は Google Chrome（headless で描画済み HTML を保存するため）
 
 ## イベントの置き方
 
-1イベント（1ページ）＝ `events/<slug>/` の1フォルダです。
+1イベント（1ページ）＝ `events/<slug>/` の1フォルダです。主催が配る **元データ（任意の形式）** と、
+CAIMawaru が読む **イベントデータ** を分けています。
 
 ```
 events/<slug>/
-  event.json                 設定とイベント情報（手で編集）
-  layout.json                会場配置図（任意。なければ配置図なしのページになる）
-  data/circles.csv           サークル情報（手で編集・公式リストから取り込み）
-  data/menus.csv             お品書きのURL（手で編集・pnpm menu）
-  public/data/circles.json   ページが読み込むデータ（pnpm data が生成。手で編集しない）
+  event.json                 設定とイベント情報（直接編集）          ┐
+  layout.json                会場配置図（任意。なければ配置図なし）  │ イベントデータ
+  data/circles.csv           サークル情報                            │ （docs/event-data.md）
+  data/menus.csv             お品書きのURL                           ┘
+  sources/                   主催の元データ（Sockbase の HTML・配布 CSV など。任意の形式）
+  public/data/circles.json   ページが読み込むデータ（pnpm data が生成。直接編集しない）
 ```
 
-新しいイベントは `pnpm new-event <slug>` で作ります。手順は [docs/new-event.md](docs/new-event.md)、
-配置図の書き方は [docs/layout.md](docs/layout.md) にあります。
-
-### event.json
-
-| キー | 必須 | 内容 |
-|---|---|---|
-| `storeId` | ✓ | ★・タグ・メモの保存先（localStorage のキー）。**公開後に変えると利用者の保存内容が読めなくなる** |
-| `title` | ✓ | ページの `<title>` |
-| `outDir` | | `dist/` の下の出力先（既定は slug）。1つのサイトに複数ページを置くときは `site` と `site/sub` のように入れ子にする |
-| `sockbase` | | Sockbase の公式サークルリストの URL（取り込み元。`source` 列にもなる） |
-| `info.name` / `date` / `venue` / `hours` | | ページに出すイベント名・日付・会場・時間 |
-| `info.links` | | 公式サイトなどのリンク `[{ "label", "url" }]` |
-| `info.hashtags` | | 「Xでシェア」に付けるハッシュタグ |
-| `info.eventSlots` | | 合同開催のイベント名 → 色の枠（1〜5）。載っていないイベントは灰色の「同時開催」 |
-| `info.slotColors` | | 枠ごとの色の上書き `{ "1": { "light", "dark", "ink", "darkInk" } }`（既定は `src/style.css` の `--ev-1〜5`） |
-| `info.halls` | | 同じサイト内の別ページへの切り替え `[{ "label", "url", "current" }]`（url は相対パス） |
-| `info.contact` | | 修正・削除の依頼先 `{ "label", "url" }`（X の URL ならヘッダーに X のボタンも出る） |
-
-### circles.csv / menus.csv
-
-| ファイル | 列 |
-|---|---|
-| `circles.csv` | `id, space, event, name, kana, penNames, tags, adult, x, pixiv, booth, web, notes, source` |
-| `menus.csv` | `id, url, note, checkedAt`（`id` は circles.csv の id。1サークル複数行可） |
-
-- `space` は複数スペースなら `A-01,A-02` のように `,` 区切り
-- `id` は空欄ならスペース番号から自動生成（`A-10` → `a-10`）
-- `penNames` / `tags` は `;` 区切り、`adult` は成人向け頒布物ありなら `1`
-- `#` で始まる行と空行は無視
+- [docs/event-data.md](docs/event-data.md) — イベントデータの仕様（event.json・circles.csv・menus.csv）
+- [docs/importers.md](docs/importers.md) — 元データの取得と変換（Sockbase・CSV・JSON・独自形式）
+- [docs/layout.md](docs/layout.md) — 配置図の書き方
+- [docs/new-event.md](docs/new-event.md) — 新しいイベントを追加する手順（`pnpm new-event <slug>` で雛形を作る）
 
 ## コマンド
 
@@ -75,13 +51,13 @@ events/<slug>/
 | コマンド | 内容 |
 |---|---|
 | `pnpm new-event <slug> [--map] [--sockbase URL] …` | イベントのフォルダを作る |
+| `EVENT=<slug> pnpm import-circles [--fetch] [--dry-run]` | 主催の元データ（sources）をイベントデータに取り込む |
 | `EVENT=<slug> pnpm data` | CSV・設定・配置図を検証して `circles.json` を生成（`--check` で検証のみ） |
 | `EVENT=<slug> pnpm dev` | 開発サーバ |
 | `EVENT=<slug> pnpm menu <URL>…` | お品書きを登録（下記） |
-| `EVENT=<slug> pnpm import:sockbase <html>` | Sockbase の公式サークルリストを取り込む |
 | `pnpm build [<slug>…]` | 型チェック・データ検証のうえ全イベント（または指定イベント）を `dist/` にビルド |
 | `pnpm check` | 全イベントのデータを検証 |
-| `pnpm test` | テスト（配置図の組み立て・検索・保存形式など。生成済みの全イベントの配置図も確かめる） |
+| `pnpm test` | テスト（ページ: 配置図・検索・保存形式など、生成済みの全イベントの配置図／取り込み: インポーター・合流処理） |
 
 ### お品書きを登録する
 
@@ -123,8 +99,9 @@ EVENT=<slug> pnpm menu -                                            # 1行ずつ
 | `src/filter.ts` | 検索・絞り込み・並べ替え |
 | `src/useMine.ts` | 閲覧者の ★・タグ・メモ（localStorage のみに保存） |
 | `src/components/SpaceMap.tsx` | 配置図の描画とタッチ操作 |
-| `tools/build.py` | CSV・設定・配置図の検証と `circles.json` の生成 |
-| `tools/import_sockbase.py` | Sockbase の公式サークルリストの取り込み |
+| `tools/build.py` | イベントデータの検証と `circles.json` の生成 |
+| `tools/import_circles.py` | 取り込みの共通処理（正規化・既存データとの合流） |
+| `tools/importers/` | 元データの形式ごとのインポーター（sockbase・csv・json） |
 | `tools/add_menu.py` | お品書き URL の登録 |
 | `tools/new_event.py` | イベントの雛形作成 |
 | `scripts/` | 全イベントのビルド・検証 |

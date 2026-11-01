@@ -1,6 +1,22 @@
 {
   "storeId": "example",
   "title": "サンプル即売会 サークルリスト（架空のデータ）",
+  "sources": [
+    {
+      "type": "csv",
+      "label": "架空の公式サークル一覧",
+      "file": "sources/official.csv",
+      "columns": {
+        "space": "配置",
+        "event": "参加",
+        "name": "サークル名",
+        "penNames": "代表者",
+        "web": "Webサイト",
+        "adult": "成人向け",
+        "menus": "お品書き"
+      }
+    }
+  ],
   "info": {
     "name": "サンプル即売会",
     "date": "2030-01-01",

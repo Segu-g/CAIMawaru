@@ -1,0 +1,13 @@
+配置,参加,サークル名,代表者,Webサイト,成人向け,お品書き
+A-01,サンプル即売会,星屑通信,作家1,https://example.com/circle1,なし,https://example.com/circle1/menu
+A-02,サンプル即売会,まどろみ書房,作家2,https://example.com/circle2,なし,
+"A-03,A-04",サンプル即売会,青い鳥工房,作家3,https://example.com/circle3,なし,
+A-09,サンプル即売会,ねこじゃらし堂,作家4,https://example.com/circle4,なし,
+B-01,サンプル即売会,雨音レコード,作家5,https://example.com/circle5,なし,
+B-05,サンプル即売会,灯台もと,作家6,https://example.com/circle6,なし,
+C-01,併設オンリー,紙ひこうき,作家7,https://example.com/circle7,なし,
+C-03,併設オンリー,月見団子,作家8,https://example.com/circle8,なし,
+D-01,併設オンリー,ゆきどけ,作家9,https://example.com/circle9,なし,
+D-06,併設オンリー,ことり文庫,作家10,https://example.com/circle10,なし,
+壁-01,サンプル即売会,はなまる商店,作家11,https://example.com/circle11,なし,
+壁-02,サンプル即売会,ソーダ水,作家12,https://example.com/circle12,なし,

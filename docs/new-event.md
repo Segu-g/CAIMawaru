@@ -4,13 +4,13 @@
 
 - サークル一覧・配置図の二次利用について、主催の注意書きを読む
   - 配置図の二次利用が「出展者に限る」などと制限されていれば、`layout.json` を作らず、公式配置図へのリンク（`info.links`）だけにする
-- 公式サークルリストの場所（Sockbase など）を確かめる
+- 公式サークルリストがどこで・どの形式で配られているか（Sockbase、配布 CSV、サイトなど）を確かめる
 
 ## 2. フォルダを作る
 
 ```sh
 pnpm new-event 2030-05-05-mycon --name "5/5 マイコン" --date 2030-05-05 --venue "○○会館" \
-  --sockbase https://list.sockbase.net/circle-lists/xxxx --map
+  --sockbase https://list.sockbase.net/circle-lists/xxxx --map   # Sockbase 以外なら --sockbase は付けない
 ```
 
 - slug（フォルダ名）は英数字・ハイフン。日付で始めると並びが分かりやすい
@@ -20,7 +20,7 @@ pnpm new-event 2030-05-05-mycon --name "5/5 マイコン" --date 2030-05-05 --ve
 
 ## 3. event.json を埋める
 
-[README の event.json の表](../README.md#eventjson) を参照。
+[event-data.md の event.json](event-data.md#eventjson) を参照。
 
 - `storeId` は公開後に変えない（利用者の ★・タグが読めなくなる）。ほかのイベントと重ならない名前にする
 - 合同開催なら `info.eventSlots` にイベント名（circles.csv の `event` 列と同じ文字列）→ 枠 1〜5 を書く
@@ -29,24 +29,17 @@ pnpm new-event 2030-05-05-mycon --name "5/5 マイコン" --date 2030-05-05 --ve
 
 ## 4. サークル情報を入れる
 
-### Sockbase から取り込む
-
-公式リストは JavaScript で描画されるため、描画済みの HTML を保存してから取り込みます。
+主催の元データを `sources/` に置き、`event.json` の `sources` に形式を書いて取り込みます（[importers.md](importers.md)）。
 
 ```sh
-mkdir -p /tmp/sockbase
-google-chrome --headless=new --virtual-time-budget=15000 --dump-dom <sockbase の URL> > /tmp/sockbase/list.html
-EVENT=<slug> pnpm import:sockbase /tmp/sockbase/list.html
-EVENT=<slug> pnpm data
+EVENT=<slug> pnpm import-circles --fetch --dry-run   # Sockbase なら取得もまとめて。まず差分を確認
+EVENT=<slug> pnpm import-circles --fetch
 ```
 
-- スペース・サークル名・ペンネーム・リンク・成人向け有無・お品書き URL は毎回上書き
-- 手で書いた `tags` / `booth` / `notes` と、手で追加した `menus.csv` の行は残る
-- 公式リストから消えたサークルは画面に表示される（配置変更・参加取り消し）
-
-### 手で入れる
-
-`events/<slug>/data/circles.csv` に行を追加し、`EVENT=<slug> pnpm data`。エラーがあると `circles.json` は更新されません。
+- Sockbase 以外（配布 CSV・JSON など）は、元データを `sources/` に保存して `type` と `columns` を書く
+- 組み込みで読めない形式は、イベントのフォルダに Python のインポーターを置く（type: python）
+- 元データがなければ、`data/circles.csv` に直接書いてもよい（[event-data.md](event-data.md)）
+- 取り込み後も `tags`・`notes` など取り込まない列は直接編集できる。次の取り込みでも残る
 
 ## 5. 配置図を描き起こす（任意）
 
