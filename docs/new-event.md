@@ -32,8 +32,8 @@ pnpm new-event 2030-05-05-mycon --name "5/5 マイコン" --date 2030-05-05 --ve
 主催の元データを `sources/` に置き、`event.json` の `sources` に形式を書いて取り込みます（[importers.md](importers.md)）。
 
 ```sh
-EVENT=<slug> pnpm import-circles --fetch --dry-run   # Sockbase なら取得もまとめて。まず差分を確認
-EVENT=<slug> pnpm import-circles --fetch
+pnpm import-circles <slug> --fetch --dry-run   # Sockbase なら取得もまとめて。まず差分を確認
+pnpm import-circles <slug> --fetch
 ```
 
 - Sockbase 以外（配布 CSV・JSON など）は、元データを `sources/` に保存して `type` と `columns` を書く
@@ -48,8 +48,8 @@ EVENT=<slug> pnpm import-circles --fetch
 ## 6. 確かめる
 
 ```sh
-EVENT=<slug> pnpm data
-EVENT=<slug> pnpm dev     # スマホ幅（〜400px）と PC 幅の両方で見る
+pnpm data <slug>
+pnpm dev <slug>     # スマホ幅（〜400px）と PC 幅の両方で見る
 pnpm test                 # 全サークルのスペースが配置図にあるか等
 pnpm build <slug>
 ```
@@ -57,4 +57,4 @@ pnpm build <slug>
 ## 7. 公開・当日の更新
 
 - `dist/<outDir>/` を公開先に置く（README の「公開」）
-- お品書きは `EVENT=<slug> pnpm menu <URL>` で追加し、`pnpm build <slug>` か `data/circles.json` の差し替えで反映
+- お品書きは `pnpm menu <slug> <URL>` で追加し、`pnpm build <slug>` か `data/circles.json` の差し替えで反映

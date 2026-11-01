@@ -89,11 +89,11 @@ def main():
     print(f"events/{a.slug}/ を作りました。次に:")
     print(f"  1. events/{a.slug}/event.json を埋める（storeId は公開後に変えない）")
     if a.sockbase:
-        print(f"  2. 公式リストを取得して取り込む: EVENT={a.slug} pnpm import-circles --fetch")
+        print(f"  2. 公式リストを取得して取り込む: pnpm import-circles {a.slug} --fetch")
     else:
-        print(f"  2. 主催の元データを events/{a.slug}/sources/ に置いて event.json の sources に書き、EVENT={a.slug} pnpm import-circles")
+        print(f"  2. 主催の元データを events/{a.slug}/sources/ に置いて event.json の sources に書き、pnpm import-circles {a.slug}")
         print(f"     （または events/{a.slug}/data/circles.csv に直接書く）")
-    print(f"  3. EVENT={a.slug} pnpm data && EVENT={a.slug} pnpm dev")
+    print(f"  3. pnpm data {a.slug} && pnpm dev {a.slug}")
 
 
 if __name__ == "__main__":

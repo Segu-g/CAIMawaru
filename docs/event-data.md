@@ -13,7 +13,7 @@ events/<slug>/sources/…   ──取り込み──▶  events/<slug>/event.jso
 
 - イベントデータは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）
 - `public/data/circles.json` は生成物で、直接編集しない
-- 検証は `EVENT=<slug> pnpm data --check`（`tools/build.py`）。エラーがあると `circles.json` は更新されない
+- 検証は `pnpm data <slug> --check`（`tools/build.py`）。エラーがあると `circles.json` は更新されない
 
 ## event.json
 

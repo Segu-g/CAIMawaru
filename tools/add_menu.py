@@ -3,17 +3,17 @@
 
 使い方:
     # Xの投稿URLなら、投稿したアカウントからサークルを自動で判定する
-    pnpm menu https://x.com/example_user/status/1234567890123456789
+    pnpm menu <slug> https://x.com/example_user/status/1234567890123456789
 
     # まとめて登録（スペース区切り）
-    pnpm menu URL1 URL2 URL3
+    pnpm menu <slug> URL1 URL2 URL3
 
     # サークルを指定する（スペース番号・id・サークル名の一部・@XのID）
-    pnpm menu --circle A-05 https://booth.pm/...
-    pnpm menu --circle 星屑 --note 新刊 https://x.com/...
+    pnpm menu <slug> --circle A-05 https://booth.pm/...
+    pnpm menu <slug> --circle 星屑 --note 新刊 https://x.com/...
 
     # 1行ずつ貼り付ける（終わったら Ctrl+D）。行は「URL」または「サークル指定 URL」
-    pnpm menu -
+    pnpm menu <slug> -
 
     --dry-run を付けると、判定結果を表示するだけで書き込まない。
 """
@@ -170,7 +170,7 @@ def main():
 
     # 表示用データを作り直す（検証エラーがあれば build.py が知らせる）
     sys.stdout.flush()
-    sys.exit(subprocess.call([sys.executable, str(Path(build.__file__))]))
+    sys.exit(subprocess.call([sys.executable, str(Path(build.__file__)), "--event", build.NAME]))
 
 
 if __name__ == "__main__":

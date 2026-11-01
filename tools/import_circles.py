@@ -4,12 +4,12 @@ data/circles.csv と data/menus.csv に取り込む。
 
     取得（sources/ に元データを置く） → 変換（インポーター） → イベントデータ（data/*.csv） → pnpm data
 
-使い方（EVENT にイベントのフォルダ名を指定）:
-    EVENT=<slug> pnpm import-circles              # sources/ の元データから取り込む
-    EVENT=<slug> pnpm import-circles --fetch      # 元データを取得してから取り込む（インポーターが fetch に対応している場合）
-    EVENT=<slug> pnpm import-circles --dry-run    # 変化を表示するだけで書き込まない
-    EVENT=<slug> pnpm import-circles --input <ファイル>   # source が1つのとき、元データのファイルを直接指定する
-    EVENT=<slug> pnpm import-circles --list       # 使えるインポーターの一覧
+使い方（<slug> はイベントのフォルダ名。指定のしかたは tools/events.py）:
+    pnpm import-circles <slug>              # sources/ の元データから取り込む
+    pnpm import-circles <slug> --fetch      # 元データを取得してから取り込む（インポーターが fetch に対応している場合）
+    pnpm import-circles <slug> --dry-run    # 変化を表示するだけで書き込まない
+    pnpm import-circles <slug> --input <ファイル>   # source が1つのとき、元データのファイルを直接指定する
+    pnpm import-circles --list              # 使えるインポーターの一覧
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きする。返さなかった列（tags / notes など）は直接編集した値を残す
 - menus.csv は取り込んだお品書き URL を追加し、直接追加した行は残す
@@ -147,7 +147,7 @@ def merge(imported, existing_circles, existing_menus, today):
 
 
 def run(args):
-    import events  # EVENT が必要なので、--list のときは読まない
+    import events
     import importers
 
     sources = events.CONFIG.get("sources") or []
@@ -219,10 +219,12 @@ def run(args):
     print(f"{events.CIRCLES_CSV.relative_to(events.ROOT)} と {events.MENUS_CSV.name} を更新しました")
     if not args.no_build:
         sys.stdout.flush()
-        sys.exit(subprocess.call([sys.executable, str(Path(__file__).resolve().parent / "build.py")]))
+        sys.exit(subprocess.call([sys.executable, str(Path(__file__).resolve().parent / "build.py"), "--event", events.NAME]))
 
 
 def main():
+    if "--list" not in sys.argv[1:]:
+        import events  # noqa: F401  イベントの指定を引数から取り除く（--list のときはイベント不要）
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--fetch", action="store_true", help="元データを取得してから取り込む")
     parser.add_argument("--input", help="元データのファイル（sources が1つのとき）")

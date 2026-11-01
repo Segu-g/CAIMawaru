@@ -1,6 +1,10 @@
-"""イベントごとのデータの置き場所。環境変数 EVENT（events/ の下のフォルダ名）で選ぶ。
+"""イベントごとのデータの置き場所。どのイベントかは、次の順で決める（tools/ のツールに共通）:
 
-    EVENT=example python3 tools/build.py
+    1. 引数 --event <slug>（--event=<slug>）
+    2. 最初の引数がイベントのフォルダ名なら、それ   例: python3 tools/build.py example --check
+    3. 環境変数 EVENT
+
+    （pnpm data example のように pnpm から呼ぶときも同じ）
 
 events/<slug>/
     event.json            設定とイベント情報（直接編集）
@@ -25,11 +29,28 @@ def known_events():
     return sorted(p.parent.name for p in EVENTS_DIR.glob("*/event.json"))
 
 
-NAME = os.environ.get("EVENT", "")
-if NAME not in known_events():
-    names = ", ".join(known_events()) or "events/ にイベントがありません。tools/new_event.py で作成できます"
-    sys.exit(f"環境変数 EVENT にイベントを指定してください（{names}）\n例: EVENT=<slug> pnpm data")
+def take_event(argv):
+    """argv（sys.argv[1:]）からイベントの指定を取り除き、(slug, 残りの引数) を返す。"""
+    rest = list(argv)
+    for i, arg in enumerate(rest):
+        if arg == "--event" and i + 1 < len(rest):
+            return rest[i + 1], rest[:i] + rest[i + 2:]
+        if arg.startswith("--event="):
+            return arg.split("=", 1)[1], rest[:i] + rest[i + 1:]
+    if rest and rest[0] in known_events():
+        return rest[0], rest[1:]
+    return os.environ.get("EVENT", ""), rest
 
+
+NAME, _rest = take_event(sys.argv[1:])
+if NAME not in known_events():
+    names = ", ".join(known_events()) or "events/ にイベントがありません。pnpm new-event <slug> で作成できます"
+    # 最初の引数がイベント名のつもりで間違っている場合（オプションや URL ではない）も知らせる
+    guess = NAME or next((a for a in _rest[:1] if not a.startswith("-") and "://" not in a), "")
+    what = f"イベント '{guess}' がありません" if guess else "イベントを指定してください"
+    sys.exit(f"{what}（{names}）\n例: pnpm data <slug>")
+# ツールの argparse が見るのは、イベントの指定を除いた引数
+sys.argv[1:] = _rest
 DIR = EVENTS_DIR / NAME
 CONFIG_JSON = DIR / "event.json"
 CONFIG = json.loads(CONFIG_JSON.read_text(encoding="utf-8"))

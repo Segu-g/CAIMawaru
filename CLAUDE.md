@@ -12,8 +12,8 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
 - **主催の元データ（任意の形式）とイベントデータ（docs/event-data.md）を混ぜない。** 元データは `sources/` に置き、
   変換は必ずインポーター（`tools/importers/` か、イベントごとの type python）で行う。イベントデータはページが読む唯一の形で、
   形式ごとの事情（列名・表記揺れ）を持ち込まない。新しい形式は、まずイベントごとの Python で書き、繰り返し使うなら組み込みにしてテストを足す
-- `public/data/circles.json` は生成物。直接編集せず `EVENT=<slug> pnpm data` で作る
-- イベントデータ（event.json・layout.json・data/*.csv）はエージェントが直接編集してよい。編集後は `EVENT=<slug> pnpm data` で検証する
+- `public/data/circles.json` は生成物。直接編集せず `pnpm data <slug>` で作る
+- イベントデータ（event.json・layout.json・data/*.csv）はエージェントが直接編集してよい。編集後は `pnpm data <slug>` で検証する
 - `storeId` は公開後に変えない（利用者の ★・タグ・メモが消える）
 - 配置図の番号の振り方は `src/layout.ts` と `tools/build.py`（`layout_spaces`）の2か所で同じ規則にしてある。変えるときは両方とテストを直す
 

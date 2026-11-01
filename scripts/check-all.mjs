@@ -1,19 +1,10 @@
-// 全イベントのデータを検証する（書き込まない）。CI 用
-import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+// 全イベントのイベントデータを検証する（書き込まない）。CI 用
+import { knownEvents, root, runPython } from './lib.mjs';
 import { resolve } from 'node:path';
 
-const root = resolve(import.meta.dirname, '..');
-const events = readdirSync(resolve(root, 'events'), { withFileTypes: true })
-  .filter((d) => d.isDirectory() && existsSync(resolve(root, 'events', d.name, 'event.json')))
-  .map((d) => d.name);
 let failed = 0;
-for (const slug of events) {
+for (const slug of knownEvents()) {
   process.stdout.write(`${slug}: `);
-  try {
-    execFileSync('python3', ['tools/build.py', '--check'], { cwd: root, stdio: 'inherit', env: { ...process.env, EVENT: slug } });
-  } catch {
-    failed++;
-  }
+  if (runPython([resolve(root, 'tools', 'build.py'), slug, '--check'])) failed++;
 }
 process.exit(failed ? 1 : 0);

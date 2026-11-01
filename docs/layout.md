@@ -64,6 +64,6 @@
 
 ## 確かめる
 
-- `EVENT=<slug> pnpm data` — スペースの重複、`expectedSpaces`、circles.csv のスペースが配置図にあるか
+- `pnpm data <slug>` — スペースの重複、`expectedSpaces`、circles.csv のスペースが配置図にあるか
 - `pnpm test` — 生成済みの全イベントの配置図
-- `EVENT=<slug> pnpm dev` で、公式配置図と並べて目で確かめる
+- `pnpm dev <slug>` で、公式配置図と並べて目で確かめる

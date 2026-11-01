@@ -6,7 +6,11 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -21,3 +25,7 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm build
+      # イベントの指定（引数・--event）がどの OS でも効くこと
+      - run: pnpm data example --check
+      - run: pnpm data --event example --check
+      - run: pnpm import-circles example --dry-run

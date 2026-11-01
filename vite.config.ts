@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// どのイベントを開発・ビルドするかは環境変数 EVENT（events/ の下のフォルダ名）で選ぶ。
-//   EVENT=example pnpm dev
+// どのイベントを開発・ビルドするかは環境変数 EVENT（events/ の下のフォルダ名）で受け取る。
+// 通常は pnpm dev <slug> / pnpm build <slug>（scripts/vite.mjs・scripts/build-all.mjs が EVENT を設定する）から起動する。
 // イベントの設定は events/<slug>/event.json、配置図は events/<slug>/layout.json（なければ配置図なし）。
 const root = import.meta.dirname;
 // テスト（vitest）はイベントに依存しないので EVENT がなくてもよい
@@ -14,7 +14,7 @@ const known = readdirSync(resolve(root, 'events'), { withFileTypes: true })
   .filter((d) => d.isDirectory() && existsSync(resolve(root, 'events', d.name, 'event.json')))
   .map((d) => d.name);
 if (!testing && (!slug || !known.includes(slug))) {
-  throw new Error(`環境変数 EVENT にイベントを指定してください（${known.join(', ') || 'events/ にイベントがありません'}）。例: EVENT=${known[0] ?? '<slug>'} pnpm dev`);
+  throw new Error(`イベントを指定してください（${known.join(', ') || 'events/ にイベントがありません'}）。例: pnpm dev ${known[0] ?? '<slug>'}`);
 }
 const dir = resolve(root, 'events', slug ?? '');
 const config = (slug ? JSON.parse(readFileSync(resolve(dir, 'event.json'), 'utf-8')) : { storeId: 'test', title: 'test' }) as {

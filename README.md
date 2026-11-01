@@ -14,14 +14,15 @@
 
 ```sh
 pnpm install
-EVENT=example pnpm data     # CSV → circles.json を生成・検証
-EVENT=example pnpm dev      # 開発サーバ
+pnpm data example     # CSV → circles.json を生成・検証
+pnpm dev example      # 開発サーバ
 ```
 
 ## 必要なもの
 
 - Node.js（`.node-version`。fnm などで合わせる）と pnpm
-- Python 3.10 以上
+- Python 3.10 以上（`python3` → `python` → `py -3` の順に探す。環境変数 `PYTHON` で指定も可）
+- Linux・macOS・Windows で動く（コマンドはシェルに依存しない。CI で3つの OS を確かめている）
 - Sockbase から取得する場合は Google Chrome（headless で描画済み HTML を保存するため）
 
 ## イベントの置き方
@@ -46,26 +47,30 @@ events/<slug>/
 
 ## コマンド
 
-イベントを対象にするコマンドは、環境変数 `EVENT` にフォルダ名を指定します。
+イベントを対象にするコマンドは、最初の引数にイベントのフォルダ名（`<slug>`）を指定します。
+`--event <slug>` でも、環境変数 `EVENT` でも指定できます（引数を省略したときの既定値として使える）。
 
 | コマンド | 内容 |
 |---|---|
 | `pnpm new-event <slug> [--map] [--sockbase URL] …` | イベントのフォルダを作る |
-| `EVENT=<slug> pnpm import-circles [--fetch] [--dry-run]` | 主催の元データ（sources）をイベントデータに取り込む |
-| `EVENT=<slug> pnpm data` | CSV・設定・配置図を検証して `circles.json` を生成（`--check` で検証のみ） |
-| `EVENT=<slug> pnpm dev` | 開発サーバ |
-| `EVENT=<slug> pnpm menu <URL>…` | お品書きを登録（下記） |
+| `pnpm import-circles <slug> [--fetch] [--dry-run]` | 主催の元データ（sources）をイベントデータに取り込む |
+| `pnpm data <slug>` | CSV・設定・配置図を検証して `circles.json` を生成（`--check` で検証のみ） |
+| `pnpm dev <slug> [Vite のオプション]` | 開発サーバ（例: `pnpm dev example --host`） |
+| `pnpm preview <slug>` | ビルド結果の確認（先に `pnpm build <slug>`） |
+| `pnpm menu <slug> <URL>…` | お品書きを登録（下記） |
 | `pnpm build [<slug>…]` | 型チェック・データ検証のうえ全イベント（または指定イベント）を `dist/` にビルド |
 | `pnpm check` | 全イベントのデータを検証 |
-| `pnpm test` | テスト（ページ: 配置図・検索・保存形式など、生成済みの全イベントの配置図／取り込み: インポーター・合流処理） |
+| `pnpm test` | テスト（ページ: 配置図・検索・保存形式など、生成済みの全イベントの配置図／ツール: 取り込み・イベントの指定） |
+
+Python のツールは直接起動してもよい（例: `python3 tools/build.py example --check`）。
 
 ### お品書きを登録する
 
 ```sh
-EVENT=<slug> pnpm menu https://x.com/<ID>/status/<番号>             # 投稿したアカウントからサークルを自動判定
-EVENT=<slug> pnpm menu URL1 URL2 URL3                               # まとめて
-EVENT=<slug> pnpm menu --circle A-05 --note 新刊 https://booth.pm/… # X 以外はサークルを指定
-EVENT=<slug> pnpm menu -                                            # 1行ずつ貼り付け。Ctrl+D で終了
+pnpm menu <slug> https://x.com/<ID>/status/<番号>             # 投稿したアカウントからサークルを自動判定
+pnpm menu <slug> URL1 URL2 URL3                               # まとめて
+pnpm menu <slug> --circle A-05 --note 新刊 https://booth.pm/… # X 以外はサークルを指定
+pnpm menu <slug> -                                            # 1行ずつ貼り付け。Ctrl+D で終了
 ```
 
 サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `pnpm data` まで自動で実行します。
@@ -104,7 +109,7 @@ EVENT=<slug> pnpm menu -                                            # 1行ずつ
 | `tools/importers/` | 元データの形式ごとのインポーター（sockbase・csv・json） |
 | `tools/add_menu.py` | お品書き URL の登録 |
 | `tools/new_event.py` | イベントの雛形作成 |
-| `scripts/` | 全イベントのビルド・検証 |
+| `scripts/` | コマンドの入り口（イベントの指定・Python の検出・全イベントのビルドと検証） |
 
 ## 閲覧者向けの機能
 

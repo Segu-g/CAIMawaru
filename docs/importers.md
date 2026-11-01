@@ -14,10 +14,10 @@ CAIMawaru は、それを **取得 → 変換 → イベントデータ** の3�
 `event.json` の `sources` に取り込み元を書き、取り込みます。
 
 ```sh
-EVENT=<slug> pnpm import-circles --dry-run   # 何が変わるかだけ表示
-EVENT=<slug> pnpm import-circles             # sources/ の元データから取り込む → pnpm data まで実行
-EVENT=<slug> pnpm import-circles --fetch     # 元データを取得してから取り込む（fetch に対応したインポーターのみ）
-EVENT=<slug> pnpm import-circles --list      # 使えるインポーター
+pnpm import-circles <slug> --dry-run   # 何が変わるかだけ表示
+pnpm import-circles <slug>             # sources/ の元データから取り込む → pnpm data まで実行
+pnpm import-circles <slug> --fetch     # 元データを取得してから取り込む（fetch に対応したインポーターのみ）
+pnpm import-circles <slug> --list      # 使えるインポーター
 ```
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きします。返さなかった列（多くは `tags`・`notes` など）は直接編集した値が残ります
