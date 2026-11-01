@@ -1,0 +1,33 @@
+{
+  "name": "caimawaru",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/build-all.mjs",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc && tsc -p tsconfig.node.json",
+    "check": "node scripts/check-all.mjs",
+    "data": "python3 tools/build.py",
+    "menu": "python3 tools/add_menu.py",
+    "new-event": "python3 tools/new_event.py",
+    "import:sockbase": "python3 -I tools/import_sockbase.py"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "description": "同人誌即売会のサークルリスト・配置図ページを、イベントごとの設定とCSVから作る静的サイト"
+}

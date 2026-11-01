@@ -1,0 +1,343 @@
+{
+  "event": {
+    "name": "サンプル即売会",
+    "date": "2030-01-01",
+    "venue": "サンプル会館 展示ホール",
+    "hours": "開場 11:00 / 閉会 15:00（架空のイベントです）",
+    "links": [
+      {
+        "label": "このリポジトリ",
+        "url": "https://github.com/"
+      }
+    ],
+    "hashtags": [
+      "サンプル即売会"
+    ],
+    "eventSlots": {
+      "サンプル即売会": 1,
+      "併設オンリー": 2
+    },
+    "updatedAt": "2026-11-02"
+  },
+  "circles": [
+    {
+      "id": "a-01",
+      "space": "A-01",
+      "event": "サンプル即売会",
+      "name": "星屑通信",
+      "kana": "",
+      "penNames": [
+        "作家1"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle1"
+      },
+      "menus": [
+        {
+          "url": "https://example.com/circle1/menu",
+          "note": "新刊",
+          "checkedAt": "2030-01-01"
+        }
+      ],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "a-02",
+      "space": "A-02",
+      "event": "サンプル即売会",
+      "name": "まどろみ書房",
+      "kana": "",
+      "penNames": [
+        "作家2"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle2"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "a-03-a-04",
+      "space": "A-03,A-04",
+      "event": "サンプル即売会",
+      "name": "青い鳥工房",
+      "kana": "",
+      "penNames": [
+        "作家3"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle3"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "a-09",
+      "space": "A-09",
+      "event": "サンプル即売会",
+      "name": "ねこじゃらし堂",
+      "kana": "",
+      "penNames": [
+        "作家4"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle4"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "b-01",
+      "space": "B-01",
+      "event": "サンプル即売会",
+      "name": "雨音レコード",
+      "kana": "",
+      "penNames": [
+        "作家5"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle5"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "b-05",
+      "space": "B-05",
+      "event": "サンプル即売会",
+      "name": "灯台もと",
+      "kana": "",
+      "penNames": [
+        "作家6"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle6"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "c-01",
+      "space": "C-01",
+      "event": "併設オンリー",
+      "name": "紙ひこうき",
+      "kana": "",
+      "penNames": [
+        "作家7"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle7"
+      },
+      "menus": [
+        {
+          "url": "https://example.com/circle7/menu",
+          "note": "",
+          "checkedAt": "2030-01-01"
+        }
+      ],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "c-03",
+      "space": "C-03",
+      "event": "併設オンリー",
+      "name": "月見団子",
+      "kana": "",
+      "penNames": [
+        "作家8"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle8"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "d-01",
+      "space": "D-01",
+      "event": "併設オンリー",
+      "name": "ゆきどけ",
+      "kana": "",
+      "penNames": [
+        "作家9"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle9"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "d-06",
+      "space": "D-06",
+      "event": "併設オンリー",
+      "name": "ことり文庫",
+      "kana": "",
+      "penNames": [
+        "作家10"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle10"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "01",
+      "space": "壁-01",
+      "event": "サンプル即売会",
+      "name": "はなまる商店",
+      "kana": "",
+      "penNames": [
+        "作家11"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle11"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    },
+    {
+      "id": "02",
+      "space": "壁-02",
+      "event": "サンプル即売会",
+      "name": "ソーダ水",
+      "kana": "",
+      "penNames": [
+        "作家12"
+      ],
+      "tags": [],
+      "adult": false,
+      "links": {
+        "web": "https://example.com/circle12"
+      },
+      "menus": [],
+      "notes": "",
+      "source": "架空のデータ"
+    }
+  ],
+  "layout": {
+    "cell": {
+      "w": 45,
+      "h": 26
+    },
+    "hall": {
+      "x": 0,
+      "y": 0,
+      "w": 1000,
+      "h": 600
+    },
+    "islands": [
+      {
+        "name": "A",
+        "x": 100,
+        "y": 100,
+        "rows": 8,
+        "columns": 2
+      },
+      {
+        "name": "B",
+        "x": 280,
+        "y": 100,
+        "rows": 8,
+        "columns": 2,
+        "order": "down-up"
+      },
+      {
+        "name": "C",
+        "x": 460,
+        "y": 100,
+        "rows": 4,
+        "columns": 1
+      },
+      {
+        "name": "D",
+        "x": 600,
+        "y": 380,
+        "rows": 5,
+        "columns": 2,
+        "order": "right-left"
+      }
+    ],
+    "entrances": [
+      {
+        "label": "出入口",
+        "rect": {
+          "x": -20,
+          "y": 450,
+          "w": 36,
+          "h": 100
+        }
+      }
+    ],
+    "landmarks": [
+      {
+        "label": "本部",
+        "rect": {
+          "x": 600,
+          "y": 500,
+          "w": 200,
+          "h": 60
+        },
+        "kind": "facility"
+      },
+      {
+        "label": "休憩所",
+        "rect": {
+          "x": 820,
+          "y": 120,
+          "w": 140,
+          "h": 160
+        },
+        "kind": "area"
+      }
+    ],
+    "cells": [
+      {
+        "space": "壁-01",
+        "x": 600,
+        "y": 60,
+        "w": 90
+      },
+      {
+        "space": "壁-02",
+        "x": 700,
+        "y": 60,
+        "w": 90
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+__pycache__/
+.env*
+# 公開先のサーバ名など、手元の運用メモ（リポジトリに入れない）
+CLAUDE.local.md
+# 実在のイベントのデータはリポジトリに入れない（手元にだけ置く）。サンプルだけ公開する
+/events/*
+!/events/example/

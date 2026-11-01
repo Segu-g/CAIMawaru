@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fafaf8">
+  <!-- 検索エンジンに載せない（イベント後に古い情報が残らないように） -->
+  <meta name="robots" content="noindex">
+  <title>%VITE_TITLE%</title>
+  <script>
+    // 保存した表示テーマを描画前に当てる（一瞬ライトで表示されるのを防ぐ）
+    try {
+      var t = localStorage.getItem('circlelist:theme');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
