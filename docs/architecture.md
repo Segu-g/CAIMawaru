@@ -59,7 +59,7 @@ pnpm test ───────────────▶ vitest（vite.config.
 
 - `package.json` の scripts は Vite をそのまま呼ぶだけ。独自のスクリプトや環境変数は使わない
 - `vite.config.ts` は `--` より後ろの最初の引数を eventId として読む（Vite は `--` より後ろを使わない。`--` がないと
-  Vite は eventId をプロジェクトのフォルダと解釈する）。eventId の後ろに Vite のオプションを書くと Vite に届かないのでエラーにする
+  Vite は eventId をプロジェクトのフォルダと解釈する）。引数は Node 標準の `util.parseArgs` で読み、eventId の後ろに Vite のオプションを書くと Vite に届かないのでエラーにする
 - 1回のビルドは1イベント。複数のイベントはコマンドを並べて実行する
 - `circles.json` がなければ、Python を呼ばずに「先に `uv run caimawaru data <eventId>`」と知らせて止まる
 - 出力先（`dist/<outDir>/`）は、ビルドのたびに空にする。ただし別のイベントの出力先がその中にある（入れ子の）ときは、

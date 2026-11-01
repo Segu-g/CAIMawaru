@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
+import { parseArgs } from 'node:util';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -30,24 +31,25 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-/** コマンドの引数（「--」より後ろ）から eventId を取り出す。 */
+/** コマンドの引数（「--」より後ろ）から eventId を取り出す（Node 標準の util.parseArgs）。 */
 function eventIdFromArgs(usage: string): string {
-  const argv = process.argv;
-  const at = argv.indexOf('--');
-  const [eventId, ...extra] = at < 0 ? [] : argv.slice(at + 1);
+  const at = process.argv.indexOf('--');
+  const args = at < 0 ? [] : process.argv.slice(at + 1);
   const list = known.join(', ') || 'events/ にイベントがありません';
-  const example = usage.replace('<eventId>', known[0] ?? '<eventId>');
-  if (!eventId || eventId.startsWith('-')) {
-    fail(`イベント（eventId）を指定してください（${list}）。例: ${example}`);
+  let positionals: string[];
+  try {
+    // オプションは受け付けない。「pnpm dev example --host」の --host は「--」の後ろに入って Vite に届かないため、黙って無視せず止める
+    ({ positionals } = parseArgs({ args, allowPositionals: true, strict: true, options: {} }));
+  } catch {
+    const i = args.findIndex((a) => !a.startsWith('-'));
+    const id = i < 0 ? (known[0] ?? '<eventId>') : args[i];
+    const opts = args.filter((_, j) => j !== i);
+    fail(`${opts.join(' ')} は Vite に渡りません。Vite のオプションは「--」の前に書いてください。例: pnpm exec vite ${opts.join(' ')} -- ${id}`);
   }
+  const [eventId, ...extra] = positionals;
+  if (!eventId) fail(`イベント（eventId）を指定してください（${list}）。例: ${usage.replace('<eventId>', known[0] ?? '<eventId>')}`);
+  if (extra.length) fail(`イベントは1つだけ指定してください（${extra.join(' ')} が余分です）。複数のときはコマンドを並べて実行します`);
   if (!known.includes(eventId)) fail(`イベント '${eventId}' がありません（${list}）`);
-  // 「pnpm dev example --host」の --host は「--」の後ろに入って Vite に届かないので、黙って無視せず止める
-  if (extra.length) {
-    fail(
-      `eventId の後ろの ${extra.join(' ')} は Vite に渡りません。Vite のオプションは「--」の前に書いてください。` +
-        `例: pnpm exec vite ${extra.join(' ')} -- ${eventId}`,
-    );
-  }
   return eventId;
 }
 
