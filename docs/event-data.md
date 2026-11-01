@@ -1,17 +1,17 @@
-# 正規フォーマット（CAIMawaru が読むイベント情報）
+# イベントデータ（CAIMawaru が読むもの）
 
 CAIMawaru がページを作るときに読むのは、この文書で決めた形のファイルだけです。
 主催が配るデータの形式はイベントごとにばらばらなので、[インポーター](importers.md)で必ずこの形に変換してから使います。
 
 ```
-主催の元データ（任意の形式）            正規フォーマット（この文書）              ページ
+主催の元データ（任意の形式）            イベントデータ（この文書）              ページ
 events/<slug>/sources/…   ──取り込み──▶  events/<slug>/event.json      ──pnpm data──▶  public/data/circles.json
                           pnpm import-    events/<slug>/layout.json
                           circles         events/<slug>/data/circles.csv
                                           events/<slug>/data/menus.csv
 ```
 
-- 正規フォーマットは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）
+- イベントデータは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）
 - `public/data/circles.json` は生成物で、手で編集しない
 - 検証は `EVENT=<slug> pnpm data --check`（`tools/build.py`）。エラーがあると `circles.json` は更新されない
 
@@ -24,7 +24,7 @@ events/<slug>/sources/…   ──取り込み──▶  events/<slug>/event.jso
 | `storeId` | ✓ | ★・タグ・メモの保存先（localStorage のキー）。**公開後に変えると利用者の保存内容が読めなくなる** |
 | `title` | ✓ | ページの `<title>` |
 | `outDir` | | `dist/` の下の出力先（既定は slug）。1つのサイトに複数ページを置くときは `site` と `site/sub` のように入れ子にする |
-| `sources` | | 取り込み元の一覧（[importers.md](importers.md)）。正規フォーマットを直接書くイベントでは不要 |
+| `sources` | | 取り込み元の一覧（[importers.md](importers.md)）。イベントデータを直接書くイベントでは不要 |
 | `info.name` / `date` / `venue` / `hours` | | イベント名・日付（YYYY-MM-DD）・会場・時間 |
 | `info.links` | | 公式サイトなどのリンク `[{ "label", "url" }]` |
 | `info.hashtags` | | 「Xでシェア」に付けるハッシュタグ |

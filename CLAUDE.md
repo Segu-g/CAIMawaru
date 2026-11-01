@@ -6,11 +6,11 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
 
 - **イベントに依存する情報はコードに書かない。** イベント名・日付・会場・URL・色・配置図・保存先・出力先・連絡先などは
   すべて `events/<slug>/` の `event.json` / `layout.json` / `data/*.csv` に置き、`src/`・`tools/`・`scripts/`・`index.html` は
-  どのイベントでも同じにする。新しい種類の情報が必要になったら、event.json のキーを足し、`tools/build.py` で検証し、docs/format.md に書く
+  どのイベントでも同じにする。新しい種類の情報が必要になったら、event.json のキーを足し、`tools/build.py` で検証し、docs/event-data.md に書く
 - 実在のイベントの `events/<slug>/` は .gitignore 済みで、公開リポジトリには `events/example/`（架空）だけを入れる。
   実在のサークル名・アカウント・URL をコード・テスト・ドキュメント・コミットに書かない
-- **主催の元データ（任意の形式）と正規フォーマット（docs/format.md）を混ぜない。** 元データは `sources/` に置き、
-  変換は必ずインポーター（`tools/importers/` か、イベントごとの type python）で行う。正規フォーマットはページが読む唯一の形で、
+- **主催の元データ（任意の形式）とイベントデータ（docs/event-data.md）を混ぜない。** 元データは `sources/` に置き、
+  変換は必ずインポーター（`tools/importers/` か、イベントごとの type python）で行う。イベントデータはページが読む唯一の形で、
   形式ごとの事情（列名・表記揺れ）を持ち込まない。新しい形式は、まずイベントごとの Python で書き、繰り返し使うなら組み込みにしてテストを足す
 - `public/data/circles.json` は生成物。手で編集せず `EVENT=<slug> pnpm data` で作る
 - `storeId` は公開後に変えない（利用者の ★・タグ・メモが消える）

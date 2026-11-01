@@ -27,19 +27,19 @@ EVENT=example pnpm dev      # 開発サーバ
 ## イベントの置き方
 
 1イベント（1ページ）＝ `events/<slug>/` の1フォルダです。主催が配る **元データ（任意の形式）** と、
-CAIMawaru が読む **正規フォーマット** を分けています。
+CAIMawaru が読む **イベントデータ** を分けています。
 
 ```
 events/<slug>/
-  event.json                 設定とイベント情報（手で編集）              ┐
-  layout.json                会場配置図（任意。なければ配置図なし）        │ 正規フォーマット
-  data/circles.csv           サークル情報                                  │ （docs/format.md）
-  data/menus.csv             お品書きのURL                                 ┘
+  event.json                 設定とイベント情報（手で編集）          ┐
+  layout.json                会場配置図（任意。なければ配置図なし）  │ イベントデータ
+  data/circles.csv           サークル情報                            │ （docs/event-data.md）
+  data/menus.csv             お品書きのURL                           ┘
   sources/                   主催の元データ（Sockbase の HTML・配布 CSV など。任意の形式）
   public/data/circles.json   ページが読み込むデータ（pnpm data が生成。手で編集しない）
 ```
 
-- [docs/format.md](docs/format.md) — 正規フォーマットの仕様（event.json・circles.csv・menus.csv）
+- [docs/event-data.md](docs/event-data.md) — イベントデータの仕様（event.json・circles.csv・menus.csv）
 - [docs/importers.md](docs/importers.md) — 元データの取得と変換（Sockbase・CSV・JSON・独自形式）
 - [docs/layout.md](docs/layout.md) — 配置図の書き方
 - [docs/new-event.md](docs/new-event.md) — 新しいイベントを追加する手順（`pnpm new-event <slug>` で雛形を作る）
@@ -51,7 +51,7 @@ events/<slug>/
 | コマンド | 内容 |
 |---|---|
 | `pnpm new-event <slug> [--map] [--sockbase URL] …` | イベントのフォルダを作る |
-| `EVENT=<slug> pnpm import-circles [--fetch] [--dry-run]` | 主催の元データ（sources）を正規フォーマットに取り込む |
+| `EVENT=<slug> pnpm import-circles [--fetch] [--dry-run]` | 主催の元データ（sources）をイベントデータに取り込む |
 | `EVENT=<slug> pnpm data` | CSV・設定・配置図を検証して `circles.json` を生成（`--check` で検証のみ） |
 | `EVENT=<slug> pnpm dev` | 開発サーバ |
 | `EVENT=<slug> pnpm menu <URL>…` | お品書きを登録（下記） |
@@ -99,7 +99,7 @@ EVENT=<slug> pnpm menu -                                            # 1行ずつ
 | `src/filter.ts` | 検索・絞り込み・並べ替え |
 | `src/useMine.ts` | 閲覧者の ★・タグ・メモ（localStorage のみに保存） |
 | `src/components/SpaceMap.tsx` | 配置図の描画とタッチ操作 |
-| `tools/build.py` | 正規フォーマットの検証と `circles.json` の生成 |
+| `tools/build.py` | イベントデータの検証と `circles.json` の生成 |
 | `tools/import_circles.py` | 取り込みの共通処理（正規化・既存データとの合流） |
 | `tools/importers/` | 元データの形式ごとのインポーター（sockbase・csv・json） |
 | `tools/add_menu.py` | お品書き URL の登録 |

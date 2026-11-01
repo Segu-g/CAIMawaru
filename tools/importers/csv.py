@@ -6,7 +6,7 @@ event.json:
       "file": "sources/official.csv",
       "encoding": "utf-8-sig",           # 任意（Excel の CSV なら "cp932" など）
       "delimiter": ",",                  # 任意（拡張子 .tsv なら既定はタブ）
-      "columns": {                       # 正規フォーマットの列 ← 元データの列名（複数なら ";" でつなぐ）
+      "columns": {                       # イベントデータの列 ← 元データの列名（複数なら ";" でつなぐ）
         "space": "配置",
         "name": "サークル名",
         "penNames": ["代表者", "寄稿者"],
@@ -23,10 +23,10 @@ DESCRIPTION = "CSV / TSV（列名の対応表で読み取る）"
 
 
 def map_record(get, source):
-    """get(元データの列名) で値を返す関数から、正規フォーマットの行を作る（json インポーターと共用）。"""
+    """get(元データの列名) で値を返す関数から、イベントデータの行を作る（json インポーターと共用）。"""
     columns = source.get("columns") or {}
     if not columns:
-        raise ValueError("columns（正規フォーマットの列 ← 元データの列）を指定してください")
+        raise ValueError("columns（イベントデータの列 ← 元データの列）を指定してください")
     row = dict(source.get("constants") or {})
     for key, src in columns.items():
         names = src if isinstance(src, list) else [src]

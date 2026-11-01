@@ -5,7 +5,7 @@ event.json:
       "type": "json",
       "file": "sources/circles.json",
       "records": "data.circles",          # サークルの配列までのパス（"." 区切り。省略するとトップレベルが配列）
-      "columns": {                        # 正規フォーマットの列 ← 各サークル内のパス（"." 区切り、配列は番号）
+      "columns": {                        # イベントデータの列 ← 各サークル内のパス（"." 区切り、配列は番号）
         "space": "booth.code",
         "name": "name",
         "x": "sns.twitter",

@@ -20,7 +20,7 @@ pnpm new-event 2030-05-05-mycon --name "5/5 マイコン" --date 2030-05-05 --ve
 
 ## 3. event.json を埋める
 
-[format.md の event.json](format.md#eventjson) を参照。
+[event-data.md の event.json](event-data.md#eventjson) を参照。
 
 - `storeId` は公開後に変えない（利用者の ★・タグが読めなくなる）。ほかのイベントと重ならない名前にする
 - 合同開催なら `info.eventSlots` にイベント名（circles.csv の `event` 列と同じ文字列）→ 枠 1〜5 を書く
@@ -38,7 +38,7 @@ EVENT=<slug> pnpm import-circles --fetch
 
 - Sockbase 以外（配布 CSV・JSON など）は、元データを `sources/` に保存して `type` と `columns` を書く
 - 組み込みで読めない形式は、イベントのフォルダに Python のインポーターを置く（type: python）
-- 元データがなければ、`data/circles.csv` に直接書いてもよい（[format.md](format.md)）
+- 元データがなければ、`data/circles.csv` に直接書いてもよい（[event-data.md](event-data.md)）
 - 取り込み後も `tags`・`notes` など取り込まない列は手で書ける。次の取り込みでも残る
 
 ## 5. 配置図を描き起こす（任意）

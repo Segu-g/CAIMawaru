@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""主催が配る任意の形式のサークル情報（event.json の sources）を、正規フォーマットの
+"""主催が配る任意の形式のサークル情報（event.json の sources）を、イベントデータの
 data/circles.csv と data/menus.csv に取り込む。
 
-    取得（sources/ に元データを置く） → 変換（インポーター） → 正規フォーマット（data/*.csv） → pnpm data
+    取得（sources/ に元データを置く） → 変換（インポーター） → イベントデータ（data/*.csv） → pnpm data
 
 使い方（EVENT にイベントのフォルダ名を指定）:
     EVENT=<slug> pnpm import-circles              # sources/ の元データから取り込む
@@ -50,7 +50,7 @@ def normalize(raw, source, warnings, where):
     for key, value in raw.items():
         if key == "menus" or key not in CIRCLE_COLS:
             if key not in ("menus",):
-                warnings.append(f"{where}: 正規フォーマットにない列 {key!r} は無視します")
+                warnings.append(f"{where}: イベントデータにない列 {key!r} は無視します")
             continue
         if key in ("penNames", "tags"):
             row[key] = ";".join(as_list(value))
@@ -152,7 +152,7 @@ def run(args):
 
     sources = events.CONFIG.get("sources") or []
     if not sources:
-        sys.exit("event.json に sources（取り込み元）がありません。docs/format.md の「sources」を参照してください")
+        sys.exit("event.json に sources（取り込み元）がありません。docs/importers.md を参照してください")
     if args.input and len(sources) != 1:
         sys.exit("--input は sources が1つのときだけ使えます")
 

@@ -1,11 +1,11 @@
-"""主催が配る任意の形式のサークル情報を、CAIMawaru の正規フォーマット（docs/format.md）の行に変換するインポーター。
+"""主催が配る任意の形式のサークル情報を、CAIMawaru のイベントデータ（docs/event-data.md）の行に変換するインポーター。
 
 インポーターは tools/importers/<type>.py に置き、次を定義する:
 
     DESCRIPTION = "一行の説明"
     DEFAULT_FILE = "sources/xxx"              # 任意。source に file がないときの元データの置き場所
     def read(source: dict, path: Path) -> list[dict]:
-        '''path の元データを読み、正規フォーマットの列名をキーにした行を返す。'''
+        '''path の元データを読み、イベントデータの列名をキーにした行を返す。'''
     def fetch(source: dict, path: Path) -> None:   # 任意
         '''元データを取得して path に保存する（pnpm import-circles --fetch）。'''
 
