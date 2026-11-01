@@ -68,10 +68,14 @@ events/<eventId>/
 
 | コマンド | 内容 |
 |---|---|
-| `pnpm dev <eventId> [Vite のオプション]` | 開発サーバ（例: `pnpm dev example --host`） |
-| `pnpm build [<eventId>…]` | 型チェックのうえ全イベント（または指定イベント）を `dist/` にビルド |
+| `pnpm dev <eventId>` | 開発サーバ |
+| `pnpm build <eventId>` | 型チェックのうえ、そのイベントのページを `dist/<outDir>/` にビルド |
 | `pnpm preview <eventId>` | ビルド結果の確認（先に `pnpm build <eventId>`） |
 | `pnpm test` | テスト（検索・保存形式・配置図の操作など、生成済みの `circles.json` の形） |
+
+ページのコマンドは Vite をそのまま呼びます（`pnpm build example` は `vite build -- example`）。1回に1イベントで、
+複数のイベントはコマンドを並べて実行します（`pnpm build a && pnpm build b`）。Vite のオプションを付けるときは
+`pnpm exec vite --host -- example` のように `--` の前に書きます。
 
 ページのコマンドは `circles.json` を読むだけで、Python は呼びません。`circles.json` がなければ、先に `uv run caimawaru data <eventId>` を実行するよう知らせて止まります。
 
@@ -98,7 +102,7 @@ uv run caimawaru menu <eventId> -                                            # 1
 
 ## 公開
 
-`uv run caimawaru data <eventId>` でデータを作ってから `pnpm build` すると `dist/<outDir>/` ができるので、それを公開先に置きます（相対パス出力なのでサブパスでも可）。
+`uv run caimawaru data <eventId>` でデータを作ってから `pnpm build <eventId>` すると `dist/<outDir>/` ができるので、それを公開先に置きます（相対パス出力なのでサブパスでも可）。
 データだけの更新なら、公開先の `data/circles.json` を差し替えるだけでも反映されます（ページは `no-cache` で読み込む）。
 
 - CDN を挟む場合、公開前に **まだ置いていないファイルの公開 URL を開かない** でください。404 がキャッシュされてページが壊れることがあります（assets のファイル名にはビルドごとの接尾辞を付けて、事故を減らしています）
@@ -117,7 +121,7 @@ uv run caimawaru menu <eventId> -                                            # 1
 | `src/filter.ts` | TS | 検索・絞り込み・並べ替え |
 | `src/useMine.ts` | TS | 閲覧者の ★・タグ・メモ（localStorage のみに保存） |
 | `src/components/SpaceMap.tsx` | TS | 配置図の描画とタッチ操作 |
-| `scripts/` | JS | `pnpm dev / build / preview` の入り口（イベントの指定、全イベントのビルド） |
+| `vite.config.ts` | TS | ページのビルド設定。引数の eventId から `event.json` を読み、出力先などを決める |
 | `tools/caimawaru/cli.py` | Python | `caimawaru` コマンドの入り口 |
 | `tools/caimawaru/build.py` | Python | イベントデータの検証と `circles.json` の生成 |
 | `tools/caimawaru/layout.py` | Python | `layout.json` の展開（島の番号の振り方・記号の位置・表示範囲） |

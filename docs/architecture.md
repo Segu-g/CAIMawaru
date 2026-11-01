@@ -6,7 +6,7 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 |---|---|---|
 | 言語・実行環境 | Python 3.10+（標準ライブラリのみ） | TypeScript / Node（Vite + React） |
 | 入り口 | `uv run caimawaru <command>`（`pyproject.toml` の `[project.scripts]`） | `pnpm <command>`（`package.json` の `scripts`） |
-| コード | `tools/caimawaru/` | `src/`・`scripts/`・`vite.config.ts` |
+| コード | `tools/caimawaru/` | `src/`・`vite.config.ts` |
 | テスト | `tools/tests/`（`uv run python -m unittest discover -s tools/tests`） | `*.test.ts`（`pnpm test`） |
 | 役割 | イベントデータの検証・生成・取り込み・編集 | ページの開発・ビルド |
 
@@ -24,7 +24,7 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 
 | ファイル | 書く | 読む |
 |---|---|---|
-| `event.json` | 人・エージェント（`caimawaru new-event` が雛形） | CLI（全コマンド）、ページ（`vite.config.ts`・`scripts/build-all.mjs`: `storeId`・`title`・`outDir` だけ） |
+| `event.json` | 人・エージェント（`caimawaru new-event` が雛形） | CLI（全コマンド）、ページ（`vite.config.ts`: `storeId`・`title`・`outDir` だけ） |
 | `layout.json` | 人・エージェント | CLI だけ（展開して `circles.json` に入れる） |
 | `data/circles.csv`・`data/menus.csv` | 人・エージェント、CLI（`import`・`menu`） | CLI だけ |
 | `sources/` | 人・エージェント、CLI（`import --fetch`） | CLI だけ（インポーター） |
@@ -51,19 +51,23 @@ importers/sockbase.py ──（--fetch のときだけ）──▶ google-chrome
 ## ページの中の依存
 
 ```
-pnpm dev / preview ──▶ scripts/vite.mjs ──▶ vite（vite.config.ts）
-pnpm build ──────────▶ scripts/build-all.mjs ─┬▶ tsc
-                                               └▶ vite build（イベントごと。vite.config.ts）
-pnpm test ───────────▶ vitest
+pnpm dev <eventId> ──────▶ vite -- <eventId>                      ─┐
+pnpm build <eventId> ────▶ tsc ─▶ vite build -- <eventId>          ├▶ vite.config.ts（eventId を引数から読む）
+pnpm preview <eventId> ──▶ vite preview -- <eventId>              ─┘
+pnpm test ───────────────▶ vitest（vite.config.ts はイベントを読まない）
 ```
 
-- `scripts/` は node_modules の実行ファイルを同じ Node で起動する（シェルを通さないので OS に依存しない）
-- イベントは最初の引数で指定し、`scripts/` から `vite.config.ts` へは内部用の環境変数 `CAIMAWARU_EVENT_ID` で渡す
+- `package.json` の scripts は Vite をそのまま呼ぶだけ。独自のスクリプトや環境変数は使わない
+- `vite.config.ts` は `--` より後ろの最初の引数を eventId として読む（Vite は `--` より後ろを使わない。`--` がないと
+  Vite は eventId をプロジェクトのフォルダと解釈する）。eventId の後ろに Vite のオプションを書くと Vite に届かないのでエラーにする
+- 1回のビルドは1イベント。複数のイベントはコマンドを並べて実行する
 - `circles.json` がなければ、Python を呼ばずに「先に `uv run caimawaru data <eventId>`」と知らせて止まる
+- 出力先（`dist/<outDir>/`）は、ビルドのたびに空にする。ただし別のイベントの出力先がその中にある（入れ子の）ときは、
+  そのページを消さないよう、自分の出力（`index.html`・`assets/`・`public/` にあるもの）だけを消す
 
 ## 同じ規則を2か所に持っているもの
 
-- `events/*/event.json` からイベントの一覧を作る処理（`tools/caimawaru/project.py` と `scripts/lib.mjs`・`vite.config.ts`）。
+- `events/*/event.json` からイベントの一覧を作る処理（`tools/caimawaru/project.py` と `vite.config.ts`）。
   どちらも「`events/` の下で `event.json` があるフォルダ」というだけの規則
 - サークルの複数スペース（`A-01,A-02`）の分け方（`tools/caimawaru/build.py` の `circle_spaces` と `src/filter.ts` の `spacesOf`）。
   「`,` で区切る」というだけの規則

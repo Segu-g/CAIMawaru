@@ -5,9 +5,9 @@
   "type": "module",
   "packageManager": "pnpm@12.16.1",
   "scripts": {
-    "dev": "node scripts/vite.mjs dev",
-    "build": "node scripts/build-all.mjs",
-    "preview": "node scripts/vite.mjs preview",
+    "dev": "vite --",
+    "build": "tsc && tsc -p tsconfig.node.json && vite build --",
+    "preview": "vite preview --",
     "test": "vitest run",
     "typecheck": "tsc && tsc -p tsconfig.node.json"
   },

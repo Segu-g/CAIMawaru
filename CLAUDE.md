@@ -5,7 +5,7 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
 ## 設計の約束
 
 - **イベントに依存する情報はコードに書かない。** イベント名・日付・会場・URL・色・配置図・保存先・出力先・連絡先などは
-  すべて `events/<eventId>/` の `event.json` / `layout.json` / `data/*.csv` に置き、`src/`・`tools/`・`scripts/`・`index.html` は
+  すべて `events/<eventId>/` の `event.json` / `layout.json` / `data/*.csv` に置き、`src/`・`tools/`・`vite.config.ts`・`index.html` は
   どのイベントでも同じにする。新しい種類の情報が必要になったら、event.json のキーを足し、`tools/caimawaru/build.py` で検証し、docs/event-data.md に書く
 - 実在のイベントの `events/<eventId>/` は .gitignore 済みで、公開リポジトリには `events/example/`（架空）だけを入れる。
   実在のサークル名・アカウント・URL をコード・テスト・ドキュメント・コミットに書かない
@@ -15,8 +15,8 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
 - `public/data/circles.json` は生成物。直接編集せず `uv run caimawaru data <eventId>` で作る
 - イベントデータ（event.json・layout.json・data/*.csv）はエージェントが直接編集してよい。編集後は `uv run caimawaru data <eventId>` で検証する
 - `storeId` は公開後に変えない（利用者の ★・タグ・メモが消える）
-- **Python の CLI（`tools/caimawaru/`）とページ（`src/`・`scripts/`）は互いを呼び出さない。** 境界は `circles.json` だけ（docs/architecture.md）。
-  `scripts/` から Python を、`tools/` から Node を起動しない。`circles.json` の形（`src/types.ts` の `CircleData`）を変えるときは両側とテストを直す
+- **Python の CLI（`tools/caimawaru/`）とページ（`src/`・`vite.config.ts`）は互いを呼び出さない。** 境界は `circles.json` だけ（docs/architecture.md）。
+  ページ側から Python を、`tools/` から Node を起動しない。`circles.json` の形（`src/types.ts` の `CircleData`）を変えるときは両側とテストを直す
 - 配置図の番号の振り方・島の記号の位置は `tools/caimawaru/layout.py` だけで決める（ページは展開済みのセルを描く）
 
 ## 情報の扱い
@@ -45,6 +45,6 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
 ## 確認
 
 - 変更後は、CLI 側は `uv run python -m unittest discover -s tools/tests` と `uv run caimawaru check`、
-  ページ側は `pnpm test` と `pnpm build` を通す
+  ページ側は `pnpm test` と `pnpm build <eventId>`（`example` と変更に関わるイベント）を通す
 - 画面の変更はスマホ幅（〜400px）と PC 幅（900px 以上）の両方で見る。横にはみ出しやすい（グリッドは `minmax(0,1fr)`、見出しは `min-width:0`）。入力欄は 16px（iOS の自動拡大対策）
 - X の埋め込みは StrictMode で二重に出やすい（実行ごとに専用の入れ物を使っている）。成人向けなどの投稿は埋め込みに出ないことがある
