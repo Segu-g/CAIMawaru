@@ -3,26 +3,26 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// どのイベントを開発・ビルドするかは環境変数 EVENT（events/ の下のフォルダ名）で受け取る。
-// 通常は pnpm dev <slug> / pnpm build <slug>（scripts/vite.mjs・scripts/build-all.mjs が EVENT を設定する）から起動する。
-// イベントの設定は events/<slug>/event.json、配置図は events/<slug>/layout.json（なければ配置図なし）。
+// どのイベントを開発・ビルドするかは、pnpm dev <eventId> / pnpm build <eventId> で指定する。
+// scripts/vite.mjs・scripts/build-all.mjs が内部用の環境変数 CAIMAWARU_EVENT_ID で渡す（利用者が設定するものではない）。
+// イベントの設定は events/<eventId>/event.json、配置図は events/<eventId>/layout.json（なければ配置図なし）。
 const root = import.meta.dirname;
-// テスト（vitest）はイベントに依存しないので EVENT がなくてもよい
+// テスト（vitest）はイベントに依存しないのでイベントの指定がなくてもよい
 const testing = !!process.env.VITEST;
-const slug = process.env.EVENT ?? (testing ? undefined : '');
+const eventId = process.env.CAIMAWARU_EVENT_ID ?? (testing ? undefined : '');
 const known = readdirSync(resolve(root, 'events'), { withFileTypes: true })
   .filter((d) => d.isDirectory() && existsSync(resolve(root, 'events', d.name, 'event.json')))
   .map((d) => d.name);
-if (!testing && (!slug || !known.includes(slug))) {
-  throw new Error(`イベントを指定してください（${known.join(', ') || 'events/ にイベントがありません'}）。例: pnpm dev ${known[0] ?? '<slug>'}`);
+if (!testing && (!eventId || !known.includes(eventId))) {
+  throw new Error(`イベントを指定してください（${known.join(', ') || 'events/ にイベントがありません'}）。例: pnpm dev ${known[0] ?? '<eventId>'}`);
 }
-const dir = resolve(root, 'events', slug ?? '');
-const config = (slug ? JSON.parse(readFileSync(resolve(dir, 'event.json'), 'utf-8')) : { storeId: 'test', title: 'test' }) as {
+const dir = resolve(root, 'events', eventId ?? '');
+const config = (eventId ? JSON.parse(readFileSync(resolve(dir, 'event.json'), 'utf-8')) : { storeId: 'test', title: 'test' }) as {
   storeId: string;
   title: string;
   outDir?: string;
 };
-if (!config.storeId || !config.title) throw new Error(`events/${slug}/event.json に storeId と title が必要です`);
+if (!config.storeId || !config.title) throw new Error(`events/${eventId}/event.json に storeId と title が必要です`);
 
 // index.html の %VITE_TITLE% とアプリの import.meta.env に渡す
 process.env.VITE_STORE_ID = config.storeId;
@@ -40,8 +40,8 @@ export default defineConfig({
   base: './',
   publicDir: resolve(dir, 'public'),
   build: {
-    // 既定は dist/<slug>/。同じサイトに複数ページを置くときは event.json の outDir で揃える
-    outDir: resolve(root, 'dist', config.outDir ?? slug ?? ''),
+    // 既定は dist/<eventId>/。同じサイトに複数ページを置くときは event.json の outDir で揃える
+    outDir: resolve(root, 'dist', config.outDir ?? eventId ?? ''),
     emptyOutDir: true,
     rollupOptions: {
       output: {

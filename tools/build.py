@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""events/<slug>/ の event.json・layout.json・data/*.csv から public/data/circles.json を生成し、内容を検証する。
+"""events/<eventId>/ の event.json・layout.json・data/*.csv から public/data/circles.json を生成し、内容を検証する。
 
-使い方（<slug> はイベントのフォルダ名。指定のしかたは tools/events.py）:
-    pnpm data <slug>             # 生成して書き込み（= python3 tools/build.py <slug>）
-    pnpm data <slug> --check     # 検証のみ（書き込まない）
+使い方（<eventId> はイベントのフォルダ名。指定のしかたは tools/events.py）:
+    pnpm data <eventId>             # 生成して書き込み（= python3 tools/build.py <eventId>）
+    pnpm data <eventId> --check     # 検証のみ（書き込まない）
 
 circles.csv の列:
     id, space, event, name, kana, penNames, tags, adult, x, pixiv, booth, web, notes, source
@@ -24,7 +24,7 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
 
-from events import CIRCLES_CSV, CONFIG, CONFIG_JSON, LAYOUT_JSON, MENUS_CSV, OUT_JSON, ROOT  # どのイベントかは引数か環境変数 EVENT（tools/events.py）
+from events import CIRCLES_CSV, CONFIG, CONFIG_JSON, LAYOUT_JSON, MENUS_CSV, OUT_JSON, ROOT  # どのイベントかは引数で指定（tools/events.py）
 
 LINK_KEYS = ("x", "pixiv", "booth", "web")
 POST_URL = re.compile(r"^https://(x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/\d+")

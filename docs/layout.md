@@ -1,6 +1,6 @@
 # 配置図（layout.json）の書き方
 
-`events/<slug>/layout.json` があるイベントだけ配置図を表示します。公式配置図を見ながら座標を描き起こします（公式画像は転載しない）。
+`events/<eventId>/layout.json` があるイベントだけ配置図を表示します。公式配置図を見ながら座標を描き起こします（公式画像は転載しない）。
 座標はホール左上を原点とした任意の単位で、セル（1スペース）の既定の大きさは 45×26 です。
 
 ```jsonc
@@ -64,6 +64,6 @@
 
 ## 確かめる
 
-- `pnpm data <slug>` — スペースの重複、`expectedSpaces`、circles.csv のスペースが配置図にあるか
+- `pnpm data <eventId>` — スペースの重複、`expectedSpaces`、circles.csv のスペースが配置図にあるか
 - `pnpm test` — 生成済みの全イベントの配置図
-- `pnpm dev <slug>` で、公式配置図と並べて目で確かめる
+- `pnpm dev <eventId>` で、公式配置図と並べて目で確かめる

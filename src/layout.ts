@@ -1,4 +1,4 @@
-// 会場配置図。イベントごとの events/<slug>/layout.json（tools/build.py が circles.json の layout に入れる）
+// 会場配置図。イベントごとの events/<eventId>/layout.json（tools/build.py が circles.json の layout に入れる）
 // から、描画に使うセル・ラベルを組み立てる。座標はホール左上を原点とした任意単位。
 
 export type Rect = { x: number; y: number; w: number; h: number };

@@ -5,15 +5,17 @@ CAIMawaru がページを作るときに読むのは、この文書で決めた�
 
 ```
 主催の元データ（任意の形式）            イベントデータ（この文書）              ページ
-events/<slug>/sources/…   ──取り込み──▶  events/<slug>/event.json      ──pnpm data──▶  public/data/circles.json
-                          pnpm import-    events/<slug>/layout.json
-                          circles         events/<slug>/data/circles.csv
-                                          events/<slug>/data/menus.csv
+events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/event.json      ──pnpm data──▶  public/data/circles.json
+                          pnpm import-    events/<eventId>/layout.json
+                          circles         events/<eventId>/data/circles.csv
+                                          events/<eventId>/data/menus.csv
 ```
 
+- **eventId**: イベントを指す ID。`events/` の下のフォルダ名で、英数字・ハイフン・アンダースコア（例: `example`、`2030-05-05-mycon`）。
+  コマンドでは `pnpm dev <eventId>` のように指定し、`storeId` と出力先（`dist/<eventId>/`）の既定値にもなる
 - イベントデータは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）
 - `public/data/circles.json` は生成物で、直接編集しない
-- 検証は `pnpm data <slug> --check`（`tools/build.py`）。エラーがあると `circles.json` は更新されない
+- 検証は `pnpm data <eventId> --check`（`tools/build.py`）。エラーがあると `circles.json` は更新されない
 
 ## event.json
 
@@ -23,7 +25,7 @@ events/<slug>/sources/…   ──取り込み──▶  events/<slug>/event.jso
 |---|---|---|
 | `storeId` | ✓ | ★・タグ・メモの保存先（localStorage のキー）。**公開後に変えると利用者の保存内容が読めなくなる** |
 | `title` | ✓ | ページの `<title>` |
-| `outDir` | | `dist/` の下の出力先（既定は slug）。1つのサイトに複数ページを置くときは `site` と `site/sub` のように入れ子にする |
+| `outDir` | | `dist/` の下の出力先（既定は eventId）。1つのサイトに複数ページを置くときは `site` と `site/sub` のように入れ子にする |
 | `sources` | | 取り込み元の一覧（[importers.md](importers.md)）。イベントデータを直接書くイベントでは不要 |
 | `info.name` / `date` / `venue` / `hours` | | イベント名・日付（YYYY-MM-DD）・会場・時間 |
 | `info.links` | | 公式サイトなどのリンク `[{ "label", "url" }]` |

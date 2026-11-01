@@ -6,11 +6,11 @@
 スマホで当日会場を回ることを前提に、配置図・検索・★／タグ／購入済みのチェック・お品書きリンクをまとめて表示します。
 
 - Vite + React + TypeScript（ページ）／ Python 3（データの生成・検証・取り込み。標準ライブラリのみ）
-- イベントに依存する情報はすべて `events/<slug>/` に置き、コードには書かない
+- イベントに依存する情報はすべて `events/<eventId>/` に置き、コードには書かない
 - 出力は相対パスの静的ファイルなので、GitHub Pages・nginx などどこにでも置ける
 
 `events/example/` に架空のサンプルイベントがあります。実在のイベントのデータは `.gitignore` でリポジトリから外してあり、
-手元の `events/<slug>/` に置いて使います（必要なら別の非公開リポジトリで管理してください）。
+手元の `events/<eventId>/` に置いて使います（必要なら別の非公開リポジトリで管理してください）。
 
 ```sh
 pnpm install
@@ -27,11 +27,11 @@ pnpm dev example      # 開発サーバ
 
 ## イベントの置き方
 
-1イベント（1ページ）＝ `events/<slug>/` の1フォルダです。主催が配る **元データ（任意の形式）** と、
+1イベント（1ページ）＝ `events/<eventId>/` の1フォルダです。主催が配る **元データ（任意の形式）** と、
 CAIMawaru が読む **イベントデータ** を分けています。
 
 ```
-events/<slug>/
+events/<eventId>/
   event.json                 設定とイベント情報（直接編集）          ┐
   layout.json                会場配置図（任意。なければ配置図なし）  │ イベントデータ
   data/circles.csv           サークル情報                            │ （docs/event-data.md）
@@ -43,22 +43,22 @@ events/<slug>/
 - [docs/event-data.md](docs/event-data.md) — イベントデータの仕様（event.json・circles.csv・menus.csv）
 - [docs/importers.md](docs/importers.md) — 元データの取得と変換（Sockbase・CSV・JSON・独自形式）
 - [docs/layout.md](docs/layout.md) — 配置図の書き方
-- [docs/new-event.md](docs/new-event.md) — 新しいイベントを追加する手順（`pnpm new-event <slug>` で雛形を作る）
+- [docs/new-event.md](docs/new-event.md) — 新しいイベントを追加する手順（`pnpm new-event <eventId>` で雛形を作る）
 
 ## コマンド
 
-イベントを対象にするコマンドは、最初の引数にイベントのフォルダ名（`<slug>`）を指定します。
-`--event <slug>` でも、環境変数 `EVENT` でも指定できます（引数を省略したときの既定値として使える）。
+イベントを対象にするコマンドは、最初の引数にイベントのフォルダ名（`<eventId>`）を指定します。
+`--event <eventId>` でも指定できます（最初の引数と両方で違うイベントを指定するとエラー）。環境変数では指定しません。
 
 | コマンド | 内容 |
 |---|---|
-| `pnpm new-event <slug> [--map] [--sockbase URL] …` | イベントのフォルダを作る |
-| `pnpm import-circles <slug> [--fetch] [--dry-run]` | 主催の元データ（sources）をイベントデータに取り込む |
-| `pnpm data <slug>` | CSV・設定・配置図を検証して `circles.json` を生成（`--check` で検証のみ） |
-| `pnpm dev <slug> [Vite のオプション]` | 開発サーバ（例: `pnpm dev example --host`） |
-| `pnpm preview <slug>` | ビルド結果の確認（先に `pnpm build <slug>`） |
-| `pnpm menu <slug> <URL>…` | お品書きを登録（下記） |
-| `pnpm build [<slug>…]` | 型チェック・データ検証のうえ全イベント（または指定イベント）を `dist/` にビルド |
+| `pnpm new-event <eventId> [--map] [--sockbase URL] …` | イベントのフォルダを作る |
+| `pnpm import-circles <eventId> [--fetch] [--dry-run]` | 主催の元データ（sources）をイベントデータに取り込む |
+| `pnpm data <eventId>` | CSV・設定・配置図を検証して `circles.json` を生成（`--check` で検証のみ） |
+| `pnpm dev <eventId> [Vite のオプション]` | 開発サーバ（例: `pnpm dev example --host`） |
+| `pnpm preview <eventId>` | ビルド結果の確認（先に `pnpm build <eventId>`） |
+| `pnpm menu <eventId> <URL>…` | お品書きを登録（下記） |
+| `pnpm build [<eventId>…]` | 型チェック・データ検証のうえ全イベント（または指定イベント）を `dist/` にビルド |
 | `pnpm check` | 全イベントのデータを検証 |
 | `pnpm test` | テスト（ページ: 配置図・検索・保存形式など、生成済みの全イベントの配置図／ツール: 取り込み・イベントの指定） |
 
@@ -67,10 +67,10 @@ Python のツールは直接起動してもよい（例: `python3 tools/build.py
 ### お品書きを登録する
 
 ```sh
-pnpm menu <slug> https://x.com/<ID>/status/<番号>             # 投稿したアカウントからサークルを自動判定
-pnpm menu <slug> URL1 URL2 URL3                               # まとめて
-pnpm menu <slug> --circle A-05 --note 新刊 https://booth.pm/… # X 以外はサークルを指定
-pnpm menu <slug> -                                            # 1行ずつ貼り付け。Ctrl+D で終了
+pnpm menu <eventId> https://x.com/<ID>/status/<番号>             # 投稿したアカウントからサークルを自動判定
+pnpm menu <eventId> URL1 URL2 URL3                               # まとめて
+pnpm menu <eventId> --circle A-05 --note 新刊 https://booth.pm/… # X 以外はサークルを指定
+pnpm menu <eventId> -                                            # 1行ずつ貼り付け。Ctrl+D で終了
 ```
 
 サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `pnpm data` まで自動で実行します。

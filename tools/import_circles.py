@@ -4,11 +4,11 @@ data/circles.csv と data/menus.csv に取り込む。
 
     取得（sources/ に元データを置く） → 変換（インポーター） → イベントデータ（data/*.csv） → pnpm data
 
-使い方（<slug> はイベントのフォルダ名。指定のしかたは tools/events.py）:
-    pnpm import-circles <slug>              # sources/ の元データから取り込む
-    pnpm import-circles <slug> --fetch      # 元データを取得してから取り込む（インポーターが fetch に対応している場合）
-    pnpm import-circles <slug> --dry-run    # 変化を表示するだけで書き込まない
-    pnpm import-circles <slug> --input <ファイル>   # source が1つのとき、元データのファイルを直接指定する
+使い方（<eventId> はイベントのフォルダ名。指定のしかたは tools/events.py）:
+    pnpm import-circles <eventId>              # sources/ の元データから取り込む
+    pnpm import-circles <eventId> --fetch      # 元データを取得してから取り込む（インポーターが fetch に対応している場合）
+    pnpm import-circles <eventId> --dry-run    # 変化を表示するだけで書き込まない
+    pnpm import-circles <eventId> --input <ファイル>   # source が1つのとき、元データのファイルを直接指定する
     pnpm import-circles --list              # 使えるインポーターの一覧
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きする。返さなかった列（tags / notes など）は直接編集した値を残す
@@ -238,7 +238,7 @@ def main():
         for kind in importers.BUILTIN:
             mod = importlib.import_module(f"importers.{kind}")
             print(f"{kind:9} {mod.DESCRIPTION}{'（取得に対応）' if hasattr(mod, 'fetch') else ''}")
-        print(f"{'python':9} イベントごとの Python ファイル（events/<slug>/ に置き、module で指定）")
+        print(f"{'python':9} イベントごとの Python ファイル（events/<eventId>/ に置き、module で指定）")
         return
     run(args)
 

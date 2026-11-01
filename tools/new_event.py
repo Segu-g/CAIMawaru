@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""新しいイベントのフォルダ events/<slug>/ を作る。
+"""新しいイベントのフォルダ events/<eventId>/ を作る。
 
 使い方:
-    python3 tools/new_event.py <slug> [--name 表示名] [--date YYYY-MM-DD] [--venue 会場]
+    python3 tools/new_event.py <eventId> [--name 表示名] [--date YYYY-MM-DD] [--venue 会場]
                                       [--sockbase URL] [--out-dir 公開先] [--map]
-    （= pnpm new-event <slug> ...）
+    （= pnpm new-event <eventId> ...）
 
     --sockbase を付けると、取り込み元（sources）に Sockbase の公式リストを入れる。
     ほかの形式（CSV・JSON・独自形式）は event.json の sources に書く（docs/importers.md）。
 
-    <slug> は英数字・ハイフン（例: 2027-03-21-mycon）。★・タグの保存先（storeId）の既定値にもなる。
+    <eventId> は英数字・ハイフン（例: 2027-03-21-mycon）。★・タグの保存先（storeId）の既定値にもなる。
     --map を付けると配置図の雛形 layout.json も作る（主催が配置図の二次利用を認めているときだけ載せる）。
 
 作ったあとは event.json を埋め、docs/new-event.md の手順でサークル情報を入れる。
@@ -29,29 +29,29 @@ MENU_COLS = ["id", "url", "note", "checkedAt"]
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("slug")
+    p.add_argument("event_id", metavar="eventId")
     p.add_argument("--name", default="")
     p.add_argument("--date", default="")
     p.add_argument("--venue", default="")
     p.add_argument("--sockbase", default="", help="Sockbase の公式サークルリストの URL")
-    p.add_argument("--out-dir", default="", help="dist/ の下の出力先（既定は slug）")
+    p.add_argument("--out-dir", default="", help="dist/ の下の出力先（既定は eventId）")
     p.add_argument("--map", action="store_true", help="配置図の雛形 layout.json を作る")
     a = p.parse_args()
 
-    if not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z_-]*", a.slug):
-        sys.exit("slug は英数字・ハイフン・アンダースコアにしてください")
+    if not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z_-]*", a.event_id):
+        sys.exit("eventId は英数字・ハイフン・アンダースコアにしてください")
     if a.date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", a.date):
         sys.exit("--date は YYYY-MM-DD で指定してください")
-    d = ROOT / "events" / a.slug
+    d = ROOT / "events" / a.event_id
     if d.exists():
         sys.exit(f"{d.relative_to(ROOT)} はすでにあります")
 
-    name = a.name or a.slug
+    name = a.name or a.event_id
     links = [{"label": "公式サイト", "url": "https://example.com/"}]
     if a.sockbase:
         links.append({"label": "公式サークルリスト（Sockbase）", "url": a.sockbase})
     config = {
-        "storeId": a.slug,
+        "storeId": a.event_id,
         "title": f"{name} サークルリスト",
         **({"outDir": a.out_dir} if a.out_dir else {}),
         "sources": [{"type": "sockbase", "url": a.sockbase}] if a.sockbase else [],
@@ -86,14 +86,14 @@ def main():
         }
         (d / "layout.json").write_text(json.dumps(layout, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    print(f"events/{a.slug}/ を作りました。次に:")
-    print(f"  1. events/{a.slug}/event.json を埋める（storeId は公開後に変えない）")
+    print(f"events/{a.event_id}/ を作りました。次に:")
+    print(f"  1. events/{a.event_id}/event.json を埋める（storeId は公開後に変えない）")
     if a.sockbase:
-        print(f"  2. 公式リストを取得して取り込む: pnpm import-circles {a.slug} --fetch")
+        print(f"  2. 公式リストを取得して取り込む: pnpm import-circles {a.event_id} --fetch")
     else:
-        print(f"  2. 主催の元データを events/{a.slug}/sources/ に置いて event.json の sources に書き、pnpm import-circles {a.slug}")
-        print(f"     （または events/{a.slug}/data/circles.csv に直接書く）")
-    print(f"  3. pnpm data {a.slug} && pnpm dev {a.slug}")
+        print(f"  2. 主催の元データを events/{a.event_id}/sources/ に置いて event.json の sources に書き、pnpm import-circles {a.event_id}")
+        print(f"     （または events/{a.event_id}/data/circles.csv に直接書く）")
+    print(f"  3. pnpm data {a.event_id} && pnpm dev {a.event_id}")
 
 
 if __name__ == "__main__":

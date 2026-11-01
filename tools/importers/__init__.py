@@ -16,7 +16,7 @@ read が返す行:
     - id か space のどちらかは必須
     - 返さなかった列は「直接編集する列」として、既存の circles.csv の値が残る
 
-イベント固有の形式には、events/<slug>/ に置いた Python ファイルを type "python" で指定できる（同じ read / fetch を定義する）。
+イベント固有の形式には、events/<eventId>/ に置いた Python ファイルを type "python" で指定できる（同じ read / fetch を定義する）。
 """
 import importlib
 import importlib.util

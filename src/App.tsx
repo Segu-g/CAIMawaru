@@ -15,7 +15,7 @@ import { slotColorCss } from './slotColors';
 
 // これ以上の幅（PC・タブレット横）では配置図と一覧を横に並べる。style.css の同じ値と合わせる
 const WIDE_QUERY = '(min-width: 900px)';
-// 配置図を載せるイベントか（events/<slug>/layout.json があるか。vite.config.ts が設定）。載せない場合は一覧とマイリストだけ
+// 配置図を載せるイベントか（events/<eventId>/layout.json があるか。vite.config.ts が設定）。載せない場合は一覧とマイリストだけ
 const HAS_MAP = import.meta.env.VITE_HAS_MAP !== 'false';
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/circles.json`;

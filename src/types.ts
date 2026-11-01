@@ -48,7 +48,7 @@ export type Circle = {
 export type CircleData = {
   event: EventInfo;
   circles: Circle[];
-  layout?: LayoutSpec; // 配置図（events/<slug>/layout.json）
+  layout?: LayoutSpec; // 配置図（events/<eventId>/layout.json）
 };
 
 // 閲覧者個人の ★・タグ・メモ（localStorage にのみ保存）

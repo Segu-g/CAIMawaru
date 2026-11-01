@@ -5,19 +5,19 @@ CAIMawaru は、それを **取得 → 変換 → イベントデータ** の3�
 
 | 段階 | 置き場所 | 誰が・何で |
 |---|---|---|
-| 取得 | `events/<slug>/sources/` | 人が保存する／インポーターの `fetch`（`pnpm import-circles --fetch`）／エージェントが取得する |
+| 取得 | `events/<eventId>/sources/` | 人が保存する／インポーターの `fetch`（`pnpm import-circles --fetch`）／エージェントが取得する |
 | 変換 | `tools/importers/`・イベントごとの Python | `pnpm import-circles`（インポーターの `read`） |
-| イベントデータ | `events/<slug>/data/*.csv` | 取り込み結果。人・エージェントが直接編集してもよい |
+| イベントデータ | `events/<eventId>/data/*.csv` | 取り込み結果。人・エージェントが直接編集してもよい |
 
 ## 使い方
 
 `event.json` の `sources` に取り込み元を書き、取り込みます。
 
 ```sh
-pnpm import-circles <slug> --dry-run   # 何が変わるかだけ表示
-pnpm import-circles <slug>             # sources/ の元データから取り込む → pnpm data まで実行
-pnpm import-circles <slug> --fetch     # 元データを取得してから取り込む（fetch に対応したインポーターのみ）
-pnpm import-circles <slug> --list      # 使えるインポーター
+pnpm import-circles <eventId> --dry-run   # 何が変わるかだけ表示
+pnpm import-circles <eventId>             # sources/ の元データから取り込む → pnpm data まで実行
+pnpm import-circles <eventId> --fetch     # 元データを取得してから取り込む（fetch に対応したインポーターのみ）
+pnpm import-circles <eventId> --list      # 使えるインポーター
 ```
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きします。返さなかった列（多くは `tags`・`notes` など）は直接編集した値が残ります
@@ -76,7 +76,7 @@ pnpm import-circles <slug> --list      # 使えるインポーター
 ```
 
 ```python
-# events/<slug>/importer.py
+# events/<eventId>/importer.py
 def read(source, path):
     """path の元データを読み、イベントデータの列名をキーにした行のリストを返す。"""
     return [{"space": "A-01", "name": "サークル名", "penNames": ["作家"], "x": "example_user",

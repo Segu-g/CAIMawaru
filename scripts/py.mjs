@@ -1,7 +1,7 @@
 // tools/ の Python ツールを、OS に合った Python で起動する（python3 / python / py -3）。
 //   node scripts/py.mjs <ツール名> [引数…]    例: node scripts/py.mjs build example --check
 //   node scripts/py.mjs -m unittest …          Python のモジュールを直接起動
-// イベントの指定（最初の引数・--event・環境変数 EVENT）は Python 側（tools/events.py）が解釈する。
+// イベントの指定（最初の引数か --event）は Python 側（tools/eventargs.py）が解釈する。
 import { resolve } from 'node:path';
 import { fail, root, runPython } from './lib.mjs';
 
