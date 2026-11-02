@@ -41,7 +41,7 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 ```
 cli.py ─┬▶ build.py ──▶ layout.py
         │     └──────▶ project.py
-        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json、イベントごとの python）
+        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json）
         │                └▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
         ├▶ menu.py ──────▶ build.py
         ├▶ edit.py ──────┬▶ build.py（書き込む前に一時フォルダの写しを検証、書き込み後に生成）

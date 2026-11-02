@@ -14,6 +14,23 @@ class CliError(Exception):
     """利用者に知らせて終了するエラー（終了コード 1）。"""
 
 
+class DuplicateKeyError(ValueError):
+    """JSON のオブジェクトに同じキーが2回ある（json は黙って後の値だけを残すので、エラーにする）。"""
+
+
+def _no_duplicate_keys(pairs):
+    keys = [k for k, _ in pairs]
+    dup = sorted({k for k in keys if keys.count(k) > 1})
+    if dup:
+        raise DuplicateKeyError(f"同じキーが2回以上あります: {', '.join(dup)}")
+    return dict(pairs)
+
+
+def parse_json(text):
+    """JSON を読む。キーの重複は DuplicateKeyError、書き方の誤りは json.JSONDecodeError（どちらも ValueError）。"""
+    return json.loads(text, object_pairs_hook=_no_duplicate_keys)
+
+
 def find_root(start=None):
     """start（既定はカレントディレクトリ）から上にたどり、events/ を持つフォルダを返す。"""
     here = Path(start or Path.cwd()).resolve()
@@ -63,7 +80,7 @@ class Event:
         return self.dir / "public" / "data" / "circles.json"
 
     def config(self):
-        return json.loads(self.config_json.read_text(encoding="utf-8"))
+        return parse_json(self.config_json.read_text(encoding="utf-8"))
 
     def rel(self, path):
         """表示用に、プロジェクトからの相対パスにする。"""

@@ -38,7 +38,7 @@ from pathlib import Path
 
 from caimawaru import build
 from caimawaru.menu import describe, find_circles, normalize_url
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, Event, Table, is_comment, make_id
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, DuplicateKeyError, Event, Table, is_comment, make_id, parse_json
 
 
 # --- CSV を書き戻す形のまま扱う ---
@@ -390,7 +390,9 @@ _MISSING = object()
 def _load_config(event):
     text = _read_text(event.config_json)
     try:
-        config = json.loads(text)
+        config = parse_json(text)
+    except DuplicateKeyError as e:
+        raise CliError(f"{event.rel(event.config_json)}: {e}。書き換えると片方が消えるので、先に直してください")
     except json.JSONDecodeError as e:
         raise CliError(f"{event.rel(event.config_json)}: JSON として読めません: {e}")
     if not isinstance(config, dict):
@@ -446,8 +448,8 @@ def config_set(event, key, value, as_json=False, force=False, dry_run=False, no_
     parts = _keys(key)
     if as_json:
         try:
-            value = json.loads(value)
-        except json.JSONDecodeError as e:
+            value = parse_json(value)
+        except ValueError as e:
             raise CliError(f"値を JSON として読めません（文字列なら --json を付けない）: {e}")
     node = config
     for part in parts[:-1]:

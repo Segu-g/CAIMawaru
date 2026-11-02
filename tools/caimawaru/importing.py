@@ -9,7 +9,6 @@ data/circles.csv と data/menus.csv に取り込む（caimawaru import）。
 - 公式リストから消えたサークルは知らせる（配置変更・参加取り消しの可能性。menus.csv に残った行は検証でエラーになる）
 - 書き込んだあと検証・生成する（--no-build で省略）
 """
-import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -106,7 +105,7 @@ def merge(imported, existing_circles, existing_menus, today):
         circles.append(out)
 
     menus = [dict(m) for m in existing_menus]
-    known = {(m["id"], m["url"]) for m in menus}
+    known = {((m.get("id") or "").strip(), (m.get("url") or "").strip()) for m in menus}
     added_menus = 0
     for cid in order:
         for url, note in by_id[cid][1]:
@@ -117,7 +116,7 @@ def merge(imported, existing_circles, existing_menus, today):
 
     new_ids = set(order)
     changed = [cid for cid in order if cid in existing
-               and any((existing[cid].get(c) or "") != circles[order.index(cid)][c] for c in CIRCLE_COLS)]
+               and any((existing[cid].get(c) or "").strip() != (circles[order.index(cid)][c] or "").strip() for c in CIRCLE_COLS)]
     report = {
         "added": [cid for cid in order if cid not in existing],
         "changed": changed,
@@ -158,7 +157,7 @@ def run(event, fetch=False, input=None, dry_run=False, no_build=False):
     """取り込む。終了コードを返す。"""
     try:
         sources = event.config().get("sources") or []
-    except json.JSONDecodeError as e:
+    except ValueError as e:  # 書き方の誤り・キーの重複
         raise CliError(f"{event.rel(event.config_json)}: JSON として読めません: {e}")
     if not sources:
         raise CliError("event.json に sources（取り込み元）がありません。docs/importers.md を参照してください")

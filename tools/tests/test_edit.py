@@ -384,11 +384,35 @@ class EditTest(unittest.TestCase):
             self.assertNotIn("Traceback", err)
         self.assertEqual(self.snapshot(), before)
 
-    def test_hash_in_space_with_empty_id_warns(self):
-        text = self.circles.read_bytes().decode("utf-8")
-        self.circles.write_bytes((text + ",#A-10,サンプル即売会,メモのつもり,,,,0,,,,,,架空\r\n").encode("utf-8"))
+    def test_import_ignores_whitespace_in_existing_values(self):
+        circles = self.circles.read_bytes().decode("utf-8").replace(",星屑通信,", ", 星屑通信 ,", 1)
+        self.circles.write_bytes(circles.encode("utf-8"))
+        self.menus.write_bytes(self.menus.read_bytes().replace(
+            b"a-01,https://example.com/circle1/menu,", b" a-01 , https://example.com/circle1/menu ,", 1))
+        code, out, err = self.cli("import", "example", "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("変更 0", out)
+        self.assertIn("お品書きの追加 0 件", out)
+
+    def test_duplicate_keys_in_event_json(self):
+        text = self.config.read_text(encoding="utf-8").replace('"title":', '"title": "古い題名",\n  "title":', 1)
+        self.config.write_text(text, encoding="utf-8")
         code, _, err = self.cli("check", "example")
-        self.assertIn("最初の列（id）を「#」で始めて", err)
+        self.assertEqual(code, 1)
+        self.assertIn("title", err)
+        self.assertIn("2回以上", err)
+        before = self.snapshot()
+        for args in (("config", "set", "example", "info.venue", "x"), ("config", "unset", "example", "info.hours"),
+                     ("config", "get", "example")):
+            code, _, err = self.cli(*args)
+            self.assertEqual(code, 1, args)
+            self.assertIn("2回以上", err)
+            self.assertNotIn("Traceback", err)
+        self.assertEqual(self.snapshot(), before)
+        self.config.write_text(text.replace('"title": "古い題名",\n  ', "", 1), encoding="utf-8")
+        code, _, err = self.cli("config", "set", "example", "info.contact", '{"label": "a", "label": "b"}', "--json")
+        self.assertEqual(code, 1)
+        self.assertIn("2回以上", err)
 
     def test_import_keys_existing_rows_by_derived_id(self):
         lines = self.circles.read_bytes().decode("utf-8").split("\r\n")

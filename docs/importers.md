@@ -6,7 +6,7 @@ CAIMawaru は、それを **取得 → 変換 → イベントデータ** の3�
 | 段階 | 置き場所 | 誰が・何で |
 |---|---|---|
 | 取得 | `events/<eventId>/sources/` | 人が保存する／インポーターの `fetch`（`uv run caimawaru import --fetch`）／エージェントが取得する |
-| 変換 | `tools/caimawaru/importers/`・イベントごとの Python | `uv run caimawaru import`（インポーターの `read`） |
+| 変換 | `tools/caimawaru/importers/` | `uv run caimawaru import`（インポーターの `read`） |
 | イベントデータ | `events/<eventId>/data/*.csv` | 取り込み結果。人・エージェントが直接編集してもよい |
 
 ## 使い方

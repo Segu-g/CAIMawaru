@@ -59,14 +59,6 @@ class CliTest(unittest.TestCase):
         r.circles[0] = {**r.circles[0], "name": "変更後"}
         self.assertEqual(build.write_output(event, r, today="2030-01-03")["event"]["updatedAt"], "2030-01-03")
 
-    def test_out_dir_is_rejected(self):
-        path = self.root / "events/example/event.json"
-        config = json.loads(path.read_text(encoding="utf-8"))
-        path.write_text(json.dumps({**config, "outDir": "site"}), encoding="utf-8")
-        code, _, err = self.cli("check", "example")
-        self.assertEqual(code, 1)
-        self.assertIn("outDir", err)
-
     def test_broken_files_are_errors_not_tracebacks(self):
         (self.root / "events/example/layout.json").write_text('{"hall": {"x": 0, "y": 0, "w": 1, "h": 1}, "islands": {}}', encoding="utf-8")
         code, _, err = self.cli("check", "example")

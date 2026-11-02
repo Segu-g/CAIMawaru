@@ -14,7 +14,7 @@ from datetime import date
 
 from caimawaru import importers
 from caimawaru import layout as layout_mod
-from caimawaru.project import is_http_url, make_id, read_csv
+from caimawaru.project import DuplicateKeyError, is_http_url, make_id, read_csv
 
 LINK_KEYS = ("x", "pixiv", "booth", "web")
 POST_URL = re.compile(r"^https://(x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/\d+")
@@ -58,6 +58,9 @@ def check_config(event, r):
     where = event.rel(event.config_json)
     try:
         config = event.config()
+    except DuplicateKeyError as e:
+        r.errors.append(f"{where}: {e}（後の値だけが使われてしまうので1つにしてください）")
+        return
     except json.JSONDecodeError as e:
         r.errors.append(f"{where}: JSON として読めません: {e}")
         return
@@ -122,18 +125,12 @@ def check_config(event, r):
             r.errors.append(f"{where}: info.contact.url が不正です: {contact}")
 
     sources = config.get("sources", [])
-    if "outDir" in config:
-        r.errors.append(f"{where}: outDir は廃止しました。出力先は dist/<eventId>/ で、公開先での置き場所はデプロイの手順で決めてください")
-    if "sockbase" in config:
-        r.errors.append(f'{where}: sockbase キーは sources に変わりました: "sources": [{{"type": "sockbase", "url": "..."}}]')
     if not isinstance(sources, list):
         r.errors.append(f"{where}: sources は配列にしてください")
         sources = []
     for i, s in enumerate(sources):
         kind = s.get("type") if isinstance(s, dict) else None
-        if kind == "python":
-            r.errors.append(f"{where}: sources[{i}] の type python は廃止しました。tools/caimawaru/importers/ にインポーターを足し、その名前を type に書いてください")
-        elif kind not in importers.available():
+        if kind not in importers.available():
             r.errors.append(f"{where}: sources[{i}].type は {' / '.join(importers.available())} のどれかにしてください: {kind!r}")
         elif kind in ("csv", "json") and not s.get("file"):
             r.errors.append(f"{where}: sources[{i}] は type {kind} なので file（元データ）が必要です")
@@ -158,8 +155,6 @@ def check_circles(event, r):
             r.errors.append(f"{where}: サークル名（name）が空です")
         if not row.get("space"):
             r.warnings.append(f"{where}: スペース番号が未入力です")
-        elif not row.get("id") and row["space"].startswith("#"):
-            r.warnings.append(f"{where}: スペース番号が「#」で始まっています。コメントの行にするなら、最初の列（id）を「#」で始めてください")
         links = {}
         for key in LINK_KEYS:
             url = row.get(key, "")

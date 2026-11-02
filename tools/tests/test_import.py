@@ -181,7 +181,7 @@ class LoaderTest(unittest.TestCase):
         self.assertTrue(callable(importers.load({"type": "csv"}).read))
 
     def test_only_modules_in_the_package(self):
-        # ファイルのパス・親パッケージのモジュール・廃止した python は読み込まない
+        # ファイルのパス・親パッケージのモジュール・パッケージにない名前は読み込まない
         p = tmpfile("my_importer.py", "raise SystemExit('実行されてはいけない')\n")
         for kind in ("excel", "python", str(p), "../cli", "caimawaru.cli", "cli", "__init__", "", None):
             with self.subTest(kind=kind), self.assertRaises(ValueError):
