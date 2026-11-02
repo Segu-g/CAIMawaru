@@ -5,6 +5,7 @@ data/circles.csv と data/menus.csv に取り込む（caimawaru import）。
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きする。返さなかった列（tags / notes など）は直接編集した値を残す
 - menus.csv は取り込んだお品書き URL を追加し、直接追加した行は残す
+- イベントデータにない列（直接足した列）と「#」の行は残す（「#」の行は、元のファイルで次にあったサークルの前に置く）
 - 公式リストから消えたサークルは知らせる（配置変更・参加取り消しの可能性。menus.csv に残った行は検証でエラーになる）
 - 書き込んだあと検証・生成する（--no-build で省略）
 """
@@ -14,7 +15,7 @@ from datetime import date
 from pathlib import Path
 
 from caimawaru import build, importers
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, make_id, read_rows, write_csv
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, Table, is_comment, make_id
 
 TRUE_WORDS = {"1", "true", "yes", "y", "有", "あり", "○", "◯", "r18", "成人向け"}
 FALSE_WORDS = {"0", "false", "no", "n", "無", "なし", "×", "-", "全年齢"}
@@ -123,6 +124,25 @@ def merge(imported, existing_circles, existing_menus, today):
     return circles, menus, report
 
 
+def keep_extras_and_comments(table, circles):
+    """取り込み結果の circles に、table（今の circles.csv）にだけある列の値と「#」の行を戻した行のリストを返す。"""
+    extras = [c for c in table.cols if c not in CIRCLE_COLS]
+    old = {r.get("id"): r for r in table.data_rows()}
+    new_ids = {c["id"] for c in circles}
+    before, pending = {}, []  # id → その前に置くコメント行
+    for r in table.rows:
+        if is_comment(r):
+            pending.append(r)
+        elif pending and r.get("id") in new_ids:
+            before.setdefault(r["id"], []).extend(pending)
+            pending = []
+    rows = []
+    for c in circles:
+        rows.extend(before.get(c["id"], []))
+        rows.append({**c, **{e: old.get(c["id"], {}).get(e, "") for e in extras}})
+    return rows + pending
+
+
 def list_importers():
     for kind in importers.available():
         mod = importers.load({"type": kind})
@@ -177,7 +197,9 @@ def run(event, fetch=False, input=None, dry_run=False, no_build=False):
             imported.append((row, menus, cols))
         print(f"{label}: {len(raws)} 件")
 
-    circles, menus, report = merge(imported, read_rows(event.circles_csv), read_rows(event.menus_csv), date.today().isoformat())
+    circle_table, menu_table = Table(event.circles_csv, CIRCLE_COLS), Table(event.menus_csv, MENU_COLS)
+    existing_menus = menu_table.data_rows()
+    circles, menus, report = merge(imported, circle_table.data_rows(), existing_menus, date.today().isoformat())
 
     for w in warnings:
         print(f"警告: {w}", file=sys.stderr)
@@ -191,7 +213,9 @@ def run(event, fetch=False, input=None, dry_run=False, no_build=False):
         print("（--dry-run のため書き込みません）")
         return 0
 
-    write_csv(event.circles_csv, CIRCLE_COLS, circles)
-    write_csv(event.menus_csv, MENU_COLS, menus)
+    circle_table.rows = keep_extras_and_comments(circle_table, circles)
+    menu_table.rows += menus[len(existing_menus):]  # merge は既存の行のあとに追加した行を返す
+    circle_table.write()
+    menu_table.write()
     print(f"{event.rel(event.circles_csv)} と {event.menus_csv.name} を更新しました")
     return 0 if no_build else build.run(event)

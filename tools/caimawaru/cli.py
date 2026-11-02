@@ -59,7 +59,7 @@ def _parser():
 def _edit_parsers(sub):
     """circle / menus / config（tools/caimawaru/edit.py）。"""
     circle_help = "サークルの指定（スペース番号・id・@XのID・サークル名の一部）"
-    key_help = "「.」区切りのキー（例: info.venue、info.links.0.url）"
+    key_help = "「.」区切りのキー（例: info.venue、info.links.0.url）。「.」を含むキーは親のオブジェクトごと --json で書く"
 
     def group(name, help):
         s = sub.add_parser(name, help=help, description=edit.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -93,7 +93,8 @@ def _edit_parsers(sub):
     s = action(actions, "set", "サークルの列を変更する", write=True)
     s.add_argument("query", metavar="サークル指定", help=circle_help)
     fields(s, CIRCLE_COLS)
-    s.add_argument("--force", action="store_true", help="id が変わる変更も行う（menus.csv の id も書き換える）")
+    s.add_argument("--force", action="store_true",
+                   help="サークルの id の変更を許す（id は閲覧者の ★・タグ・メモが参照するので公開後は変えない。menus.csv の id も書き換える）")
     s = action(actions, "remove", "サークルを削除する", write=True)
     s.add_argument("query", metavar="サークル指定", help=circle_help)
     s.add_argument("--with-menus", action="store_true", help="そのサークルのお品書き（menus.csv の行）も削除する")
@@ -119,7 +120,8 @@ def _edit_parsers(sub):
         if name == "set":
             s.add_argument("value", metavar="値")
             s.add_argument("--json", action="store_true", help="値を JSON として読む（数・真偽値・配列・オブジェクト）。付けなければ文字列")
-        s.add_argument("--force", action="store_true", help="storeId も変更する（公開後は変えない）")
+        s.add_argument("--force", action="store_true",
+                       help="storeId の変更を許す（★・タグ・メモの保存先なので公開後は変えない）")
 
 
 def _run(a):

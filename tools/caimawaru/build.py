@@ -41,34 +41,80 @@ def circle_spaces(circle):
     return [s.strip() for s in circle["space"].split(",") if s.strip()]
 
 
+def _url_ok(value):
+    return isinstance(value, str) and is_http_url(value)
+
+
+def _is_link(value, url_ok=_url_ok):
+    """{ "label": 文字列, "url": … } か。"""
+    return isinstance(value, dict) and isinstance(value.get("label", ""), str) and url_ok(value.get("url"))
+
+
 def check_config(event, r):
-    """event.json の検証。ページに出すイベント情報（info）を r.info に入れる。"""
+    """event.json の検証。ページに出すイベント情報（info）を r.info に入れる。
+
+    直接編集した値の型が違っても、例外にせず検証エラーにする。
+    """
     where = event.rel(event.config_json)
     try:
         config = event.config()
     except json.JSONDecodeError as e:
         r.errors.append(f"{where}: JSON として読めません: {e}")
         return
+    if not isinstance(config, dict):
+        r.errors.append(f"{where}: オブジェクト（{{ ... }}）にしてください")
+        return
     for key in ("storeId", "title"):
         if not config.get(key):
             r.errors.append(f"{where}: {key} がありません")
-    info = dict(config.get("info") or {})
+        elif not isinstance(config[key], str):
+            r.errors.append(f"{where}: {key} は文字列にしてください: {config[key]!r}")
+    info = config.get("info") or {}
+    if not isinstance(info, dict):
+        r.errors.append(f"{where}: info はオブジェクト（{{ ... }}）にしてください: {info!r}")
+        info = {}
+    info = dict(info)
     for key in INFO_REQUIRED:
         if not info.get(key):
             r.warnings.append(f"{where}: info.{key} が未入力です")
     for key, default in (("name", ""), ("date", ""), ("venue", ""), ("hours", ""), ("links", []), ("hashtags", [])):
         info.setdefault(key, default)
-    for link in info["links"]:
-        if not is_http_url(link.get("url", "")):
-            r.errors.append(f"{where}: info.links の URL が不正です: {link}")
-    for ev, n in (info.get("eventSlots") or {}).items():
-        if not (isinstance(n, int) and 1 <= n <= 5):
+    for key in ("name", "date", "venue", "hours"):
+        if not isinstance(info[key], str):
+            r.errors.append(f"{where}: info.{key} は文字列にしてください: {info[key]!r}")
+
+    def array_of(key, ok, what):
+        value = info.get(key)
+        if value is None:
+            return
+        if not isinstance(value, list):
+            r.errors.append(f"{where}: info.{key} は配列にしてください: {value!r}")
+            return
+        for item in value:
+            if not ok(item):
+                r.errors.append(f"{where}: info.{key} の{what}: {item!r}")
+
+    def object_of(key):
+        value = info.get(key)
+        if value is not None and not isinstance(value, dict):
+            r.errors.append(f"{where}: info.{key} はオブジェクト（{{ ... }}）にしてください: {value!r}")
+            return {}
+        return value or {}
+
+    array_of("links", _is_link, "URL が不正です（{ \"label\", \"url\" } にしてください）")
+    array_of("hashtags", lambda v: isinstance(v, str), "値は文字列にしてください")
+    array_of("halls", lambda v: _is_link(v, lambda u: isinstance(u, str) and bool(u))
+             and isinstance(v.get("current", False), bool), "形が不正です（{ \"label\", \"url\", \"current\" } にしてください）")
+    for ev, n in object_of("eventSlots").items():
+        if not (isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 5):
             r.errors.append(f"{where}: info.eventSlots の {ev} は 1〜5 にしてください: {n}")
-    for n in (info.get("slotColors") or {}):
+    for n, color in object_of("slotColors").items():
         if n not in ("1", "2", "3", "4", "5"):
             r.errors.append(f"{where}: info.slotColors の枠 {n} は 1〜5 にしてください")
+        elif not (isinstance(color, dict) and all(isinstance(v, str) for v in color.values())):
+            r.errors.append(f"{where}: info.slotColors の枠 {n} は {{ \"light\", \"dark\", \"ink\", \"darkInk\" }}（文字列）にしてください: {color!r}")
     contact = info.get("contact")
-    if contact and not is_http_url(contact.get("url", "")):
+    if contact and not _is_link(contact):
         r.errors.append(f"{where}: info.contact.url が不正です: {contact}")
 
     sources = config.get("sources", [])
@@ -87,7 +133,7 @@ def check_config(event, r):
             r.errors.append(f"{where}: sources[{i}].type は {' / '.join(importers.available())} のどれかにしてください: {kind!r}")
         elif kind in ("csv", "json") and not s.get("file"):
             r.errors.append(f"{where}: sources[{i}] は type {kind} なので file（元データ）が必要です")
-        if isinstance(s, dict) and s.get("url") and not is_http_url(s["url"]):
+        if isinstance(s, dict) and s.get("url") and not _url_ok(s["url"]):
             r.errors.append(f"{where}: sources[{i}].url が不正です: {s['url']}")
     r.info = info
 

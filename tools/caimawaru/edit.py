@@ -20,8 +20,10 @@
 お品書きの追加は caimawaru menu。
 
 - 書き込む前に、変更後のイベントデータを検証する。変更で新しいエラーが増えるなら書き込まない
-- CSV は列の順・引用符・改行を write_csv と同じ形で書き戻す（変えていない行はそのまま）。
-  イベントデータにない列・空行・「#」の行も残す
+- CSV は決まった形（docs/event-data.md の「CSV の書き方」。取り込み・caimawaru menu と同じ）で書き戻す。
+  イベントデータにない列と「#」の行（最初の値が「#」で始まる行）は残し、空行・値がすべて空の行は落とす。その形で保存されたファイルなら、差分は変えた行だけになる
+- event.json のキーは「.」で区切る（info.links.0.url）。「.」を含むキーは、親のオブジェクトごと --json で書く
+- 変更でエラーが増えたかは、行番号を除いたメッセージで比べる（同じ内容のエラーが別の行に移ると見分けられない）
 - event.json はインデント 2・日本語はそのままの JSON で書き戻す（キーの順は保つ）
 - storeId とサークルの id は公開後に変えない（閲覧者の ★・タグ・メモが参照する）ので、変えるには --force が要る
 """
@@ -36,27 +38,14 @@ from pathlib import Path
 
 from caimawaru import build
 from caimawaru.menu import describe, find_circles, normalize_url
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, Event, format_csv, make_id, read_table
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, Event, Table, is_comment, make_id
 
 
 # --- CSV を書き戻す形のまま扱う ---
 
-class Table:
-    """CSV の見出しと行。cols はイベントデータの列（決まった順）＋ファイルにだけある列。"""
-
-    def __init__(self, path, base_cols):
-        self.path = path
-        header, self.rows = read_table(path)
-        self.cols = list(base_cols) + [c for c in header if c and c not in base_cols]
-
-    def text(self):
-        return format_csv(self.cols, self.rows)
-
-
 def _is_data_row(row):
-    """read_csv が読む行か（空行・「#」の行でない）。"""
-    return any((v or "").strip() for k, v in row.items() if k) and \
-        not (row.get("id") or row.get("space") or "").startswith("#")
+    """read_csv が読む行か（read_table は空行を落とし、「#」の行をコメント行にしている）。"""
+    return not is_comment(row)
 
 
 def _views(table, derive_id):
@@ -149,6 +138,31 @@ def _read_text(path):
     return path.read_bytes().decode("utf-8-sig") if path.exists() else ""
 
 
+def _write_all(event, files):
+    """files をまとめて書く。どれか1つでも開けなければ（読み取り専用・ほかのアプリが開いている等）、どれも書かない。
+
+    先にすべてを中身を消さずに開いてから書く（一時ファイルを作って置き換える方法はファイルを動かすので使わない）。
+    """
+    handles = []
+    try:
+        for path in sorted(files, key=lambda p: not p.exists()):  # 新しく作るファイルは最後に
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                handles.append((path, path.open("r+b" if path.exists() else "xb")))
+            except OSError as e:
+                raise CliError(f"{event.rel(path)} に書き込めません（ほかのアプリで開いていたら閉じてください）: {e}。"
+                               "どのファイルも書き換えていません") from e
+        for path, f in handles:
+            try:
+                f.write(files[path].encode("utf-8"))
+                f.truncate()
+            except OSError as e:
+                raise CliError(f"{event.rel(path)} の書き込みに失敗しました: {e}") from e
+    finally:
+        for _, f in handles:
+            f.close()
+
+
 def commit(event, files, dry_run=False, no_build=False):
     """files（{パス: 新しい内容}）の差分を表示し、検証して書き込む。終了コードを返す。"""
     changed = {p: (_read_text(p), new) for p, new in files.items() if _read_text(p) != new}
@@ -158,8 +172,10 @@ def commit(event, files, dry_run=False, no_build=False):
     for path, (old, new) in changed.items():
         rel = event.rel(path)
         diff = list(difflib.unified_diff(old.splitlines(), new.splitlines(), f"a/{rel}", f"b/{rel}", lineterm=""))
-        for line in diff or [f"{rel}: 改行コード・BOM だけが変わります"]:
+        for line in diff or [f"{rel}: 改行・空行・BOM だけが変わります"]:
             print(line)
+        if "\n" in old.replace("\r\n", ""):
+            print(f"{rel}: 改行を CRLF にそろえます")
 
     before = build.validate(event)
     after = _validate_with(event, {p: new for p, (_, new) in changed.items()})
@@ -172,10 +188,7 @@ def commit(event, files, dry_run=False, no_build=False):
         print("（--dry-run のため書き込みません）")
         return 0
 
-    for path, (_, new) in changed.items():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8", newline="") as f:
-            f.write(new)
+    _write_all(event, {p: new for p, (_, new) in changed.items()})
     print(f"{' と '.join(event.rel(p) for p in changed)} を更新しました")
     return 0 if no_build else build.run(event)
 
@@ -256,6 +269,8 @@ def circle_set(event, query, fields, force=False, dry_run=False, no_build=False)
 
     new_id = (row.get("id") or "").strip() or make_id((row.get("space") or "").strip())
     if new_id != c["id"]:
+        if any(o["id"] == new_id for o in views if o is not c):
+            raise CliError(f"id '{new_id}' のサークルはすでにあります")
         if not force:
             raise CliError(f"id が {c['id']} から {new_id or '（空）'} に変わります。id は menus.csv と閲覧者の ★・タグ・メモが参照するので、"
                            "公開後は変えません。変えるときは --force（menus.csv の id も書き換えます）")

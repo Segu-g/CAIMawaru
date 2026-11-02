@@ -2,13 +2,15 @@
 import contextlib
 import io
 import json
+import os
 import shutil
+import stat
 import tempfile
 import unittest
 from pathlib import Path
 
 from caimawaru.cli import main
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, format_csv, read_table
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, format_csv, read_csv, read_table
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -209,18 +211,159 @@ class EditTest(unittest.TestCase):
             _, rows = read_table(path)
             self.assertEqual(format_csv(cols, rows).encode("utf-8"), path.read_bytes())
 
-    def test_extra_columns_and_comment_rows_are_kept(self):
+    def write_circles_with_extras(self):
+        """「memo」列・コメント行・空行を足した circles.csv にする（直接編集でありうる形）。"""
         lines = self.circles.read_bytes().decode("utf-8").split("\r\n")
         lines[0] += ",memo"
         lines[1] += ",手元のメモ"
-        lines.insert(2, "# コメント行" + "," * 14)
+        lines.insert(2, "# コメント行")
+        lines.insert(3, "")
         self.circles.write_bytes("\r\n".join(lines).encode("utf-8"))
+
+    def test_extra_columns_and_comment_rows_are_kept(self):
+        self.write_circles_with_extras()
         code, _, err = self.cli("circle", "set", "example", "A-02", "notes=x", "memo=追記", "--no-build")
         self.assertEqual(code, 0, err)
-        out = self.circles.read_bytes().decode("utf-8")
-        self.assertIn("手元のメモ", out)
-        self.assertIn("# コメント行", out)
-        self.assertIn(",x,架空の公式サークル一覧,追記", out)
+        lines = self.circles.read_bytes().decode("utf-8").split("\r\n")
+        self.assertTrue(lines[0].endswith(",source,memo"))
+        self.assertTrue(lines[1].endswith(",手元のメモ"))
+        self.assertEqual(lines[2], "# コメント行")  # 位置はそのまま、1列で
+        self.assertTrue(lines[3].endswith(",x,架空の公式サークル一覧,追記"))  # 空行は落とす
+
+    def test_canonical_form(self):
+        cases = [
+            ("﻿id,url,note,checkedAt\na-01,https://example.com/m,,2030-01-01\n\n",  # BOM・LF・空行
+             "id,url,note,checkedAt\r\na-01,https://example.com/m,,2030-01-01\r\n"),
+            ("id,url,note,checkedAt\r\n# メモ, 続き,,\r\na-01,https://example.com/m\r\n",  # コメント行・足りない値
+             "id,url,note,checkedAt\r\n# メモ\r\na-01,https://example.com/m,,\r\n"),
+            ('id,url,note,checkedAt\r\na-01,https://example.com/m,"""新刊"", 既刊",2030-01-01\r\n',  # 引用符
+             'id,url,note,checkedAt\r\na-01,https://example.com/m,"""新刊"", 既刊",2030-01-01\r\n'),
+            ("id,url,note,checkedAt\r\n,,,\r\n , ,\t,\r\na-01,https://example.com/m,,\r\n",  # 値がすべて空の行は空行と同じ
+             "id,url,note,checkedAt\r\na-01,https://example.com/m,,\r\n"),
+            ("id,url,note,checkedAt\r\n,#x,,\r\n",  # 「#」の行は最初の値が「#」で始まる行だけ
+             "id,url,note,checkedAt\r\n,#x,,\r\n"),
+            ("checkedAt,note,url,id,by\r\n2030-01-01,,https://example.com/m,a-01,人\r\n",  # 列の順・ファイルにだけある列
+             "id,url,note,checkedAt,by\r\na-01,https://example.com/m,,2030-01-01,人\r\n"),
+        ]
+        for text, expected in cases:
+            self.menus.write_bytes(text.encode("utf-8"))
+            header, rows = read_table(self.menus)
+            cols = MENU_COLS + [c for c in header if c not in MENU_COLS]
+            self.assertEqual(format_csv(cols, rows), expected, text)
+        # read_csv（検証・生成が読む）も同じ規則でコメント行と空行を見分ける
+        other = self.root / "other.csv"
+        other.write_bytes(("id,space,event,name\r\n# メモ,A-01,,\r\n,,,\r\n,#A-10,,番号が「#」で始まる\r\n").encode("utf-8"))
+        self.assertEqual([(c["id"], c["space"]) for c in read_csv(other)], [("", "#A-10")])
+        # 「,」を含むコメントは1列なので引用符で囲む
+        self.assertEqual(format_csv(MENU_COLS, [{"#": "# a,b"}]), 'id,url,note,checkedAt\r\n"# a,b"\r\n')
+        # 編集コマンドも同じ形で書く
+        self.menus.write_bytes(cases[0][0].encode("utf-8"))
+        code, out, err = self.cli("menus", "set", "example", "A-01", "note=既刊", "--no-build")
+        self.assertEqual(code, 0, err)
+        self.assertIn("CRLF", out)
+        self.assertEqual(self.menus.read_bytes(),
+                         "id,url,note,checkedAt\r\na-01,https://example.com/m,既刊,2030-01-01\r\n".encode("utf-8"))
+
+    def test_bad_headers_are_refused(self):
+        for header in ("id,url,,checkedAt", "id,url,note,note"):
+            self.menus.write_bytes(f"{header}\r\na-01,https://example.com/m,a,b\r\n".encode("utf-8"))
+            before = self.snapshot()
+            for args in (("menus", "list", "example"), ("circle", "set", "example", "A-02", "notes=x"),
+                         ("menu", "example", "--circle", "A-02", "https://example.com/m2"), ("import", "example")):
+                code, _, err = self.cli(*args)
+                self.assertEqual(code, 1, (header, args))
+                self.assertIn("見出し", err)
+                self.assertNotIn("Traceback", err)
+            self.assertEqual(self.snapshot(), before)
+        self.menus.write_bytes(b"id,url,note,checkedAt\r\na-01,https://example.com/m,a,b,extra\r\n")
+        code, _, err = self.cli("menus", "list", "example")
+        self.assertEqual(code, 1)
+        self.assertIn("menus.csv:2", err)
+
+    def test_partial_write_failure_changes_nothing(self):
+        self.menus.chmod(stat.S_IREAD)
+        try:
+            if os.access(self.menus, os.W_OK):
+                self.skipTest("読み取り専用にできない環境（root など）")
+            before = self.snapshot()
+            for args in (("circle", "set", "example", "C-01", "id=c-99", "--force"),
+                         ("circle", "remove", "example", "A-01", "--with-menus")):
+                code, _, err = self.cli(*args)
+                self.assertEqual(code, 1, args)
+                self.assertIn("書き込めません", err)
+                self.assertNotIn("Traceback", err)
+                self.assertEqual(self.snapshot(), before)
+        finally:
+            self.menus.chmod(stat.S_IREAD | stat.S_IWRITE)
+
+    def test_wrong_typed_config_is_an_error_not_a_traceback(self):
+        before = self.snapshot()
+        for key, value, *flags in (("info.contact", "foo"), ("info.links", "x"), ("info", "title"),
+                                   ("info.eventSlots", "3"), ("info.eventSlots", "3", "--json"),
+                                   ("info.hashtags", "タグ"), ("info.slotColors", '{"1": "red"}', "--json"),
+                                   ("info.halls", "x"), ("info.venue", "1", "--json"), ("title", "[]", "--json")):
+            code, _, err = self.cli("config", "set", "example", key, value, *flags)
+            self.assertEqual(code, 1, (key, value))
+            self.assertIn("書き込みません", err)
+            self.assertNotIn("Traceback", err)
+        self.assertEqual(self.snapshot(), before)
+        # 直接編集で型が違う event.json でも、検証や編集が例外で止まらない
+        self.config.write_text('{"storeId": "example", "title": "t", "info": {"contact": "foo", "links": "x"}}', encoding="utf-8")
+        code, _, err = self.cli("check", "example")
+        self.assertEqual(code, 1)
+        self.assertIn("info.links は配列", err)
+        self.assertNotIn("Traceback", err)
+        code, _, err = self.cli("circle", "set", "example", "A-02", "notes=x", "--no-build")
+        self.assertEqual(code, 0, err)
+        self.config.write_text("[]", encoding="utf-8")
+        self.assertEqual(self.cli("check", "example")[0], 1)
+
+    def test_id_change_to_existing_id_is_refused(self):
+        before = self.snapshot()
+        code, _, err = self.cli("circle", "set", "example", "C-01", "id=a-01", "--force")
+        self.assertEqual(code, 1)
+        self.assertIn("すでにあります", err)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_menus_set_normalizes_x_url(self):
+        code, _, err = self.cli("menus", "set", "example", "A-01",
+                                "url=https://twitter.com/example_user/status/1234567890?s=20", "--no-build")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.circle_json("A-01")["menus"][0]["url"], "https://x.com/example_user/status/1234567890")
+
+    def test_empty_query_matches_nothing(self):
+        # スペースも X も空欄のサークルがあっても、空・「@」だけの指定には当たらない
+        code, _, err = self.cli("circle", "add", "example", "id=nospace", "name=未配置", "--no-build")
+        self.assertEqual(code, 0, err)
+        for q in ("", " ", "@"):
+            code, _, err = self.cli("circle", "show", "example", q)
+            self.assertEqual(code, 1, repr(q))
+            self.assertIn("該当するサークルがありません", err)
+
+    def test_import_and_menu_keep_extra_columns_and_comments(self):
+        self.write_circles_with_extras()
+        self.menus.write_bytes(self.menus.read_bytes().replace(
+            b"checkedAt\r\n", "checkedAt,by\r\n# menus のメモ\r\n".encode("utf-8"), 1))
+        code, _, err = self.cli("import", "example", "--no-build")
+        self.assertEqual(code, 0, err)
+        code, _, err = self.cli("menu", "example", "--circle", "A-02", "https://example.com/circle2/menu")
+        self.assertEqual(code, 0, err)
+        circles = self.circles.read_bytes().decode("utf-8").split("\r\n")
+        self.assertTrue(circles[0].endswith(",source,memo"))
+        self.assertTrue(circles[1].endswith(",手元のメモ"))
+        self.assertEqual(circles[2], "# コメント行")
+        menus = self.menus.read_bytes().decode("utf-8").split("\r\n")
+        self.assertEqual(menus[:2], ["id,url,note,checkedAt,by", "# menus のメモ"])
+        self.assertTrue(menus[-2].startswith("a-02,https://example.com/circle2/menu,"))
+
+    def test_import_and_menu_are_byte_identical_for_normal_data(self):
+        before = self.snapshot()
+        self.assertEqual(self.cli("import", "example", "--no-build")[0], 0)
+        self.assertEqual(self.snapshot(), before)  # example は取り込み結果そのもの
+        self.assertEqual(self.cli("menu", "example", "--circle", "A-02", "https://example.com/circle2/menu")[0], 0)
+        old, new = before[self.menus], self.menus.read_bytes()
+        self.assertTrue(new.startswith(old))
+        self.assertTrue(new[len(old):].startswith(b"a-02,https://example.com/circle2/menu,,"))
 
 
 if __name__ == "__main__":
