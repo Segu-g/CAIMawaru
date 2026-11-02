@@ -1,7 +1,7 @@
 // 1つのサークルの編集（circles.csv の1行）と、そのサークルのお品書き（menus.csv の行）。
 import { useEffect, useMemo, useRef, useState, type InputHTMLAttributes } from 'react';
 import type { Doc } from './doc';
-import { addMenu, menusOf, removeCircle, renameMenus, updateCircle, type Dirty } from './edit';
+import { addMenu, changeCircleId, menusOf, removeCircle, sameIdCircles, updateCircle, type Dirty } from './edit';
 import MenuRow from './MenuRow';
 import { circleId, isDataRow, type Row } from './model';
 import type { Issue } from './validate';
@@ -68,36 +68,43 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
 
   const set = (col: string, value: string) => edit((d) => updateCircle(d, circle.key, col, value), 'circles');
 
-  /** id かスペース番号を変える。id が変わってお品書きがあるときは、付け替えるかを利用者に決めてもらう */
+  const shared = sameIdCircles(doc, circle);
+  const sharedNames = shared.map((c) => `${c.values.space} ${c.values.name}`.trim()).join('・');
+
+  /** id かスペース番号を変える。id が変わってお品書きがあるときは、付け替えることを利用者に確かめる */
   const commitIdField = (col: 'id' | 'space', value: string): boolean => {
     const after = circleId({ ...v, [col]: value });
-    if (after === id || menus.length === 0) {
-      set(col, value);
-      return true;
+    const plan = changeCircleId(doc, circle.key, col, value);
+    if (after !== id && menus.length > 0) {
+      if (!after) {
+        alert('id もスペース番号もないと、お品書きを付けられません。どちらかを入れてください');
+        return false;
+      }
+      const taken = doc.circles.some((c) => c.key !== circle.key && isDataRow(c.values) && circleId(c.values) === after);
+      const message = shared.length
+        ? `このサークルの id が「${id}」から「${after}」に変わります。\n` +
+          `「${id}」はほかのサークル（${sharedNames}）も使っているので、お品書き ${menus.length} 件は付け替えず、id「${id}」のまま残します。`
+        : `このサークルの id が「${id}」から「${after}」に変わります。\n` +
+          `お品書き ${plan.moved} 件の id も「${after}」に付け替えます（付け替えないとお品書きが宙に浮くため）。` +
+          (taken ? `\n注意: 「${after}」はほかのサークルも使っている id です。重複を直すまで、お品書きがどちらのものか決まりません。` : '');
+      if (!confirm(message + '\n\nキャンセルすると入力を元に戻します。')) return false;
     }
-    if (!after) {
-      alert('id もスペース番号もないと、お品書きを付けられません。どちらかを入れてください');
-      return false;
-    }
-    const taken = doc.circles.some((c) => c.key !== circle.key && isDataRow(c.values) && circleId(c.values) === after);
-    const ok = confirm(
-      `このサークルの id が「${id}」から「${after}」に変わります。\n` +
-        `お品書き ${menus.length} 件の id も「${after}」に付け替えます（付け替えないとお品書きが宙に浮くため）。` +
-        (taken ? `\n注意: 「${after}」はほかのサークルも使っている id です。` : '') +
-        '\n\nキャンセルすると入力を元に戻します。',
-    );
-    if (!ok) return false;
-    edit((d) => renameMenus(updateCircle(d, circle.key, col, value), id, after).doc, 'circles', 'menus');
+    edit((d) => changeCircleId(d, circle.key, col, value).doc, ...plan.dirty);
     return true;
   };
 
   const remove = () => {
     const name = v.name || v.space || id || 'このサークル';
+    if (shared.length) {
+      alert(`id「${id}」はほかのサークル（${sharedNames}）も使っているので、お品書きがどちらのものか決まりません。\n先に id かスペース番号を直して重複をなくしてから削除してください。`);
+      return;
+    }
     const message = menus.length
-      ? `「${name}」を削除します。\nこのサークルのお品書き ${menus.length} 件も menus.csv から削除します（残すと宙に浮くため）。\n\nお品書きを別のサークルに移したいときは、キャンセルして「お品書き」タブで id を付け替えてから削除してください。`
+      ? `「${name}」を削除します。\nこのサークルのお品書き ${menus.length} 件も menus.csv から削除します（残すと宙に浮くため）。\n\nお品書きを別のサークルに移したいときは、キャンセルして「お品書き」タブで付け替えてから削除してください。`
       : `「${name}」を削除しますか？`;
     if (!confirm(message)) return;
-    edit((d) => removeCircle(d, circle.key).doc, ...(menus.length ? (['circles', 'menus'] as const) : (['circles'] as const)));
+    const res = removeCircle(doc, circle.key);
+    edit((d) => removeCircle(d, circle.key).doc, ...(res.removedMenus ? (['circles', 'menus'] as const) : (['circles'] as const)));
     onRemoved();
   };
 
@@ -117,6 +124,15 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
         <h2>{v.name || '（名前なし）'}</h2>
         <button type="button" className="danger" onClick={remove}>削除</button>
       </div>
+      {shared.length > 0 && (
+        <div className="ed-box danger" role="alert">
+          <p>
+            <strong>id「{id}」が重複しています。</strong>ほかのサークル（{sharedNames}）も同じ id です。
+            お品書きと閲覧者の ★ は id で決まるので、どちらのものか決まりません。id かスペース番号を直して重複をなくしてください。
+          </p>
+          <p>重複している間は、このサークルを削除できません。id を変えても、お品書きは付け替えずに元の id のまま残します。</p>
+        </div>
+      )}
       {mine.length > 0 && (
         <ul className="ed-inline-issues">
           {mine.map((i, n) => <li key={n} className={i.level}>{i.message}</li>)}

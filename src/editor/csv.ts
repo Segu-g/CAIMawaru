@@ -124,15 +124,16 @@ export type CsvTable = {
  * 列名に空のもの・重複があるとき、列名より値が多い行があるときは、保存すると内容が失われるので CsvError にする。
  */
 export function parseCsv(text: string): CsvTable {
-  // 空の行と、どの値も空か空白だけの行（「,,,」）は捨てる（Python の read_csv も読まない）
-  const records = scan(text).filter((r) => r.fields.some((f) => f.trim()));
-  const first = records.shift();
+  // 列名の行は、最初の（本当に）空でない行。空白だけの行を飛ばして次の行を列名にすることはしない
+  const [first, ...rest] = scan(text).filter((r) => r.fields.length > 0);
   if (!first) return { header: [], rows: [] };
   const header = first.fields;
-  const empty = header.indexOf('');
+  const empty = header.findIndex((c) => !c.trim());
   if (empty >= 0) throw new CsvError(`${first.line} 行目（列名）の ${empty + 1} 番目の列名が空です`);
   const dup = header.find((c, i) => header.indexOf(c) !== i);
   if (dup !== undefined) throw new CsvError(`${first.line} 行目（列名）の「${dup}」が重複しています`);
+  // 列名より後ろの、どの値も空か空白だけの行（「,,,」）は空の行と同じく捨てる（Python の read_csv も読まない）
+  const records = rest.filter((r) => r.fields.some((f) => f.trim()));
   const rows = records.map(({ fields, line }): CsvRow => {
     if (fields[0].startsWith('#')) return { comment: fields }; // 列名より値が多くても残す
     if (fields.length > header.length) {

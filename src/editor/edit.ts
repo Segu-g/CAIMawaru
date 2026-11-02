@@ -16,10 +16,10 @@ export function menusOf(doc: Doc, circle: Row): Row[] {
   return id ? doc.menus.filter((m) => isDataRow(m.values) && m.values.id.trim() === id) : [];
 }
 
-/** 同じ id のサークルがほかにもあるか（重複している id のお品書きは、片方を消しても消さない） */
-function idShared(doc: Doc, circle: Row): boolean {
+/** 同じ id を使っているほかのサークル（id の重複。お品書きはどちらのものか決まらない） */
+export function sameIdCircles(doc: Doc, circle: Row): Row[] {
   const id = circleId(circle.values);
-  return doc.circles.some((c) => c.key !== circle.key && isDataRow(c.values) && circleId(c.values) === id);
+  return id ? doc.circles.filter((c) => c.key !== circle.key && isDataRow(c.values) && circleId(c.values) === id) : [];
 }
 
 export function addCircle(doc: Doc, values: Partial<Record<string, string>> = {}): { doc: Doc; key: number } {
@@ -45,11 +45,29 @@ export function renameMenus(doc: Doc, oldId: string, newId: string): { doc: Doc;
   return { doc: moved ? { ...doc, menus } : doc, moved };
 }
 
+/**
+ * サークルの id かスペース番号を変える（col は 'id' か 'space'）。id が変わるときは、お品書きの id も付け替える。
+ * ただし id がほかのサークルと重複しているときは、お品書きはそのサークルのものかもしれないので付け替えない。
+ * dirty は書き換わるファイル（お品書きを付け替えなければ circles だけ）。
+ */
+export function changeCircleId(doc: Doc, key: number, col: 'id' | 'space', value: string): { doc: Doc; moved: number; dirty: ('circles' | 'menus')[] } {
+  const circle = doc.circles.find((c) => c.key === key);
+  if (!circle) return { doc, moved: 0, dirty: [] };
+  const before = circleId(circle.values);
+  const shared = sameIdCircles(doc, circle).length > 0;
+  const next = updateCircle(doc, key, col, value);
+  const after = circleId({ ...circle.values, [col]: value });
+  if (shared || !after || after === before) return { doc: next, moved: 0, dirty: ['circles'] };
+  const res = renameMenus(next, before, after);
+  return { doc: res.doc, moved: res.moved, dirty: res.moved ? ['circles', 'menus'] : ['circles'] };
+}
+
 /** サークルを消す。そのサークルのお品書きも一緒に消す（残すと menus.csv に宙に浮いた行ができる） */
 export function removeCircle(doc: Doc, key: number): { doc: Doc; removedMenus: number } {
   const circle = doc.circles.find((c) => c.key === key);
   if (!circle) return { doc, removedMenus: 0 };
-  const menus = idShared(doc, circle) ? [] : menusOf(doc, circle);
+  // id が重複しているときは、お品書きは同じ id のほかのサークルのものとして残す
+  const menus = sameIdCircles(doc, circle).length ? [] : menusOf(doc, circle);
   const drop = new Set(menus.map((m) => m.key));
   return {
     doc: { ...doc, circles: doc.circles.filter((c) => c.key !== key), menus: doc.menus.filter((m) => !drop.has(m.key)) },
@@ -96,4 +114,55 @@ export function setInfo(event: JsonObject, key: string, value: Json | undefined)
   if (value === undefined || (empty && !(key in info))) delete info[key];
   else info[key] = value;
   return { ...event, info };
+}
+
+// --- info.eventSlots（イベント名 → 色の枠）---
+
+export type SlotRow = { name: string; slot: Json };
+
+/**
+ * 画面で編集している eventSlots の行を、event.json に書くオブジェクトにする。
+ * 名前が空・重複・数字だけ（JavaScript ではキーの順が並べ替わる）のときは書かずに理由を返す。
+ */
+export function slotsToObject(rows: SlotRow[]): { ok: true; value: JsonObject } | { ok: false; message: string } {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const name = r.name.trim();
+    if (!name) return { ok: false, message: 'イベント名が空の行があります。入力するか、その行を削除してください' };
+    if (/^\d+$/.test(name)) return { ok: false, message: `イベント名「${name}」は数字だけなので使えません（キーの順が変わるため）` };
+    if (seen.has(name)) return { ok: false, message: `イベント名「${name}」が重複しています` };
+    seen.add(name);
+  }
+  return { ok: true, value: Object.fromEntries(rows.map((r) => [r.name.trim(), r.slot])) };
+}
+
+const isObject = (v: Json | undefined): v is JsonObject => !!v && typeof v === 'object' && !Array.isArray(v);
+const optString = (v: Json | undefined) => v === undefined || typeof v === 'string';
+
+export type EditableField = 'storeId' | 'title' | 'name' | 'date' | 'venue' | 'hours' | 'links' | 'hashtags' | 'eventSlots' | 'contact';
+
+/**
+ * event.json のうち、画面で編集できる形になっているもの（false の欄は読み取り専用にする）。
+ * 想定と違う形の値（文字列のはずが数値、links の要素が文字列など）を、画面で編集して空欄や {} に変えてしまわないため。
+ */
+export function editableFields(event: JsonObject): Record<EditableField, boolean> {
+  const info = infoOf(event);
+  const { links, hashtags, contact } = info;
+  // info がオブジェクトでなければ、info の欄はどれも編集しない（書き換えると info の中身が消える）
+  const infoOk = event.info === undefined || isObject(event.info);
+  const fields = {
+    name: optString(info.name),
+    date: optString(info.date),
+    venue: optString(info.venue),
+    hours: optString(info.hours),
+    links: links === undefined || (Array.isArray(links) && links.every((l) => isObject(l) && optString(l.label) && optString(l.url))),
+    hashtags: hashtags === undefined || (Array.isArray(hashtags) && hashtags.every((t) => typeof t === 'string')),
+    eventSlots: info.eventSlots === undefined || isObject(info.eventSlots),
+    contact: contact === undefined || (isObject(contact) && optString(contact.label) && optString(contact.url)),
+  };
+  return {
+    storeId: optString(event.storeId),
+    title: optString(event.title),
+    ...(Object.fromEntries(Object.entries(fields).map(([k, ok]) => [k, ok && infoOk])) as typeof fields),
+  };
 }

@@ -19,7 +19,13 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
   const [event, setEvent] = useState('');
   const [menu, setMenu] = useState<'' | 'yes' | 'no'>('');
 
-  const rows = useMemo(() => doc.circles.filter((c) => isDataRow(c.values)), [doc.circles]);
+  // コメントの行は出さない。足したまま何も入れていない行は出す（保存はしない）
+  const rows = useMemo(() => doc.circles.filter((c) => c.comment === undefined), [doc.circles]);
+  const idCount = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const c of rows) if (isDataRow(c.values)) n.set(circleId(c.values), (n.get(circleId(c.values)) ?? 0) + 1);
+    return n;
+  }, [rows]);
   const events = useMemo(() => [...new Set(rows.map((c) => c.values.event.trim()))].sort(), [rows]);
   const menuCount = useMemo(() => {
     const n = new Map<string, number>();
@@ -104,11 +110,14 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
                     <td className="nowrap">{v.space}</td>
                     <td>
                       <button type="button" className="ed-row-link" onClick={(e) => { e.stopPropagation(); onSelect(c.key); }}>
-                        {v.name || '（名前なし）'}
+                        {v.name || (isDataRow(v) ? '（名前なし）' : '（空の行。保存しません）')}
                       </button>
                     </td>
                     <td>{v.event}</td>
-                    <td className="nowrap ed-mono">{v.id ? id : <span className="ed-derived" title="スペース番号から作る id">{id}</span>}</td>
+                    <td className="nowrap ed-mono">
+                      {v.id ? id : <span className="ed-derived" title="スペース番号から作る id">{id}</span>}
+                      {(idCount.get(id) ?? 0) > 1 && <span className="ed-badge danger">重複</span>}
+                    </td>
                     <td>{v.adult === '1' ? '成人' : v.adult && v.adult !== '0' ? v.adult : ''}</td>
                     <td className="num">{menuCount.get(id) || ''}</td>
                   </tr>

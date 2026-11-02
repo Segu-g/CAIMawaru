@@ -15,5 +15,8 @@ export default defineConfig({
   // サブパスに置いても動くよう相対パスで出力
   base: './',
   publicDir: false,
+  // 開発サーバが配るのはエディタのコード（src/。ページと共通の style.css を含む）と依存パッケージだけ。
+  // /@fs/ からリポジトリのほかのファイル（events/ のイベントデータなど）を読めないようにする
+  server: { fs: { strict: true, allow: [resolve(root, 'src'), resolve(root, 'node_modules')] } },
   build: { outDir: resolve(root, 'dist/editor'), emptyOutDir: true },
 });

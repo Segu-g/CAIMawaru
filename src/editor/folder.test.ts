@@ -58,8 +58,8 @@ describe('読み込みと書き戻し', () => {
       'data/circles.csv': serializeCircles(next),
       'data/menus.csv': serializeMenus(next),
     });
-    expect(res.ok).toBe(true);
-    if (!res.ok) return;
+    expect(res.kind).toBe('saved');
+    if (res.kind !== 'saved') return;
     expect(res.written).toEqual(['data/circles.csv', 'data/menus.csv']);
     expect(dir.read('event.json')).toBe(read('event.json'));
     expect(dir.read('layout.json')).toBe(read('layout.json'));
@@ -101,7 +101,7 @@ describe('読み込みと書き戻し', () => {
     expect(notes.map((n) => n.file)).toEqual(['data/circles.csv', 'event.json']); // 列の順・字下げがそろう
     const next = addMenu(doc, 'x-1', 'https://example.com/m', '', new Date(2030, 4, 5)).doc;
     const res = await saveFiles(dir, snapshots, { 'data/menus.csv': serializeMenus(next) });
-    expect(res.ok).toBe(true);
+    expect(res.kind).toBe('saved');
     expect(dir.read('data/menus.csv')).toBe('id,url,note,checkedAt\r\nx-1,https://example.com/m,,2030-05-05\r\n');
   });
 
@@ -157,9 +157,63 @@ describe('ほかで変わったファイルは上書きしない', () => {
     dir.put('data/menus.csv', external);
     const next = updateCircle(doc, doc.circles[0].key, 'name', '変更');
     const res = await saveFiles(dir, snapshots, { 'data/circles.csv': serializeCircles(next) });
-    expect(res).toEqual({ ok: false, changed: ['data/menus.csv'] });
+    expect(res).toEqual({ kind: 'conflict', changed: ['data/menus.csv'] });
     expect(dir.read('data/circles.csv')).toBe(read('data/circles.csv'));
     expect(dir.read('data/menus.csv')).toBe(external);
+  });
+
+  it('保存の直後にほかが書いた内容は「変わった」として残る（保存後の状態は書いた中身から作る）', async () => {
+    const dir = exampleFolder();
+    const { snapshots, doc } = await open(dir);
+    const data = (await dir.getDirectoryHandle('data')) as FakeDir;
+    const external = 'id,url,note,checkedAt\r\nc-01,https://example.com/cli,,2030-01-05\r\n';
+    // close の直後（読み直す前）に CLI が menus.csv を書く
+    data.afterClose = (name) => {
+      if (name === 'menus.csv') data.put('menus.csv', external);
+    };
+    const next = addMenu(doc, 'a-02', 'https://example.com/n', '', new Date(2030, 0, 1)).doc;
+    const res = await saveFiles(dir, snapshots, { 'data/menus.csv': serializeMenus(next) });
+    expect(res.kind).toBe('saved');
+    if (res.kind !== 'saved') return;
+    expect(res.snapshots['data/menus.csv'].text).toBe(serializeMenus(next));
+    data.afterClose = undefined;
+    // 次の保存では CLI の変更を見つけて、上書きしない
+    const again = await saveFiles(dir, res.snapshots, { 'data/menus.csv': serializeMenus(next) });
+    expect(again).toEqual({ kind: 'conflict', changed: ['data/menus.csv'] });
+    expect(dir.read('data/menus.csv')).toBe(external);
+  });
+
+  it('書き込み口を用意できないファイルがあれば、何も書かない', async () => {
+    const dir = exampleFolder();
+    const { snapshots, doc } = await open(dir);
+    ((await dir.getDirectoryHandle('data')) as FakeDir).failOn.set('menus.csv', 'createWritable');
+    const next = setTop(doc.event, 'title', '変更');
+    const res = await saveFiles(dir, snapshots, {
+      'event.json': formatJson(next),
+      'data/menus.csv': serializeMenus(addMenu(doc, 'a-02', 'https://example.com/n').doc),
+    });
+    expect(res).toMatchObject({ kind: 'failed', failed: 'data/menus.csv', written: [] });
+    expect(dir.read('event.json')).toBe(read('event.json'));
+    expect(dir.read('data/menus.csv')).toBe(read('data/menus.csv'));
+    if (res.kind === 'failed') expect(changedSince(res.snapshots, await readAll(dir))).toEqual([]);
+  });
+
+  it('2つ目のファイルの書き込みで失敗したら、書けたファイルだけを反映し、ずれた「変更あり」を残さない', async () => {
+    const dir = exampleFolder();
+    const { snapshots, doc } = await open(dir);
+    ((await dir.getDirectoryHandle('data')) as FakeDir).failOn.set('menus.csv', 'write');
+    const next = addMenu(updateCircle(doc, doc.circles[0].key, 'notes', '補足'), 'a-02', 'https://example.com/n').doc;
+    const res = await saveFiles(dir, snapshots, { 'data/circles.csv': serializeCircles(next), 'data/menus.csv': serializeMenus(next) });
+    expect(res).toMatchObject({ kind: 'failed', failed: 'data/menus.csv', written: ['data/circles.csv'] });
+    if (res.kind !== 'failed') return;
+    expect(dir.read('data/circles.csv')).toBe(serializeCircles(next));
+    expect(dir.read('data/menus.csv')).toBe(read('data/menus.csv'));
+    // 返された状態はフォルダと一致する（次の保存がいつまでも「ほかで変更」にならない）
+    expect(changedSince(res.snapshots, await readAll(dir))).toEqual([]);
+    ((await dir.getDirectoryHandle('data')) as FakeDir).failOn.clear();
+    const retry = await saveFiles(dir, res.snapshots, { 'data/menus.csv': serializeMenus(next) });
+    expect(retry).toMatchObject({ kind: 'saved', written: ['data/menus.csv'] });
+    expect(dir.read('data/menus.csv')).toBe(serializeMenus(next));
   });
 
   it('ファイルが消えた・新しくできたのも「変わった」', async () => {

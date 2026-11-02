@@ -66,10 +66,17 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
     );
   });
 
-  it('どの値も空か空白だけの行（「,,,」「, ,」）は空の行と同じく捨てる', () => {
-    expect(roundTrip(',,,\r\nid,url,note,checkedAt\r\n,,,\r\na-01,https://example.com/m,,\r\n, ,\t,\r\n"",""\r\na-02,,,\r\n')).toBe(
+  it('列名より後ろの、どの値も空か空白だけの行（「,,,」「, ,」）は空の行と同じく捨てる', () => {
+    expect(roundTrip('\r\nid,url,note,checkedAt\r\n,,,\r\na-01,https://example.com/m,,\r\n, ,\t,\r\n"",""\r\na-02,,,\r\n')).toBe(
       'id,url,note,checkedAt\r\na-01,https://example.com/m,,\r\na-02,,,\r\n',
     );
+  });
+
+  it('列名の行の前では空白だけの行を飛ばさない（次の行を列名にしない）', () => {
+    expect(() => parseCsv(',,,\r\nid,url\r\na-01,u\r\n')).toThrow('1 行目（列名）の 1 番目の列名が空');
+    expect(() => parseCsv('\r\n, ,\r\nid,url\r\n')).toThrow('2 行目（列名）');
+    expect(() => parseCsv(' \r\nid,url\r\n')).toThrow(CsvError);
+    expect(() => parseCsv('id, \r\n')).toThrow('2 番目の列名が空');
   });
 
   it('id が空で space が「#」で始まる行はコメントではない（最初の値だけで見分ける）', () => {

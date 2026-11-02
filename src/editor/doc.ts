@@ -1,6 +1,7 @@
 // 読み込んだファイルの中身（テキスト）⇄ エディタで編集する形。ファイルの読み書き自体は folder.ts。
 import { CsvError, formatCsv, outputColumns, parseCsv } from './csv';
-import { CIRCLE_COLS, MENU_COLS, newRow, type JsonObject, type Row } from './model';
+import { lossyJson } from './jsonCheck';
+import { CIRCLE_COLS, isDataRow, MENU_COLS, newRow, type JsonObject, type Row } from './model';
 
 /**
  * event.json を書く形（Python の json.dumps(..., ensure_ascii=False, indent=2) + "\n" と同じ。キーの順は保つ）。
@@ -15,6 +16,11 @@ export type Doc = {
   event: JsonObject;
   /** event.json の行末（読み込んだファイルに合わせる） */
   eventEol: '\n' | '\r\n';
+  /**
+   * event.json を書き戻すと値やキーの順が変わってしまう箇所（jsonCheck.ts）。あればイベント情報は読み取り専用にして、
+   * event.json は書かない
+   */
+  eventLocked: string[];
   circles: Row[];
   /** circles.csv に書く列（決まった列 + ファイルにあったほかの列） */
   circleCols: string[];
@@ -58,8 +64,10 @@ export function readEvent(text: string): JsonObject {
   return value as JsonObject;
 }
 
+/** 行を CSV にする。コメントの行はそのまま、どの値も空の行（足したまま何も入れていない行など）は書かない */
 export function serializeTable(cols: readonly string[], rows: Row[]): string {
-  return formatCsv(cols, rows.map((r) => (r.comment !== undefined ? { comment: r.comment } : { values: r.values })));
+  const out = rows.filter((r) => r.comment !== undefined || isDataRow(r.values));
+  return formatCsv(cols, out.map((r) => (r.comment !== undefined ? { comment: r.comment } : { values: r.values })));
 }
 
 export function serializeCircles(doc: Pick<Doc, 'circles' | 'circleCols'>): string {
@@ -85,6 +93,7 @@ export function loadDoc(texts: Texts): { doc: Doc; notes: LoadNote[] } {
   const doc: Doc = {
     event,
     eventEol: texts.event.includes('\r\n') ? '\r\n' : '\n',
+    eventLocked: lossyJson(texts.event),
     circles: circles.rows,
     circleCols: circles.cols,
     menus: menus.rows,
@@ -97,6 +106,10 @@ export function loadDoc(texts: Texts): { doc: Doc; notes: LoadNote[] } {
   };
   check('data/circles.csv', texts.circles, serializeCircles(doc), csvStyle);
   check('data/menus.csv', texts.menus, serializeMenus(doc), csvStyle);
-  check('event.json', texts.event, serializeEvent(doc), '保存すると、CLI と同じ書式（字下げ2・末尾の改行）にそろえて書きます');
+  if (doc.eventLocked.length) {
+    notes.push({ file: 'event.json', message: 'このエディタでは書き戻すと値やキーの順が変わってしまうので、イベント情報は読み取り専用で開きました（「イベント情報」タブ）。サークルとお品書きは編集できます' });
+  } else {
+    check('event.json', texts.event, serializeEvent(doc), '保存すると、CLI と同じ書式（字下げ2・末尾の改行）にそろえて書きます');
+  }
   return { doc, notes };
 }

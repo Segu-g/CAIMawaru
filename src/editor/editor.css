@@ -153,3 +153,7 @@ select.invalid { border-color: var(--danger); color: var(--danger); }
 .ed-issues ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .ed-issues li button { width: 100%; text-align: left; display: flex; gap: 8px; align-items: baseline; }
 .ed-level { flex: none; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-2); }
+.ed-badge { display: inline-block; margin-left: 4px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; font-size: var(--fs-xs); font-weight: 700; }
+.ed-badge.danger { color: var(--danger); }
+fieldset.ed-locked { border: none; margin: 0; padding: 0; min-width: 0; display: grid; gap: 10px; }
+.ed-inline-error { margin: 0; color: var(--danger); font-size: var(--fs-sm); font-weight: 700; }

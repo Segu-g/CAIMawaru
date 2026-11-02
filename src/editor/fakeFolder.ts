@@ -14,6 +14,10 @@ function notFound(name: string): Error {
 export class FakeDir implements DirHandleLike {
   readonly kind = 'directory' as const;
   readonly entries = new Map<string, Entry>();
+  /** テストで失敗させる操作（ファイル名 → createWritable で失敗 / write で失敗） */
+  readonly failOn = new Map<string, 'createWritable' | 'write'>();
+  /** close の直後に呼ぶ（保存の途中でほかが書き込む、を再現する） */
+  afterClose?: (name: string) => void;
   constructor(readonly name: string) {}
 
   /** パス（「data/circles.csv」）にファイルを置く。フォルダは作る */
@@ -71,6 +75,7 @@ export class FakeDir implements DirHandleLike {
 
   private fileHandle(name: string): FileHandleLike {
     const entries = this.entries;
+    const self = this;
     return {
       kind: 'file',
       name,
@@ -81,14 +86,23 @@ export class FakeDir implements DirHandleLike {
         return { text: async () => e.text, lastModified: e.lastModified, size };
       },
       async createWritable(): Promise<WritableLike> {
+        if (self.failOn.get(name) === 'createWritable') throw Object.assign(new Error(`${name} に書く許可がありません`), { name: 'NotAllowedError' });
         // 本物と同じく、close するまで元のファイルは変わらない
         let buf = '';
+        let done = false;
         return {
           async write(data: string) {
+            if (self.failOn.get(name) === 'write') throw new Error(`${name} に書けません（ディスクがいっぱい）`);
             buf += data;
           },
           async close() {
+            if (done) throw new Error('閉じたあとです');
+            done = true;
             entries.set(name, { kind: 'file', text: buf, lastModified: ++clock });
+            self.afterClose?.(name);
+          },
+          async abort() {
+            done = true;
           },
         };
       },

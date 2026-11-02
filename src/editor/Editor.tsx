@@ -11,12 +11,15 @@ import MenusTab from './MenusTab';
 import { circleId, isDataRow } from './model';
 import { checkCircles, checkEvent, checkMenus, type Issue } from './validate';
 
-type Opened = { dir: DirHandleLike; snapshots: Snapshots; doc: Doc; notes: LoadNote[]; dirty: Dirty };
+/** loadId は読み込むたびに変わる番号（読み込み直したときに、画面の入力中の状態を作り直すため） */
+type Opened = { dir: DirHandleLike; snapshots: Snapshots; doc: Doc; notes: LoadNote[]; dirty: Dirty; loadId: number };
+let loads = 0;
 type Tab = 'circles' | 'menus' | 'event' | 'issues';
 type Status =
   | { kind: 'none' }
   | { kind: 'error'; message: string }
   | { kind: 'saved'; files: FilePath[] }
+  | { kind: 'partial'; saved: FilePath[]; failed: FilePath; unsaved: FilePath[]; message: string }
   | { kind: 'conflict'; files: FilePath[] };
 
 const CLEAN: Dirty = { event: false, circles: false, menus: false };
@@ -30,19 +33,34 @@ async function openFolder(dir: DirHandleLike): Promise<Opened> {
   if (!snapshots['event.json'].exists) throw new Error(`${dir.name}/ に event.json がありません`);
   const text = (p: FilePath) => (snapshots[p].exists ? snapshots[p].text : null);
   const { doc, notes } = loadDoc({ event: snapshots['event.json'].text, circles: text('data/circles.csv'), menus: text('data/menus.csv') });
-  return { dir, snapshots, doc, notes, dirty: CLEAN };
+  return { dir, snapshots, doc, notes, dirty: CLEAN, loadId: ++loads };
 }
 
 function Unsupported() {
+  // File System Access API は安全な接続（https か localhost）でだけ使える。Chrome でも http://<IP アドレス> などでは使えない
+  const insecure = !window.isSecureContext;
   return (
     <main className="ed-start">
       <h1>イベントデータの編集</h1>
       <div className="ed-box danger">
-        <p><strong>このブラウザでは使えません。</strong></p>
-        <p>
-          フォルダのファイルを直接読み書きする機能（File System Access API の <code>showDirectoryPicker</code>）が必要です。
-          PC の Chrome か Edge で開いてください（Firefox・Safari・スマホのブラウザは対応していません）。
-        </p>
+        {insecure ? (
+          <>
+            <p><strong>このアドレスでは使えません。</strong></p>
+            <p>
+              フォルダのファイルを直接読み書きする機能（File System Access API）は、安全な接続でだけ使えます。
+              <code>http://localhost:…</code>（<code>pnpm editor</code> が表示するアドレス）か、<code>https://</code> のアドレスで開いてください。
+              <code>http://192.168.…</code> のような IP アドレスや、<code>file://</code> では使えません。
+            </p>
+          </>
+        ) : (
+          <>
+            <p><strong>このブラウザでは使えません。</strong></p>
+            <p>
+              フォルダのファイルを直接読み書きする機能（File System Access API の <code>showDirectoryPicker</code>）が必要です。
+              PC の Chrome か Edge で開いてください（Firefox・Safari・スマホのブラウザは対応していません）。
+            </p>
+          </>
+        )}
         <p>
           ブラウザを使わずに編集するときは、<code>events/&lt;eventId&gt;/</code> の event.json・data/circles.csv・data/menus.csv を直接編集し、
           <code>uv run caimawaru data &lt;eventId&gt;</code> で検証してください（docs/event-data.md）。
@@ -149,19 +167,32 @@ export default function Editor() {
     if (errors && !confirm(`確認でエラーが ${errors} 件あります（「確認」タブ）。このまま保存しますか？\nエラーがあると uv run caimawaru data は circles.json を作りません。`)) return;
     const { doc } = opened;
     const writes: Partial<Record<FilePath, string>> = {};
-    if (opened.dirty.event) writes['event.json'] = serializeEvent(doc);
+    // 書き戻すと値が変わる event.json は書かない（画面でも編集できないようにしてある）
+    if (opened.dirty.event && !doc.eventLocked.length) writes['event.json'] = serializeEvent(doc);
     if (opened.dirty.circles) writes['data/circles.csv'] = serializeCircles(doc);
     if (opened.dirty.menus) writes['data/menus.csv'] = serializeMenus(doc);
     setBusy(true);
     try {
       const res = await saveFiles(opened.dir, opened.snapshots, writes);
-      if (!res.ok) {
+      if (res.kind === 'conflict') {
         setStatus({ kind: 'conflict', files: res.changed });
         return;
       }
-      setOpened((o) => (o ? { ...o, snapshots: res.snapshots, dirty: CLEAN, notes: [] } : o));
+      // 書けたファイルだけを「保存済み」にする（保存中に編集されていたら、そのファイルは未保存のまま）
+      setOpened((o) => {
+        if (!o) return o;
+        const next = { ...o.dirty };
+        for (const k of Object.keys(DIRTY_FILE) as (keyof Dirty)[]) {
+          if (res.written.includes(DIRTY_FILE[k]) && o.doc === doc) next[k] = false;
+        }
+        return { ...o, snapshots: res.snapshots, dirty: next, notes: res.kind === 'saved' ? [] : o.notes };
+      });
       setExternal([]);
-      setStatus({ kind: 'saved', files: res.written });
+      if (res.kind === 'saved') setStatus({ kind: 'saved', files: res.written });
+      else {
+        const unsaved = (Object.keys(writes) as FilePath[]).filter((p) => !res.written.includes(p));
+        setStatus({ kind: 'partial', saved: res.written, failed: res.failed, unsaved, message: res.message });
+      }
     } catch (e) {
       setStatus({ kind: 'error', message: `保存できませんでした: ${(e as Error).message}` });
     } finally {
@@ -229,6 +260,16 @@ export default function Editor() {
           </p>
           <p>上書きすると、その変更が消えます。読み込み直してから、もう一度編集してください（この画面での変更は破棄されます）。</p>
           <button type="button" onClick={() => opened && open(opened.dir)}>読み込み直す</button>
+        </div>
+      )}
+      {status.kind === 'partial' && (
+        <div className="ed-box danger" role="alert">
+          <p>
+            <strong>保存が途中で失敗しました</strong>（{status.failed}: {status.message}）。
+          </p>
+          <p>保存できたファイル: {status.saved.length ? status.saved.join('・') : 'なし'}</p>
+          <p>保存できなかったファイル（未保存のまま）: {status.unsaved.join('・')}</p>
+          <p>原因（ファイルの権限・ディスクの空きなど）を確かめてから、もう一度「保存」してください。</p>
         </div>
       )}
       {status.kind === 'saved' && (
@@ -331,7 +372,7 @@ export default function Editor() {
       <main className="ed-main">
         {tab === 'circles' && <CirclesTab doc={doc} issues={issues} selected={selected} onSelect={setSelected} edit={edit} />}
         {tab === 'menus' && <MenusTab doc={doc} edit={edit} onOpenCircle={(key) => { setSelected(key); setTab('circles'); }} />}
-        {tab === 'event' && <EventTab doc={doc} issues={issues} edit={edit} />}
+        {tab === 'event' && <EventTab key={opened.loadId} doc={doc} issues={issues} edit={edit} />}
         {tab === 'issues' && (
           <section className="ed-issues">
             <p className="meta">
