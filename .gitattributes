@@ -1,0 +1,4 @@
+# どの OS でチェックアウトしても、リポジトリと同じバイト列にする（Windows の git が改行を CRLF に変えないように）。
+# イベントデータの CSV は保存時の形が CRLF なので変換しない（docs/event-data.md「CSV の書き方」）。それ以外は LF。
+* text=auto eol=lf
+*.csv -text
