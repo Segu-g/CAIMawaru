@@ -216,7 +216,7 @@ def _source_path(event, source, module, label, input_file):
 
 def _import_source(event, index, source, input_file, fetch, warnings):
     """1つの取り込み元を（必要なら取得して）読み、[ImportedCircle] を返す。"""
-    label = source.get("name") or source.get("type") or f"sources[{index}]"
+    label = source.get("label") or source.get("type") or f"sources[{index}]"
     try:
         module = importers.load(source)
     except ValueError as e:

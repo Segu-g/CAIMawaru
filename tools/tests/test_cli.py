@@ -69,6 +69,7 @@ class CliTest(unittest.TestCase):
         code, out, _ = self.cli("import", "example", "--dry-run")
         self.assertEqual(code, 0, out)
         self.assertIn("--dry-run", out)
+        self.assertIn("架空の公式サークル一覧: 12 件", out)  # sources の label で報告する
         code, out, _ = self.cli("menu", "example", "--circle", "A-02", "--dry-run", "https://example.com/m")
         self.assertEqual(code, 0, out)
         self.assertIn("1 件を登録できます", out)
