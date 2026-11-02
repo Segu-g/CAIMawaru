@@ -19,16 +19,19 @@ DESCRIPTION = "Sockbase の公式サークルリスト（ページの HTML）"
 DEFAULT_FILE = "sources/sockbase.html"
 
 
-def _astro(v):
+ASTRO_ARRAY = 1  # Astro の props の [型, 値] で、値が配列であることを表す型
+
+
+def _astro(value):
     # Astro の props シリアライズ形式 [型, 値]（0=値, 1=配列）を素の値に戻す
-    if isinstance(v, list) and len(v) == 2 and isinstance(v[0], int):
-        t, x = v
-        return [_astro(i) for i in x] if t == 1 else _astro(x)
-    if isinstance(v, dict):
-        return {k: _astro(x) for k, x in v.items()}
-    if isinstance(v, list):
-        return [_astro(i) for i in v]
-    return v
+    if isinstance(value, list) and len(value) == 2 and isinstance(value[0], int):
+        kind, inner = value
+        return [_astro(item) for item in inner] if kind == ASTRO_ARRAY else _astro(inner)
+    if isinstance(value, dict):
+        return {key: _astro(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_astro(item) for item in value]
+    return value
 
 
 # サークルの一覧が入っている部品と、その props のキー（先にあるものを優先）
@@ -36,8 +39,8 @@ COMPONENTS = (("SearchableCircleCardRack", "circles"), ("SpaceMapViewer", "space
 ISLAND = re.compile(r'<astro-island[^>]*component-url="[^"]*/([A-Za-z]+)\.[^"]*"[^>]*props="([^"]*)"')
 
 
-def _circles(src):
-    islands = {name: props for name, props in ISLAND.findall(src)}
+def _circles(page_html):
+    islands = {name: props for name, props in ISLAND.findall(page_html)}
     for name, key in COMPONENTS:
         if name in islands:
             records = _astro(json.loads(html.unescape(islands[name]))).get(key)
@@ -46,26 +49,26 @@ def _circles(src):
     raise ValueError("サークルデータが見つかりません。Sockbase の公式リストのページの HTML か確かめてください")
 
 
-def _text(d, key):
+def _text(record, key):
     """項目がない・null でも空文字として読む。"""
-    v = (d or {}).get(key)
-    return v.strip() if isinstance(v, str) else ""
+    value = (record or {}).get(key)
+    return value.strip() if isinstance(value, str) else ""
 
 
 def read(source, path):
     rows = []
-    for s in _circles(Path(path).read_text(encoding="utf-8")):
-        links = s.get("links") or {}
-        space = _text(s, "spaceName")
+    for circle in _circles(Path(path).read_text(encoding="utf-8")):
+        links = circle.get("links") or {}
+        space = _text(circle, "spaceName")
         menu = _text(links, "menuURL")
         rows.append({
             "id": space.replace(",", "-").lower(),
             "space": space,
-            "event": _text(s, "eventName"),
-            "name": _text(s, "circleName"),
-            "kana": _text(s, "circleNameYomi"),
-            "penNames": _text(s, "penName"),
-            "adult": bool(s.get("hasAdult")),
+            "event": _text(circle, "eventName"),
+            "name": _text(circle, "circleName"),
+            "kana": _text(circle, "circleNameYomi"),
+            "penNames": _text(circle, "penName"),
+            "adult": bool(circle.get("hasAdult")),
             "x": _text(links, "twitterScreenName"),     # ID だけ。共通処理で URL にする
             "pixiv": _text(links, "pixivUserId"),       # 数字だけ。共通処理で URL にする
             "web": _text(links, "websiteURL"),
@@ -76,11 +79,12 @@ def read(source, path):
 
 
 HOST = "list.sockbase.net"
+FETCH_TIMEOUT_SECONDS = 60
 
 
 def _is_official(url):
-    u = urllib.parse.urlsplit(url)
-    return u.scheme == "https" and u.hostname == HOST
+    parts = urllib.parse.urlsplit(url)
+    return parts.scheme == "https" and parts.hostname == HOST
 
 
 def fetch(source, path):
@@ -88,11 +92,11 @@ def fetch(source, path):
     url = source.get("url", "")
     if not _is_official(url):
         raise ValueError(f"Sockbase の公式リストの URL ではありません: {url!r}")
-    req = urllib.request.Request(url, headers={"User-Agent": "caimawaru"})
-    with urllib.request.urlopen(req, timeout=60) as res:
+    request = urllib.request.Request(url, headers={"User-Agent": "caimawaru"})
+    with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
         # リダイレクトで別のサイトに移っていないこと
-        if not _is_official(res.geturl()):
-            raise ValueError(f"Sockbase 以外のページに移動しました: {res.geturl()!r}")
-        body = res.read().decode(res.headers.get_content_charset() or "utf-8")
+        if not _is_official(response.geturl()):
+            raise ValueError(f"Sockbase 以外のページに移動しました: {response.geturl()!r}")
+        body = response.read().decode(response.headers.get_content_charset() or "utf-8")
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(body, encoding="utf-8")

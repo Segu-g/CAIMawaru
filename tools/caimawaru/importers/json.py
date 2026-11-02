@@ -23,7 +23,8 @@ DESCRIPTION = "JSON（パスの対応表で読み取る）"
 
 
 def dig(obj, path):
-    for key in [k for k in str(path).split(".") if k]:
+    """「.」区切りのパス（配列は番号）の先の値。途中でたどれなければ None。"""
+    for key in [key for key in str(path).split(".") if key]:
         if isinstance(obj, list) and key.isdigit():
             obj = obj[int(key)] if int(key) < len(obj) else None
         elif isinstance(obj, dict):
@@ -39,12 +40,15 @@ def read(source, path):
     if not isinstance(records, list):
         raise ValueError(f"records のパス {source.get('records', '')!r} が配列を指していません")
 
-    def getter(rec):
-        def get(p):
-            v = dig(rec, p)
-            if isinstance(v, list):  # 配列は空白区切り（menus）か ; 区切り（penNames 等）にする
-                return " ".join(str(x) for x in v if x not in (None, "")) if p == source.get("columns", {}).get("menus") else ";".join(str(x) for x in v if x not in (None, ""))
-            return v
+    def getter(record):
+        def get(value_path):
+            value = dig(record, value_path)
+            if not isinstance(value, list):
+                return value
+            # 配列は、map_record が読む区切り（menus は空白、penNames などは「;」）でつなぐ
+            is_menus = value_path == source.get("columns", {}).get("menus")
+            separator = " " if is_menus else ";"
+            return separator.join(str(item) for item in value if item not in (None, ""))
         return get
 
-    return [map_record(getter(r), source) for r in records]
+    return [map_record(getter(record), source) for record in records]

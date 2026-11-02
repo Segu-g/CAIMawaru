@@ -40,9 +40,10 @@ def normalize_url(url):
     (URL, 投稿したアカウントの ID) を返す。X の投稿でなければ ID は None。前後の空白（TRIM）は除く。
     """
     url = trim(url)
-    m = X_POST.match(url)
-    if m:
-        return f"{X_ORIGIN}/{m.group(1)}/status/{m.group(2)}", m.group(1)
+    post = X_POST.match(url)
+    if post:
+        handle, post_id = post.groups()
+        return f"{X_ORIGIN}/{handle}/status/{post_id}", handle
     return url, None
 
 
@@ -51,8 +52,11 @@ def profile_handle(url):
 
     www.・mobile.・twitter.com、末尾の「/」、クエリ（?lang=ja）・「#」以降は受け付ける。
     """
-    m = X_PROFILE.fullmatch(trim(url))
-    return m.group(1).lower() if m and m.group(1).lower() not in NOT_ACCOUNTS else None
+    profile = X_PROFILE.fullmatch(trim(url))
+    if not profile:
+        return None
+    handle = profile.group(1).lower()
+    return handle if handle not in NOT_ACCOUNTS else None
 
 
 def x_handle(circle):
