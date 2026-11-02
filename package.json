@@ -8,6 +8,8 @@
     "dev": "vite --",
     "build": "tsc && tsc -p tsconfig.node.json && vite build --",
     "preview": "vite preview --",
+    "editor": "vite --config vite.editor.config.ts",
+    "build:editor": "tsc && tsc -p tsconfig.node.json && vite build --config vite.editor.config.ts",
     "test": "vitest run",
     "typecheck": "tsc && tsc -p tsconfig.node.json"
   },

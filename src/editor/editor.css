@@ -1,0 +1,155 @@
+/* イベントデータのエディタ。色・文字の大きさはページと同じ変数（../style.css）を使う。PC 幅が前提だが、狭くても崩れないようにする */
+.ed-start {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+}
+.ed-start h1 { margin: 0; font-size: 20px; min-width: 0; }
+.ed-start p { margin: 0; }
+.ed-list { display: grid; gap: 4px; padding-left: 1.2em; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; overflow-wrap: anywhere; }
+.ed-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+button.ed-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; min-height: var(--tap); padding: 4px 16px; }
+button.ed-primary:disabled { background: var(--surface); border-color: var(--line); color: var(--ink-2); }
+
+.ed-box {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ed-box p { margin: 0; }
+.ed-box > button { justify-self: start; }
+.ed-box.danger { border: 2px solid var(--danger); }
+.ed-box.danger strong { color: var(--danger); }
+.ed-box.warn { border-color: var(--star); border-width: 2px; }
+.ed-box.ok { border-color: var(--ok); border-width: 2px; }
+.ed-candidates { display: flex; flex-wrap: wrap; gap: 6px; }
+.ed-next { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* 開いたあと: ヘッダー / タブ / 知らせ / 本体 */
+.ed-app {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  grid-template-columns: minmax(0, 1fr);
+}
+.ed-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.ed-header h1 { margin: 0; font-size: var(--fs-md); flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 0 10px; align-items: baseline; }
+.ed-folder { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink-2); font-weight: 400; overflow-wrap: anywhere; }
+.ed-header-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ed-dirty { color: var(--danger); font-size: var(--fs-sm); }
+.ed-tabs { display: flex; flex-wrap: wrap; gap: 0; padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.ed-tabs button { border: none; border-radius: 0; background: none; color: var(--ink-2); font-weight: 700; min-height: var(--tap); padding: 0 14px; }
+.ed-tabs button[aria-current="page"] { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+.ed-status { display: grid; gap: 8px; padding: 8px 16px 0; }
+.ed-status:empty { display: none; }
+.ed-main { padding: 12px 16px 32px; min-width: 0; }
+
+/* サークル: 左に一覧、右に編集 */
+.ed-split { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) {
+  .ed-split { grid-template-columns: minmax(0, 1fr) minmax(0, 520px); align-items: start; }
+  .ed-detail-pane { position: sticky; top: 64px; max-height: calc(100dvh - 80px); overflow-y: auto; }
+}
+.ed-list-pane { display: grid; gap: 8px; min-width: 0; }
+.ed-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ed-toolbar input[type="search"] { flex: 1 1 240px; min-width: 0; }
+input, textarea {
+  min-height: var(--tap-sm);
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-input);
+  min-width: 0;
+}
+input[readonly] { background: var(--bg); color: var(--ink-2); }
+textarea { resize: vertical; }
+select.invalid { border-color: var(--danger); color: var(--danger); }
+.ed-check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-md); }
+.ed-check input { min-height: 0; width: 18px; height: 18px; }
+
+.ed-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.ed-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.ed-table th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 700; color: var(--ink-2); }
+.ed-table th, .ed-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ed-table tbody tr { cursor: pointer; }
+.ed-table tbody tr:hover { background: var(--bg); }
+.ed-table tr[aria-selected="true"] { background: var(--bg); box-shadow: inset 3px 0 0 var(--accent); }
+.ed-table tr.has-error td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+.ed-table .nowrap { white-space: nowrap; }
+.ed-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ed-row-link { border: none; background: none; padding: 0; min-height: 0; color: var(--ink); font-weight: 700; text-align: left; font-size: var(--fs-md); }
+.ed-derived { color: var(--ink-3); }
+
+/* 編集の欄 */
+.ed-form { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.ed-form-head { display: flex; align-items: center; gap: 8px; }
+.ed-form h2, .ed-event h2 { margin: 0; font-size: var(--fs-lg); flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ed-form h3, .ed-event h3 { margin: 8px 0 0; font-size: var(--fs-md); min-width: 0; }
+.ed-fields { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 600px) {
+  .ed-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ed-fields .wide { grid-column: 1 / -1; }
+}
+.ed-fields label { display: grid; gap: 2px; align-content: start; }
+.ed-fields label > span { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-2); }
+.ed-fields small { font-size: var(--fs-xs); color: var(--ink-3); }
+.ed-fields select { width: 100%; }
+.ed-inline-issues { margin: 0; padding-left: 1.2em; display: grid; gap: 2px; font-size: var(--fs-sm); }
+.ed-inline-issues .error, .ed-issues .error .ed-level { color: var(--danger); }
+.ed-inline-issues .warning { color: var(--ink-2); }
+
+/* お品書きの行 */
+.ed-menus { display: grid; gap: 8px; }
+.ed-menu {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ed-menu-date, .ed-menu-actions, .ed-menu-circle { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.ed-menu-date input { flex: 1; min-width: 0; }
+.ed-menu-circle select { flex: 1; min-width: 0; }
+.ed-menu-actions { justify-content: flex-end; }
+.ed-menu-add { display: grid; gap: 6px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; }
+.ed-menus-tab { display: grid; gap: 8px; max-width: 1400px; }
+@media (min-width: 1100px) {
+  .ed-menus-tab .ed-menu { grid-template-columns: minmax(0, 1.6fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 200px) auto; align-items: center; }
+}
+
+/* イベント情報 */
+.ed-event { display: grid; gap: 10px; max-width: 860px; }
+.ed-pairs { display: grid; gap: 6px; }
+.ed-pair { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; align-items: center; }
+.ed-pair.narrow { grid-template-columns: minmax(0, 1fr) auto; max-width: 420px; }
+.ed-pair-actions, .ed-row-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* 確認 */
+.ed-issues { display: grid; gap: 8px; max-width: 960px; }
+.ed-issues ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ed-issues li button { width: 100%; text-align: left; display: flex; gap: 8px; align-items: baseline; }
+.ed-level { flex: none; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-2); }
