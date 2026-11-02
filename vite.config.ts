@@ -99,11 +99,6 @@ export default defineConfig(({ command, isPreview }) => {
   process.env.VITE_TITLE = config.title;
   process.env.VITE_HAS_MAP = String(hasMap);
 
-  // ビルドごとに assets のファイル名を変える。公開前に新しいファイル名の URL が一度でも
-  // 取得されると、CDN（Cloudflare など）がその 404 をキャッシュしてページが壊れることがあるため、
-  // 内容が同じでも毎回まだ誰も取得していない名前にする
-  const BUILD_ID = Date.now().toString(36);
-
   return {
     plugins: [react()],
     // サブパスに置いても動くよう相対パスで出力
@@ -112,13 +107,6 @@ export default defineConfig(({ command, isPreview }) => {
     build: {
       outDir,
       emptyOutDir: nested.length === 0,
-      rollupOptions: {
-        output: {
-          entryFileNames: `assets/[name]-[hash]-${BUILD_ID}.js`,
-          chunkFileNames: `assets/[name]-[hash]-${BUILD_ID}.js`,
-          assetFileNames: `assets/[name]-[hash]-${BUILD_ID}[extname]`,
-        },
-      },
     },
   };
 });
