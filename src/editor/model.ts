@@ -9,12 +9,15 @@ export const LINK_KEYS = ['x', 'pixiv', 'booth', 'web'] as const;
 export type CircleCol = (typeof CIRCLE_COLS)[number];
 export type MenuCol = (typeof MENU_COLS)[number];
 
-/** 表の1行。key は画面の中だけで使う番号（ファイルには書かない） */
-export type Row = { key: number; values: Record<string, string> };
+/**
+ * 表の1行。key は画面の中だけで使う番号（ファイルには書かない）。
+ * comment はコメントの行（最初の値が「#」で始まる行）の最初の値で、そのときの values は空。一覧には出さず、そのまま書き戻す
+ */
+export type Row = { key: number; values: Record<string, string>; comment?: string };
 
 let nextKey = 1;
-export function newRow(values: Record<string, string>): Row {
-  return { key: nextKey++, values };
+export function newRow(values: Record<string, string>, comment?: string): Row {
+  return comment === undefined ? { key: nextKey++, values } : { key: nextKey++, values, comment };
 }
 
 /** スペース番号から id を作る（project.py の make_id と同じ。「A-03,A-04」→「a-03-a-04」）。 */
@@ -32,6 +35,7 @@ export function circleId(values: Record<string, string>): string {
  * エディタでも一覧に出さず、そのまま書き戻す。
  */
 export function isDataRow(values: Record<string, string>): boolean {
+  // コメントの行は values が空なので、ここで除かれる
   if (!Object.values(values).some((v) => v.trim())) return false;
   return !((values.id || values.space || '').startsWith('#'));
 }

@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { formatCsv, parseCsv, parseRecords } from './csv';
+import { CsvError, formatCsv, outputColumns, parseCsv, parseRecords, type CsvRow } from './csv';
 import { CIRCLE_COLS, MENU_COLS } from './model';
-
 // ファイルの中身をそのまま（改行も変えずに）読む
 import circlesCsv from '../../events/example/data/circles.csv?raw';
 import menusCsv from '../../events/example/data/menus.csv?raw';
 
 const bytes = (s: string) => Array.from(new TextEncoder().encode(s));
+const values = (v: Record<string, string>): CsvRow => ({ values: v });
+
+/** 読んで、決まった列（+ ほかの列）で書き戻す（エディタが保存するのと同じ） */
+function roundTrip(text: string, standard: readonly string[] = MENU_COLS): string {
+  const { header, rows } = parseCsv(text);
+  return formatCsv(outputColumns(standard, header), rows);
+}
 
 describe('events/example の CSV を読んで書き戻すと同じバイト列になる', () => {
   it.each([
@@ -17,7 +23,7 @@ describe('events/example の CSV を読んで書き戻すと同じバイト列�
     const { header, rows } = parseCsv(original);
     expect(header).toEqual(cols);
     expect(rows.length).toBeGreaterThan(0);
-    expect(bytes(formatCsv(cols, rows))).toEqual(bytes(original));
+    expect(bytes(roundTrip(original, cols))).toEqual(bytes(original));
   });
 });
 
@@ -27,26 +33,25 @@ describe('Python の csv.DictWriter（project.write_csv）と同じ書き方', (
     { id: 'a-01', url: 'https://example.com/a?x=1,2', note: '新刊 "総集編"', checkedAt: '2030-01-01' },
     { id: 'a-02', url: 'https://example.com/b', note: '1行目\n2行目', checkedAt: '' },
     { id: 'a-03', url: 'https://example.com/c', note: ' 前後の空白 ', checkedAt: '' },
-    { id: '#メモ', url: '', note: '', checkedAt: '' },
-    { id: 'a-04', url: 'https://example.com/d', note: 'CRLF\r\nを含む', checkedAt: '', extra: '捨てる' },
+    { id: 'a-04', url: 'https://example.com/d', note: 'CRLF\r\nを含む', checkedAt: '' },
     { id: 'a-05', url: '', note: '"', checkedAt: ',' },
   ];
   const python =
     'id,url,note,checkedAt\r\na-01,"https://example.com/a?x=1,2","新刊 ""総集編""",2030-01-01\r\n' +
-    'a-02,https://example.com/b,"1行目\n2行目",\r\na-03,https://example.com/c, 前後の空白 ,\r\n#メモ,,,\r\n' +
+    'a-02,https://example.com/b,"1行目\n2行目",\r\na-03,https://example.com/c, 前後の空白 ,\r\n' +
     'a-04,https://example.com/d,"CRLF\r\nを含む",\r\na-05,,"""",","\r\n';
 
-  it('「,」「"」改行を含む値・日本語・余分な列', () => {
-    expect(formatCsv(MENU_COLS, rows)).toBe(python);
+  it('「,」「"」改行を含む値・日本語・前後の空白', () => {
+    expect(formatCsv(MENU_COLS, rows.map(values))).toBe(python);
   });
 
-  it('書いたものを読むと元の値に戻る', () => {
-    const { rows: back } = parseCsv(python);
-    expect(back).toEqual(rows.map(({ id, url, note, checkedAt }) => ({ id, url, note, checkedAt })));
+  it('書いたものを読むと元の値に戻り、もう一度書くと同じになる', () => {
+    expect(parseCsv(python).rows).toEqual(rows.map(values));
+    expect(roundTrip(python)).toBe(python);
   });
 
-  it('CR だけの値も「"」で囲む。足りない列は空欄', () => {
-    expect(formatCsv(['id', 'v'], [{ id: '1', v: 'a\rb' }, { id: '2' }])).toBe('id,v\r\n1,"a\rb"\r\n2,\r\n');
+  it('CR だけの値も「"」で囲む。足りない値は空欄', () => {
+    expect(formatCsv(['id', 'v'], [values({ id: '1', v: 'a\rb' }), values({ id: '2' })])).toBe('id,v\r\n1,"a\rb"\r\n2,\r\n');
   });
 
   it('行がなければ列名の行だけ', () => {
@@ -54,13 +59,64 @@ describe('Python の csv.DictWriter（project.write_csv）と同じ書き方', (
   });
 });
 
+describe('CLI と同じ形（列の順・空の行・コメントの行・ほかの列）', () => {
+  it('空の行は捨てる（先頭・途中・末尾）', () => {
+    expect(roundTrip('\r\n\r\nid,url,note,checkedAt\r\n\r\na-01,https://example.com/m,,\r\n\r\n\r\n')).toBe(
+      'id,url,note,checkedAt\r\na-01,https://example.com/m,,\r\n',
+    );
+  });
+
+  it('LF・CR の行末は CRLF にする', () => {
+    expect(roundTrip('id,url,note,checkedAt\na-01,https://example.com/m,新刊,\ra-02,,,\n')).toBe(
+      'id,url,note,checkedAt\r\na-01,https://example.com/m,新刊,\r\na-02,,,\r\n',
+    );
+  });
+
+  it('BOM は除いて書かない', () => {
+    const out = roundTrip('﻿id,url,note,checkedAt\r\na-01,https://example.com/m,,\r\n');
+    expect(out).toBe('id,url,note,checkedAt\r\na-01,https://example.com/m,,\r\n');
+    expect(bytes(out).slice(0, 3)).not.toEqual([0xef, 0xbb, 0xbf]);
+  });
+
+  it('コメントの行はその位置に、最初の値だけを1つの値として書く（必要なら「"」で囲む）', () => {
+    const text = 'id,url,note,checkedAt\r\n# 確認中,,,\r\na-01,https://example.com/m,,\r\n"#あとで, 見る",x,y\r\n#末尾\r\n';
+    const { rows } = parseCsv(text);
+    expect(rows).toEqual([
+      { comment: '# 確認中' },
+      values({ id: 'a-01', url: 'https://example.com/m', note: '', checkedAt: '' }),
+      { comment: '#あとで, 見る' },
+      { comment: '#末尾' },
+    ]);
+    expect(roundTrip(text)).toBe('id,url,note,checkedAt\r\n# 確認中\r\na-01,https://example.com/m,,\r\n"#あとで, 見る"\r\n#末尾\r\n');
+  });
+
+  it('「#」が最初の値でなければコメントではない', () => {
+    expect(parseCsv('id,url\r\n a#,#x\r\n').rows).toEqual([values({ id: ' a#', url: '#x' })]);
+  });
+
+  it('列名は決まった列の順に並べ、ほかの列は元の順でそのあとに（値も残す）', () => {
+    const text = 'memo,url,id,extra2\r\nメモ,https://example.com/m,a-01,"x,y"\r\n';
+    expect(outputColumns(MENU_COLS, parseCsv(text).header)).toEqual(['id', 'url', 'note', 'checkedAt', 'memo', 'extra2']);
+    expect(roundTrip(text)).toBe('id,url,note,checkedAt,memo,extra2\r\na-01,https://example.com/m,,,メモ,"x,y"\r\n');
+  });
+
+  it('値が足りない行は空欄で埋める', () => {
+    expect(roundTrip('id,url,note,checkedAt\r\na-01\r\n')).toBe('id,url,note,checkedAt\r\na-01,,,\r\n');
+  });
+
+  it('列名が空・重複、列名より値が多い行は読まない（内容が失われるため）', () => {
+    expect(() => parseCsv('id,,note\r\n')).toThrow(CsvError);
+    expect(() => parseCsv('id,url,\r\n')).toThrow('3 番目の列名が空');
+    expect(() => parseCsv('id,url,id\r\n')).toThrow('「id」が重複');
+    expect(() => parseCsv('id,url\r\na-01,u\r\na-02,"複数\n行",余分\r\n')).toThrow('3 行目の値が列名より多く');
+    // コメントの行は値が多くてもよい（最初の値だけを書く）
+    expect(parseCsv('id,url\r\n#メモ,a,b,c\r\n').rows).toEqual([{ comment: '#メモ' }]);
+  });
+});
+
 describe('Python の csv.reader と同じ読み方', () => {
   it('行末は CRLF・LF・CR のどれでもよく、空の行は飛ばす', () => {
-    expect(parseCsv('id,v\n\n1,x\r\n,\r2,y').rows).toEqual([
-      { id: '1', v: 'x' },
-      { id: '', v: '' },
-      { id: '2', v: 'y' },
-    ]);
+    expect(parseCsv('id,v\n\n1,x\r\n,\r2,y').rows).toEqual([values({ id: '1', v: 'x' }), values({ id: '', v: '' }), values({ id: '2', v: 'y' })]);
   });
 
   it('BOM を除く', () => {
@@ -73,10 +129,6 @@ describe('Python の csv.reader と同じ読み方', () => {
 
   it('囲みのない値の中の「"」はそのまま、閉じた「"」の後ろの文字は値に足す', () => {
     expect(parseRecords('1,ab"c\r\n1,"ab"c\r\n')).toEqual([['1', 'ab"c'], ['1', 'abc']]);
-  });
-
-  it('値が足りない行は空欄、多い値は捨てる', () => {
-    expect(parseCsv('id,v\n1\n1,2,3\n').rows).toEqual([{ id: '1', v: '' }, { id: '1', v: '2' }]);
   });
 
   it('最後の値が空・閉じていない「"」', () => {

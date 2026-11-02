@@ -1,28 +1,45 @@
-// イベントデータの CSV（data/circles.csv・data/menus.csv）の読み書き。
-// Python の tools/caimawaru/project.py（read_rows・write_csv。標準ライブラリ csv の excel 方言）と同じ結果になるようにする。
-// - 書き出し: 列名の行 → 各行。区切りは「,」、行末は CRLF、BOM なし。「,」「"」「CR」「LF」を含む値だけ「"」で囲み、
-//   中の「"」は「""」にする。columns にない列は書かない（Python の extrasaction="ignore"）
-// - 読み込み: 「"」で囲んだ値の中の改行・「,」はそのまま値に入る。囲みの外の CRLF・LF・CR はどれも行の終わり。
-//   空の行は無視する（csv.DictReader）。値の前後の空白は残す（書き戻す前提の read_rows と同じ）
+// イベントデータの CSV（data/circles.csv・data/menus.csv）の読み書き。CLI（tools/caimawaru/）と同じ形で書く:
+// - UTF-8（BOM なし）、行末 CRLF。「,」「"」CR・LF を含む値だけ「"」で囲み、中の「"」は「""」にする（Python の csv の QUOTE_MINIMAL）
+// - 列名の行は、決まった列（CIRCLE_COLS・MENU_COLS）をこの順に、そのあとにファイルにあったほかの列を元の順に（値も残す）
+// - 行はファイルの順（足した行は最後）。足りない値は空欄。空の行は捨てる
+// - コメントの行（最初の値が「#」で始まる）はその位置に残し、最初の値だけを1つの値として書く
+// - 読み込みは Python の csv.reader と同じ（囲みの中の改行・「,」は値に入る。囲みの外の CRLF・LF・CR はどれも行の終わり。BOM は除く）
+
+type Scanned = { fields: string[]; line: number };
 
 /** CSV を値の配列の配列にする（Python の csv.reader と同じ。空の行は [] になる）。 */
 export function parseRecords(text: string): string[][] {
+  return scan(text).map((r) => r.fields);
+}
+
+/** 各レコードと、それが始まる行番号（1 から。エラーの表示用） */
+function scan(text: string): Scanned[] {
   const src = text.startsWith('﻿') ? text.slice(1) : text;
-  const records: string[][] = [];
+  const records: Scanned[] = [];
   let record: string[] = [];
   let field = '';
+  let line = 1;
+  let startLine = 1;
   // start: 行の始め / field: 値の始め / plain: 囲みのない値 / quoted: 「"」の中 / quote: 「"」の中で「"」を読んだ直後
   let state: 'start' | 'field' | 'plain' | 'quoted' | 'quote' = 'start';
   const endRecord = () => {
-    records.push(record);
+    records.push({ fields: record, line: startLine });
     record = [];
   };
   for (let i = 0; i < src.length; i++) {
     const c = src[i];
     const eol = c === '\r' || c === '\n';
-    if (eol && c === '\r' && src[i + 1] === '\n' && state !== 'quoted') i++; // CRLF は1つの行末
+    const crlf = c === '\r' && src[i + 1] === '\n';
+    // 行の数え方: CRLF は1行。囲みの外の CRLF は「\n」を読み飛ばすので、ここで数える
+    let newline = eol && !crlf;
+    if (crlf && state !== 'quoted') {
+      i++;
+      newline = true;
+    }
+    if (state === 'start') startLine = line;
     if (state === 'start' && eol) {
       endRecord(); // 空の行
+      if (newline) line++;
       continue;
     }
     switch (state) {
@@ -77,6 +94,7 @@ export function parseRecords(text: string): string[][] {
         }
         break;
     }
+    if (newline) line++;
   }
   // 最後の行に行末がないとき
   if (state === 'field') {
@@ -89,35 +107,58 @@ export function parseRecords(text: string): string[][] {
   return records;
 }
 
+/** 読めない（そのまま保存すると内容が失われる）CSV */
+export class CsvError extends Error {}
+
+/** 1行。普通の行は列名 → 値、コメントの行（最初の値が「#」で始まる）は最初の値だけを持つ */
+export type CsvRow = { values: Record<string, string> } | { comment: string };
+
 export type CsvTable = {
-  /** ファイルの1行目（列名）。書き出すときは決まった列（CIRCLE_COLS・MENU_COLS）を使う */
+  /** ファイルの1行目（列名） */
   header: string[];
-  /** 各行。列名 → 値（足りない列は ''）。列名より多い値は捨てる（Python も書き戻さない） */
-  rows: Record<string, string>[];
+  rows: CsvRow[];
 };
 
-/** CSV を列名つきの行にする（Python の csv.DictReader と同じく、空の行は飛ばす）。 */
+/**
+ * CSV を列名つきの行にする。空の行は捨て、コメントの行はその位置に残す。値が足りない行は空欄で埋める。
+ * 列名に空のもの・重複があるとき、列名より値が多い行があるときは、保存すると内容が失われるので CsvError にする。
+ */
 export function parseCsv(text: string): CsvTable {
-  const [header = [], ...records] = parseRecords(text);
-  const rows = records
-    .filter((r) => r.length > 0)
-    .map((r) => {
-      const row: Record<string, string> = {};
-      // 同じ列名が2回あれば後ろの値（DictReader と同じ）
-      header.forEach((col, i) => {
-        if (col) row[col] = r[i] ?? '';
-      });
-      return row;
-    });
+  const records = scan(text).filter((r) => r.fields.length > 0);
+  const first = records.shift();
+  if (!first) return { header: [], rows: [] };
+  const header = first.fields;
+  const empty = header.indexOf('');
+  if (empty >= 0) throw new CsvError(`${first.line} 行目（列名）の ${empty + 1} 番目の列名が空です`);
+  const dup = header.find((c, i) => header.indexOf(c) !== i);
+  if (dup !== undefined) throw new CsvError(`${first.line} 行目（列名）の「${dup}」が重複しています`);
+  const rows = records.map(({ fields, line }): CsvRow => {
+    if (fields[0].startsWith('#')) return { comment: fields[0] };
+    if (fields.length > header.length) {
+      throw new CsvError(`${line} 行目の値が列名より多くあります（値 ${fields.length} 個・列名 ${header.length} 個）`);
+    }
+    return { values: Object.fromEntries(header.map((col, i) => [col, fields[i] ?? ''])) };
+  });
   return { header, rows };
+}
+
+/** 書き出す列: 決まった列をこの順に、そのあとにファイルにあったほかの列を元の順に */
+export function outputColumns(standard: readonly string[], header: readonly string[]): string[] {
+  return [...standard, ...header.filter((c) => !standard.includes(c))];
 }
 
 function quote(value: string): string {
   return /[,"\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-/** 列名の行と各行を CSV にする（Python の project.write_csv と同じバイト列になる）。 */
-export function formatCsv(columns: readonly string[], rows: readonly Record<string, string | undefined>[]): string {
+/** 書く1行。値（列名 → 値）か、コメントの行 */
+export type CsvOutRow = { values: Record<string, string | undefined> } | { comment: string };
+
+/**
+ * 列名の行と各行を CSV にする（UTF-8・BOM なし・行末 CRLF・必要なときだけ「"」で囲む。Python の csv と同じ書き方）。
+ * 足りない値は空欄。コメントの行は最初の値だけを1つの値として書く。
+ */
+export function formatCsv(columns: readonly string[], rows: readonly CsvOutRow[]): string {
   const line = (values: (string | undefined)[]) => values.map((v) => quote(v ?? '')).join(',') + '\r\n';
-  return line([...columns]) + rows.map((row) => line(columns.map((c) => row[c]))).join('');
+  return line([...columns]) + rows.map((row) => ('comment' in row ? line([row.comment]) : line(columns.map((c) => row.values[c])))).join('');
 }

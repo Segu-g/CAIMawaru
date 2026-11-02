@@ -1,36 +1,47 @@
 // 読み込んだファイルの中身（テキスト）⇄ エディタで編集する形。ファイルの読み書き自体は folder.ts。
-import { formatCsv, parseCsv } from './csv';
+import { CsvError, formatCsv, outputColumns, parseCsv } from './csv';
 import { CIRCLE_COLS, MENU_COLS, newRow, type JsonObject, type Row } from './model';
 
-/** event.json を書く形（Python の json.dumps(..., ensure_ascii=False, indent=2) + "\n" と同じ） */
-export function formatJson(value: unknown): string {
-  return JSON.stringify(value, null, 2) + '\n';
+/**
+ * event.json を書く形（Python の json.dumps(..., ensure_ascii=False, indent=2) + "\n" と同じ。キーの順は保つ）。
+ * eol に CRLF を渡すと、行末を CRLF にする（読み込んだファイルが CRLF だったとき）。
+ */
+export function formatJson(value: unknown, eol: '\n' | '\r\n' = '\n'): string {
+  const text = JSON.stringify(value, null, 2) + '\n';
+  return eol === '\n' ? text : text.replace(/\n/g, '\r\n'); // 文字列の中の改行は \n とエスケープ済みなので、置き換わるのは行末だけ
 }
 
 export type Doc = {
   event: JsonObject;
+  /** event.json の行末（読み込んだファイルに合わせる） */
+  eventEol: '\n' | '\r\n';
   circles: Row[];
+  /** circles.csv に書く列（決まった列 + ファイルにあったほかの列） */
+  circleCols: string[];
   menus: Row[];
+  menuCols: string[];
 };
 
 export type LoadNote = { file: string; message: string };
 
-/** CSV を読んで編集用の行にする。列名の行がおかしいときは例外（そのまま保存すると内容が消えるため開かない）。 */
-export function readTable(text: string, columns: readonly string[], file: string, notes: LoadNote[]): Row[] {
-  if (!text.trim()) return [];
-  const { header, rows } = parseCsv(text);
-  if (!header.includes('id')) {
+/** CSV を読んで編集用の行にする。読めない（保存すると内容が失われる）ときは例外にして開かない。 */
+export function readTable(text: string, standard: readonly string[], file: string): { rows: Row[]; cols: string[] } {
+  let table;
+  try {
+    table = parseCsv(text);
+  } catch (e) {
+    if (e instanceof CsvError) throw new Error(`${file}: ${e.message}。内容が失われるので開きません。直接編集で直してから開き直してください`);
+    throw e;
+  }
+  const { header, rows } = table;
+  if (header.length && !header.includes('id')) {
     throw new Error(`${file} の1行目に列名（id など）がありません。直接編集で直してから開き直してください`);
   }
-  const extra = header.filter((c) => c && !columns.includes(c));
-  if (extra.length) {
-    notes.push({ file, message: `決まった列にない ${extra.join('・')} 列は、保存すると消えます（CLI の取り込みと同じ）` });
-  }
-  return rows.map((values) => {
-    const v: Record<string, string> = {};
-    for (const c of columns) v[c] = values[c] ?? '';
-    return newRow(v);
-  });
+  const cols = outputColumns(standard, header);
+  return {
+    cols,
+    rows: rows.map((r) => ('comment' in r ? newRow({}, r.comment) : newRow(Object.fromEntries(cols.map((c) => [c, r.values[c] ?? '']))))),
+  };
 }
 
 /** event.json を読む。オブジェクトでなければ例外。 */
@@ -47,12 +58,20 @@ export function readEvent(text: string): JsonObject {
   return value as JsonObject;
 }
 
-export function serializeCircles(rows: Row[]): string {
-  return formatCsv(CIRCLE_COLS, rows.map((r) => r.values));
+export function serializeTable(cols: readonly string[], rows: Row[]): string {
+  return formatCsv(cols, rows.map((r) => (r.comment !== undefined ? { comment: r.comment } : { values: r.values })));
 }
 
-export function serializeMenus(rows: Row[]): string {
-  return formatCsv(MENU_COLS, rows.map((r) => r.values));
+export function serializeCircles(doc: Pick<Doc, 'circles' | 'circleCols'>): string {
+  return serializeTable(doc.circleCols, doc.circles);
+}
+
+export function serializeMenus(doc: Pick<Doc, 'menus' | 'menuCols'>): string {
+  return serializeTable(doc.menuCols, doc.menus);
+}
+
+export function serializeEvent(doc: Pick<Doc, 'event' | 'eventEol'>): string {
+  return formatJson(doc.event, doc.eventEol);
 }
 
 export type Texts = { event: string; circles: string | null; menus: string | null };
@@ -61,15 +80,23 @@ export type Texts = { event: string; circles: string | null; menus: string | nul
 export function loadDoc(texts: Texts): { doc: Doc; notes: LoadNote[] } {
   const notes: LoadNote[] = [];
   const event = readEvent(texts.event);
-  const circles = readTable(texts.circles ?? '', CIRCLE_COLS, 'data/circles.csv', notes);
-  const menus = readTable(texts.menus ?? '', MENU_COLS, 'data/menus.csv', notes);
-  // 編集しなくても書式だけ変わるファイルを知らせる（保存するのは編集したファイルだけ）
-  const csvStyle = '保存すると、CLI と同じ書式（列の順・行末 CRLF・必要なときだけ「"」で囲む）にそろえて書きます';
-  const check = (file: string, text: string | null, out: string, message: string) => {
-    if (text !== null && text.trim() && text.replace(/^\uFEFF/, '') !== out) notes.push({ file, message });
+  const circles = readTable(texts.circles ?? '', CIRCLE_COLS, 'data/circles.csv');
+  const menus = readTable(texts.menus ?? '', MENU_COLS, 'data/menus.csv');
+  const doc: Doc = {
+    event,
+    eventEol: texts.event.includes('\r\n') ? '\r\n' : '\n',
+    circles: circles.rows,
+    circleCols: circles.cols,
+    menus: menus.rows,
+    menuCols: menus.cols,
   };
-  check('data/circles.csv', texts.circles, serializeCircles(circles), csvStyle);
-  check('data/menus.csv', texts.menus, serializeMenus(menus), csvStyle);
-  check('event.json', texts.event, formatJson(event), '保存すると、CLI と同じ書式（字下げ2・末尾の改行）にそろえて書きます');
-  return { doc: { event, circles, menus }, notes };
+  // 編集しなくても書式だけ変わるファイルを知らせる（保存するのは編集したファイルだけ）
+  const csvStyle = '保存すると、CLI と同じ書式（列の順・行末 CRLF・必要なときだけ「"」で囲む・空の行を除く）にそろえて書きます';
+  const check = (file: string, text: string | null, out: string, message: string) => {
+    if (text !== null && text.trim() && text !== out) notes.push({ file, message });
+  };
+  check('data/circles.csv', texts.circles, serializeCircles(doc), csvStyle);
+  check('data/menus.csv', texts.menus, serializeMenus(doc), csvStyle);
+  check('event.json', texts.event, serializeEvent(doc), '保存すると、CLI と同じ書式（字下げ2・末尾の改行）にそろえて書きます');
+  return { doc, notes };
 }

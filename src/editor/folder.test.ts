@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { formatJson, loadDoc, serializeCircles, serializeMenus } from './doc';
+import { formatJson, loadDoc, serializeCircles, serializeEvent, serializeMenus } from './doc';
+import { checkMenus } from './validate';
 import { addMenu, removeCircle, renameMenus, setInfo, setTop, updateCircle, updateMenu } from './edit';
 import { FakeDir } from './fakeFolder';
 import { changedSince, findEventDirs, readAll, saveFiles, type Snapshots } from './folder';
@@ -43,8 +44,8 @@ describe('読み込みと書き戻し', () => {
     const { doc, notes } = await open(exampleFolder());
     expect(notes).toEqual([]);
     expect(formatJson(doc.event)).toBe(read('event.json'));
-    expect(serializeCircles(doc.circles)).toBe(read('data/circles.csv'));
-    expect(serializeMenus(doc.menus)).toBe(read('data/menus.csv'));
+    expect(serializeCircles(doc)).toBe(read('data/circles.csv'));
+    expect(serializeMenus(doc)).toBe(read('data/menus.csv'));
   });
 
   it('編集して保存すると、編集したファイルだけを書き、layout.json は触らない', async () => {
@@ -54,8 +55,8 @@ describe('読み込みと書き戻し', () => {
     let next = updateCircle(doc, circle.key, 'notes', '補足, "引用" と\n改行');
     next = addMenu(next, 'a-02', 'https://example.com/circle2/menu', '既刊', new Date(2030, 0, 2)).doc;
     const res = await saveFiles(dir, snapshots, {
-      'data/circles.csv': serializeCircles(next.circles),
-      'data/menus.csv': serializeMenus(next.menus),
+      'data/circles.csv': serializeCircles(next),
+      'data/menus.csv': serializeMenus(next),
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -99,25 +100,52 @@ describe('読み込みと書き戻し', () => {
     expect(doc.circles[0].values).toMatchObject({ id: 'x-1', name: 'サンプル', space: '' });
     expect(notes.map((n) => n.file)).toEqual(['data/circles.csv', 'event.json']); // 列の順・字下げがそろう
     const next = addMenu(doc, 'x-1', 'https://example.com/m', '', new Date(2030, 4, 5)).doc;
-    const res = await saveFiles(dir, snapshots, { 'data/menus.csv': serializeMenus(next.menus) });
+    const res = await saveFiles(dir, snapshots, { 'data/menus.csv': serializeMenus(next) });
     expect(res.ok).toBe(true);
     expect(dir.read('data/menus.csv')).toBe('id,url,note,checkedAt\r\nx-1,https://example.com/m,,2030-05-05\r\n');
   });
 
-  it('コメント行と空の値の行はそのまま残す', async () => {
+  it('コメントの行は一覧に出さず、その位置に1つの値として書き戻す。空の値だけの行も残す', async () => {
     const text = 'id,url,note,checkedAt\r\n# 確認中,,,\r\na-01,https://example.com/m,,\r\n,,,\r\n';
     const { doc } = await open(exampleFolder().put('data/menus.csv', text));
-    expect(serializeMenus(doc.menus)).toBe(text);
+    expect(doc.menus[0]).toMatchObject({ comment: '# 確認中', values: {} });
+    expect(checkMenus(doc.menus, doc.circles)).toEqual([]);
+    const next = addMenu(doc, 'a-02', 'https://example.com/n', '', new Date(2030, 0, 1)).doc;
+    expect(serializeMenus(next)).toBe(
+      'id,url,note,checkedAt\r\n# 確認中\r\na-01,https://example.com/m,,\r\n,,,\r\na-02,https://example.com/n,,2030-01-01\r\n',
+    );
   });
 
-  it('決まった列にない列は、保存すると消えることを知らせる', async () => {
-    const { notes } = await open(exampleFolder().put('data/menus.csv', 'id,url,memo\r\na-01,https://example.com/m,x\r\n'));
-    expect(notes.some((n) => n.message.includes('memo'))).toBe(true);
+  it('決まった列にない列は、決まった列のあとに値ごと残す', async () => {
+    const { doc } = await open(exampleFolder().put('data/menus.csv', 'memo,url,id\r\nメモ,https://example.com/m,a-01\r\n'));
+    expect(doc.menuCols).toEqual(['id', 'url', 'note', 'checkedAt', 'memo']);
+    const next = addMenu(doc, 'a-02', 'https://example.com/n', '新刊', new Date(2030, 0, 1)).doc;
+    expect(serializeMenus(next)).toBe(
+      'id,url,note,checkedAt,memo\r\na-01,https://example.com/m,,,メモ\r\na-02,https://example.com/n,新刊,2030-01-01,\r\n',
+    );
   });
 
-  it('列名の行がない CSV・JSON として読めない event.json は開かない', async () => {
-    await expect(open(exampleFolder().put('data/circles.csv', 'a-01,A-01\r\n'))).rejects.toThrow('列名');
-    await expect(open(exampleFolder().put('event.json', '{ "storeId": '))).rejects.toThrow('JSON');
+  it('LF・BOM・空の行のファイルも開け、保存すると CLI の書式になる', async () => {
+    const { doc, notes } = await open(exampleFolder().put('data/menus.csv', '﻿id,url,note,checkedAt\n\na-01,https://example.com/m,新刊,\n\n'));
+    expect(notes.map((n) => n.file)).toEqual(['data/menus.csv']);
+    expect(serializeMenus(doc)).toBe('id,url,note,checkedAt\r\na-01,https://example.com/m,新刊,\r\n');
+  });
+
+  it('event.json が CRLF なら CRLF のまま書く', async () => {
+    const text = '{\r\n  "storeId": "ev",\r\n  "title": "改行\\nを含む"\r\n}\r\n';
+    const { doc, notes } = await open(exampleFolder().put('event.json', text));
+    expect(notes).toEqual([]);
+    expect(serializeEvent(doc)).toBe(text);
+    expect(serializeEvent({ ...doc, event: setTop(doc.event, 'title', 't') })).toBe('{\r\n  "storeId": "ev",\r\n  "title": "t"\r\n}\r\n');
+  });
+
+  it('内容が失われる CSV・JSON として読めない event.json は開かない', async () => {
+    const opens = (path: string, text: string) => open(exampleFolder().put(path, text));
+    await expect(opens('data/circles.csv', 'a-01,A-01\r\n')).rejects.toThrow('列名');
+    await expect(opens('data/menus.csv', 'id,url,,checkedAt\r\n')).rejects.toThrow('3 番目の列名が空');
+    await expect(opens('data/menus.csv', 'id,url,url\r\n')).rejects.toThrow('「url」が重複');
+    await expect(opens('data/menus.csv', 'id,url\r\na-01,"https://example.com/m\r\n続き",余分\r\n')).rejects.toThrow('2 行目の値が列名より多く');
+    await expect(opens('event.json', '{ "storeId": ')).rejects.toThrow('JSON');
   });
 });
 
@@ -128,7 +156,7 @@ describe('ほかで変わったファイルは上書きしない', () => {
     const external = read('data/menus.csv') + 'a-02,https://example.com/other,,2030-01-03\r\n';
     dir.put('data/menus.csv', external);
     const next = updateCircle(doc, doc.circles[0].key, 'name', '変更');
-    const res = await saveFiles(dir, snapshots, { 'data/circles.csv': serializeCircles(next.circles) });
+    const res = await saveFiles(dir, snapshots, { 'data/circles.csv': serializeCircles(next) });
     expect(res).toEqual({ ok: false, changed: ['data/menus.csv'] });
     expect(dir.read('data/circles.csv')).toBe(read('data/circles.csv'));
     expect(dir.read('data/menus.csv')).toBe(external);
@@ -170,7 +198,7 @@ describe('サークルとお品書きの編集', () => {
     const circle = doc.circles.find((c) => c.values.id === 'a-01')!;
     const res = removeCircle(doc, circle.key);
     expect(res.removedMenus).toBe(1);
-    expect(serializeMenus(res.doc.menus)).toBe('id,url,note,checkedAt\r\nc-01,https://example.com/circle7/menu,,2030-01-01\r\n');
+    expect(serializeMenus(res.doc)).toBe('id,url,note,checkedAt\r\nc-01,https://example.com/circle7/menu,,2030-01-01\r\n');
     expect(res.doc.circles.map((c) => c.values.id)).not.toContain('a-01');
   });
 
@@ -180,7 +208,7 @@ describe('サークルとお品書きの編集', () => {
     const next = updateCircle(doc, circle.key, 'id', 'c-01x');
     const res = renameMenus(next, 'c-01', circleId(next.circles.find((c) => c.key === circle.key)!.values));
     expect(res.moved).toBe(1);
-    expect(serializeMenus(res.doc.menus)).toContain('c-01x,https://example.com/circle7/menu');
+    expect(serializeMenus(res.doc)).toContain('c-01x,https://example.com/circle7/menu');
   });
 
   it('お品書きの URL を変えると、確認した日を今日にする', async () => {

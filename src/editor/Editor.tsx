@@ -3,7 +3,7 @@
 // 正式な検証と circles.json の生成は Python の uv run caimawaru data <eventId>（ページからは実行しない）。
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import CirclesTab from './CirclesTab';
-import { formatJson, loadDoc, serializeCircles, serializeMenus, type Doc, type LoadNote } from './doc';
+import { loadDoc, serializeCircles, serializeEvent, serializeMenus, type Doc, type LoadNote } from './doc';
 import type { Dirty } from './edit';
 import EventTab from './EventTab';
 import { changedSince, findEventDirs, readAll, saveFiles, type DirHandleLike, type FilePath, type Snapshots } from './folder';
@@ -149,9 +149,9 @@ export default function Editor() {
     if (errors && !confirm(`確認でエラーが ${errors} 件あります（「確認」タブ）。このまま保存しますか？\nエラーがあると uv run caimawaru data は circles.json を作りません。`)) return;
     const { doc } = opened;
     const writes: Partial<Record<FilePath, string>> = {};
-    if (opened.dirty.event) writes['event.json'] = formatJson(doc.event);
-    if (opened.dirty.circles) writes['data/circles.csv'] = serializeCircles(doc.circles);
-    if (opened.dirty.menus) writes['data/menus.csv'] = serializeMenus(doc.menus);
+    if (opened.dirty.event) writes['event.json'] = serializeEvent(doc);
+    if (opened.dirty.circles) writes['data/circles.csv'] = serializeCircles(doc);
+    if (opened.dirty.menus) writes['data/menus.csv'] = serializeMenus(doc);
     setBusy(true);
     try {
       const res = await saveFiles(opened.dir, opened.snapshots, writes);

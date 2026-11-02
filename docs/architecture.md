@@ -33,7 +33,15 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 | `public/data/circles.json` | CLI だけ（`caimawaru data`） | ページだけ（実行時に読み込む。`vite.config.ts` は配置図の有無を見る。テストは形を確かめる） |
 
 エディタは、ページの中で唯一イベントデータを書くもので、書くのは利用者がブラウザで選んだフォルダの event.json・data/circles.csv・data/menus.csv だけです
-（File System Access API。サーバや Node のスクリプトはファイルを書かない）。書式は CLI に合わせ（CSV は `project.write_csv`、JSON は字下げ2・非 ASCII のまま・末尾の改行）、
+（File System Access API。サーバや Node のスクリプトはファイルを書かない）。書式は CLI と同じで、同じ内容なら同じバイト列になります:
+
+- CSV: UTF-8（BOM なし）、行末 CRLF。「,」「"」CR・LF を含む値だけ「"」で囲み、中の「"」は「""」にする（Python の csv の QUOTE_MINIMAL）。
+  列名の行は決まった列（circles.csv: `id,space,event,name,kana,penNames,tags,adult,x,pixiv,booth,web,notes,source`、menus.csv: `id,url,note,checkedAt`）をこの順に、
+  そのあとにファイルにあったほかの列を元の順に（値も残す）。行はファイルの順（足した行は最後）で、足りない値は空欄。空の行は捨てる。
+  コメントの行（最初の値が `#` で始まる）はその位置に残し、最初の値だけを1つの値として書く
+- 列名が空・重複している CSV、列名より値が多い行がある CSV は、保存すると内容が失われるので開かない
+- event.json: 字下げ2・非 ASCII のまま・キーの順を保つ・末尾の改行。読み込んだファイルが CRLF なら CRLF のまま
+
 保存の前に、読み込んだ後でほかに（CLI・エージェントなど）変更されたファイルがあれば何も書きません。
 
 `circles.json` の形は `src/types.ts` の `CircleData` で、ページと CLI の取り決めです。変えるときは両方を直し、
@@ -84,6 +92,6 @@ pnpm build:editor ───────▶ tsc ─▶ vite build --config vite.e
 - サークルの複数スペース（`A-01,A-02`）の分け方（`tools/caimawaru/build.py` の `circle_spaces` と `src/filter.ts` の `spacesOf`）。
   「`,` で区切る」というだけの規則
 - イベントデータの CSV の読み書き（`tools/caimawaru/project.py` の `CIRCLE_COLS`・`MENU_COLS`・`read_rows`・`write_csv`・`make_id` と、
-  `src/editor/csv.ts`・`src/editor/model.ts`）。列の並び・Python の `csv` と同じ書式（CRLF・必要なときだけ「"」で囲む）・空の行と「#」の行の扱い。
-  `src/editor/csv.test.ts` が events/example の CSV を読み直して同じバイト列になることを確かめる
+  `src/editor/csv.ts`・`src/editor/model.ts`）。上の書式（列の並び・CRLF・囲み方・空の行・コメントの行・ほかの列）。
+  `src/editor/csv.test.ts` が events/example の CSV を読み直して同じバイト列になることと、それぞれの規則を確かめる
 - 簡単な検証（`src/editor/validate.ts`）は `build.py` のエラーの一部と同じ規則。正式な検証は `build.py` だけ
