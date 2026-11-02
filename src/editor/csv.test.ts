@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { CsvError, formatCsv, outputColumns, parseCsv, parseRecords, type CsvRow } from './csv';
+import { CsvError, formatCsv, parseCsv, parseRecords, type CsvRow } from './csv';
 import { CIRCLE_COLS, MENU_COLS } from './model';
 // ファイルの中身をそのまま（改行も変えずに）読む
 import circlesCsv from '../../events/example/data/circles.csv?raw';
 import menusCsv from '../../events/example/data/menus.csv?raw';
 
 const bytes = (s: string) => Array.from(new TextEncoder().encode(s));
-const values = (v: Record<string, string>): CsvRow => ({ values: v });
+const values = (v: Record<string, string>, extra: string[] = []): CsvRow => ({ values: v, extra });
+const parse = (text: string, standard: readonly string[] = MENU_COLS) => parseCsv(text, standard);
 
 /** 読んで、決まった列（+ ほかの列）で書き戻す（エディタが保存するのと同じ） */
 function roundTrip(text: string, standard: readonly string[] = MENU_COLS): string {
-  const { header, rows } = parseCsv(text);
-  return formatCsv(outputColumns(standard, header), rows);
+  const { extraHeader, rows } = parse(text, standard);
+  return formatCsv(standard, extraHeader, rows);
 }
 
 describe('events/example の CSV を読んで書き戻すと同じバイト列になる', () => {
@@ -20,7 +21,7 @@ describe('events/example の CSV を読んで書き戻すと同じバイト列�
     ['menus.csv', menusCsv, MENU_COLS],
   ] as const)('%s', (_, original, cols) => {
     expect(original).toContain('\r\n');
-    const { header, rows } = parseCsv(original);
+    const { header, rows } = parse(original, cols);
     expect(header).toEqual(cols);
     expect(rows.length).toBeGreaterThan(0);
     expect(bytes(roundTrip(original, cols))).toEqual(bytes(original));
@@ -42,20 +43,20 @@ describe('Python の csv.DictWriter（project.write_csv）と同じ書き方', (
     'a-04,https://example.com/d,"CRLF\r\nを含む",\r\na-05,,"""",","\r\n';
 
   it('「,」「"」改行を含む値・日本語・前後の空白', () => {
-    expect(formatCsv(MENU_COLS, rows.map(values))).toBe(python);
+    expect(formatCsv(MENU_COLS, [], rows.map((v) => values(v)))).toBe(python);
   });
 
   it('書いたものを読むと元の値に戻り、もう一度書くと同じになる', () => {
-    expect(parseCsv(python).rows).toEqual(rows.map(values));
+    expect(parse(python).rows).toEqual(rows.map((v) => values(v)));
     expect(roundTrip(python)).toBe(python);
   });
 
   it('CR だけの値も「"」で囲む。足りない値は空欄', () => {
-    expect(formatCsv(['id', 'v'], [values({ id: '1', v: 'a\rb' }), values({ id: '2' })])).toBe('id,v\r\n1,"a\rb"\r\n2,\r\n');
+    expect(formatCsv(['id', 'v'], [], [values({ id: '1', v: 'a\rb' }), values({ id: '2' })])).toBe('id,v\r\n1,"a\rb"\r\n2,\r\n');
   });
 
   it('行がなければ列名の行だけ', () => {
-    expect(formatCsv(MENU_COLS, [])).toBe('id,url,note,checkedAt\r\n');
+    expect(formatCsv(MENU_COLS, [], [])).toBe('id,url,note,checkedAt\r\n');
   });
 });
 
@@ -73,15 +74,15 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
   });
 
   it('列名の行の前では空白だけの行を飛ばさない（次の行を列名にしない）', () => {
-    expect(() => parseCsv(',,,\r\nid,url\r\na-01,u\r\n')).toThrow('1 行目（列名）の 1 番目の列名が空');
-    expect(() => parseCsv('\r\n, ,\r\nid,url\r\n')).toThrow('2 行目（列名）');
-    expect(() => parseCsv(' \r\nid,url\r\n')).toThrow(CsvError);
-    expect(() => parseCsv('id, \r\n')).toThrow('2 番目の列名が空');
+    expect(() => parse(',,,\r\nid,url\r\na-01,u\r\n')).toThrow('1 行目（列名）に決まった列');
+    expect(() => parse('\r\n, ,\r\nid,url\r\n')).toThrow('2 行目（列名）');
+    expect(() => parse(' \r\nid,url\r\n')).toThrow(CsvError);
+    expect(() => parse('a-01,A-01\r\n')).toThrow(CsvError); // 列名の行がない（データの行が先頭）
   });
 
   it('id が空で space が「#」で始まる行はコメントではない（最初の値だけで見分ける）', () => {
     const text = 'id,space,name\r\n,#A-01,サンプル\r\n';
-    expect(parseCsv(text).rows).toEqual([values({ id: '', space: '#A-01', name: 'サンプル' })]);
+    expect(parse(text, ['id', 'space', 'name']).rows).toEqual([values({ id: '', space: '#A-01', name: 'サンプル' })]);
     expect(roundTrip(text, ['id', 'space', 'name'])).toBe(text);
   });
 
@@ -99,7 +100,7 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
 
   it('コメントの行はその位置に、読んだ値をすべてそのまま書く（数を変えず、空欄で埋めない）', () => {
     const text = 'id,url,note,checkedAt\r\n# 確認中,,,\r\na-01,https://example.com/m,,\r\n#末尾\r\n#2つ, 前後の空白 \r\n';
-    const { rows } = parseCsv(text);
+    const { rows } = parse(text);
     expect(rows).toEqual([
       { comment: ['# 確認中', '', '', ''] },
       values({ id: 'a-01', url: 'https://example.com/m', note: '', checkedAt: '' }),
@@ -114,7 +115,7 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
       'id,space,event,name,kana,penNames,tags,adult,x,pixiv,booth,web,notes,source\r\n' +
       '#a-02,A-02,サンプル即売会,まどろみ書房,,作家2,,0,,,,https://example.com/circle2,,架空の公式サークル一覧\r\n' +
       'a-03-a-04,"A-03,A-04",サンプル即売会,青い鳥工房,,作家3,,0,,,,https://example.com/circle3,,架空の公式サークル一覧\r\n';
-    const { rows } = parseCsv(text);
+    const { rows } = parse(text);
     expect(rows[0]).toEqual({
       comment: ['#a-02', 'A-02', 'サンプル即売会', 'まどろみ書房', '', '作家2', '', '0', '', '', '', 'https://example.com/circle2', '', '架空の公式サークル一覧'],
     });
@@ -123,7 +124,7 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
 
   it('「,」「"」改行を含むコメントの行は必要な値だけ「"」で囲む', () => {
     const text = 'id,url,note,checkedAt\r\n"#あとで, 見る","say ""hi""","複数\n行",x\r\n';
-    expect(parseCsv(text).rows).toEqual([{ comment: ['#あとで, 見る', 'say "hi"', '複数\n行', 'x'] }]);
+    expect(parse(text).rows).toEqual([{ comment: ['#あとで, 見る', 'say "hi"', '複数\n行', 'x'] }]);
     expect(roundTrip(text)).toBe(text);
     // 余計な囲みは外れる（Python の csv と同じ書き方にそろう）
     expect(roundTrip('id,url\r\n"#メモ","a"\r\n', ['id', 'url'])).toBe('id,url\r\n#メモ,a\r\n');
@@ -131,17 +132,18 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
 
   it('列名より値が多いコメントの行は読めて、そのまま書く', () => {
     const text = 'id,url\r\n#メモ,a,b,c\r\na-01,https://example.com/m\r\n';
-    expect(parseCsv(text).rows[0]).toEqual({ comment: ['#メモ', 'a', 'b', 'c'] });
+    expect(parse(text).rows[0]).toEqual({ comment: ['#メモ', 'a', 'b', 'c'] });
     expect(roundTrip(text, ['id', 'url'])).toBe(text);
   });
 
   it('「#」が最初の値でなければコメントではない', () => {
-    expect(parseCsv('id,url\r\n a#,#x\r\n').rows).toEqual([values({ id: ' a#', url: '#x' })]);
+    expect(parse('id,url\r\n a#,#x\r\n', ['id', 'url']).rows).toEqual([values({ id: ' a#', url: '#x' })]);
   });
 
   it('列名は決まった列の順に並べ、ほかの列は元の順でそのあとに（値も残す）', () => {
     const text = 'memo,url,id,extra2\r\nメモ,https://example.com/m,a-01,"x,y"\r\n';
-    expect(outputColumns(MENU_COLS, parseCsv(text).header)).toEqual(['id', 'url', 'note', 'checkedAt', 'memo', 'extra2']);
+    expect(parse(text).extraHeader).toEqual(['memo', 'extra2']);
+    expect(parse(text).rows).toEqual([values({ id: 'a-01', url: 'https://example.com/m', note: '', checkedAt: '' }, ['メモ', 'x,y'])]);
     expect(roundTrip(text)).toBe('id,url,note,checkedAt,memo,extra2\r\na-01,https://example.com/m,,,メモ,"x,y"\r\n');
   });
 
@@ -149,21 +151,37 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
     expect(roundTrip('id,url,note,checkedAt\r\na-01\r\n')).toBe('id,url,note,checkedAt\r\na-01,,,\r\n');
   });
 
-  it('列名が空・重複、列名より値が多い行は読まない（内容が失われるため）', () => {
-    expect(() => parseCsv('id,,note\r\n')).toThrow(CsvError);
-    expect(() => parseCsv('id,url,\r\n')).toThrow('3 番目の列名が空');
-    expect(() => parseCsv('id,url,id\r\n')).toThrow('「id」が重複');
-    expect(() => parseCsv('id,url\r\na-01,u\r\na-02,"複数\n行",余分\r\n')).toThrow('3 行目の値が列名より多く');
+  it('ほかの列は位置で扱う: 末尾の「,」でできた名前のない列の値も残す', () => {
+    const text = 'id,url,note,checkedAt,\r\na-01,https://example.com/m,,,名前のない列の値\r\na-02,,,,\r\n';
+    expect(parse(text).extraHeader).toEqual(['']);
+    expect(parse(text).rows[0]).toEqual(values({ id: 'a-01', url: 'https://example.com/m', note: '', checkedAt: '' }, ['名前のない列の値']));
+    expect(roundTrip(text)).toBe(text);
+  });
+
+  it('名前のない列が2つ・同じ名前のほかの列が2つあっても、位置ごとに残す', () => {
+    const text = 'id,,url,memo,,memo\r\na-01,x,https://example.com/m,m1,y,m2\r\n';
+    const { extraHeader, rows } = parse(text);
+    expect(extraHeader).toEqual(['', 'memo', '', 'memo']);
+    expect(rows[0]).toEqual(values({ id: 'a-01', url: 'https://example.com/m', note: '', checkedAt: '' }, ['x', 'm1', 'y', 'm2']));
+    expect(roundTrip(text)).toBe('id,url,note,checkedAt,,memo,,memo\r\na-01,https://example.com/m,,,x,m1,y,m2\r\n');
+  });
+
+  it('決まった列の名前が2回ある・列名より値が多い行・決まった列が1つもない列名の行は読まない（内容が失われるため）', () => {
+    expect(() => parse('id,url,id\r\n')).toThrow('「id」が重複');
+    expect(() => parse('id,url,note,url\r\na-01,a,b,c\r\n')).toThrow('「url」が重複');
+    expect(() => parse('id,url\r\na-01,u\r\na-02,"複数\n行",余分\r\n')).toThrow('3 行目の値が列名より多く');
+    expect(() => parse(', ,\r\n')).toThrow('1 行目（列名）に決まった列');
+    expect(() => parse('memo,x\r\n')).toThrow(CsvError);
   });
 });
 
 describe('Python の csv.reader と同じ読み方', () => {
   it('行末は CRLF・LF・CR のどれでもよく、空の行は飛ばす', () => {
-    expect(parseCsv('id,v\n\n1,x\r\n2,y\r3,z').rows).toEqual([values({ id: '1', v: 'x' }), values({ id: '2', v: 'y' }), values({ id: '3', v: 'z' })]);
+    expect(parse('id,v\n\n1,x\r\n2,y\r3,z', ['id', 'v']).rows).toEqual([values({ id: '1', v: 'x' }), values({ id: '2', v: 'y' }), values({ id: '3', v: 'z' })]);
   });
 
   it('BOM を除く', () => {
-    expect(parseCsv('﻿id,v\r\n1,2\r\n').header).toEqual(['id', 'v']);
+    expect(parse('﻿id,v\r\n1,2\r\n', ['id', 'v']).header).toEqual(['id', 'v']);
   });
 
   it('囲みの中の改行は値に入る（CRLF もそのまま）', () => {

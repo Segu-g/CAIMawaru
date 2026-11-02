@@ -11,13 +11,14 @@ export type MenuCol = (typeof MENU_COLS)[number];
 
 /**
  * 表の1行。key は画面の中だけで使う番号（ファイルには書かない）。
- * comment はコメントの行（最初の値が「#」で始まる行）の値の並びで、そのときの values は空。一覧には出さず、そのまま書き戻す
+ * comment はコメントの行（最初の値が「#」で始まる行）の値の並びで、そのときの values は空。一覧には出さず、そのまま書き戻す。
+ * extra は決まった列にない列の値（位置の順。画面では編集せず、そのまま書き戻す）
  */
-export type Row = { key: number; values: Record<string, string>; comment?: string[] };
+export type Row = { key: number; values: Record<string, string>; comment?: string[]; extra?: string[] };
 
 let nextKey = 1;
-export function newRow(values: Record<string, string>, comment?: string[]): Row {
-  return comment === undefined ? { key: nextKey++, values } : { key: nextKey++, values, comment };
+export function newRow(values: Record<string, string>, comment?: string[], extra?: string[]): Row {
+  return { key: nextKey++, values, ...(comment !== undefined && { comment }), ...(extra !== undefined && { extra }) };
 }
 
 /** スペース番号から id を作る（project.py の make_id と同じ。「A-03,A-04」→「a-03-a-04」）。 */
@@ -34,8 +35,8 @@ export function circleId(values: Record<string, string>): string {
  * サークル・お品書きとして扱う行か。コメントの行（最初の値が「#」で始まる行。csv.ts で見分け、values は空）は除く。
  * 空の値だけの行は読み込むときに捨てるが、画面で足して何も入れていない行もここで除く。
  */
-export function isDataRow(values: Record<string, string>): boolean {
-  return Object.values(values).some((v) => v.trim());
+export function isDataRow(values: Record<string, string>, extra: readonly string[] = []): boolean {
+  return Object.values(values).some((v) => v.trim()) || extra.some((v) => v.trim());
 }
 
 /** http(s) の URL か（project.py の is_http_url と同じく、スキームとホストがあるか）。 */

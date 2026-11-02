@@ -251,7 +251,7 @@ export default function Editor() {
       return setTab('circles');
     }
     const menu = opened.doc.menus.find((m) => m.key === issue.key);
-    const circle = menu && opened.doc.circles.find((c) => isDataRow(c.values) && circleId(c.values) === menu.values.id.trim());
+    const circle = menu && opened.doc.circles.find((c) => isDataRow(c.values, c.extra) && circleId(c.values) === menu.values.id.trim());
     if (circle) {
       setSelected(circle.key);
       setTab('circles');
@@ -336,8 +336,8 @@ export default function Editor() {
   }
 
   const { doc } = opened;
-  const circleCount = doc.circles.filter((c) => isDataRow(c.values)).length;
-  const menuCount = doc.menus.filter((m) => isDataRow(m.values)).length;
+  const circleCount = doc.circles.filter((c) => isDataRow(c.values, c.extra)).length;
+  const menuCount = doc.menus.filter((m) => isDataRow(m.values, m.extra)).length;
   const tabs: [Tab, string][] = [
     ['circles', `サークル（${circleCount}）`],
     ['menus', `お品書き（${menuCount}）`],

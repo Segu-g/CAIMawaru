@@ -25,7 +25,7 @@ export function checkCircles(circles: Row[]): Issue[] {
   const err = (r: Row, message: string) => issues.push({ level: 'error', where: 'circle', key: r.key, message: `${label(r.values)}: ${message}` });
   for (const r of circles) {
     const v = r.values;
-    if (!isDataRow(v)) continue;
+    if (!isDataRow(v, r.extra)) continue;
     const id = circleId(v);
     if (!id) {
       err(r, 'id もスペース番号もありません');
@@ -46,12 +46,12 @@ export function checkCircles(circles: Row[]): Issue[] {
 
 export function checkMenus(menus: Row[], circles: Row[]): Issue[] {
   const issues: Issue[] = [];
-  const ids = new Set(circles.filter((r) => isDataRow(r.values)).map((r) => circleId(r.values)));
+  const ids = new Set(circles.filter((r) => isDataRow(r.values, r.extra)).map((r) => circleId(r.values)));
   const seen = new Set<string>();
   const add = (level: Issue['level'], r: Row, message: string) => issues.push({ level, where: 'menu', key: r.key, message });
   for (const r of menus) {
     const v = r.values;
-    if (!isDataRow(v)) continue;
+    if (!isDataRow(v, r.extra)) continue;
     const id = v.id.trim();
     const url = v.url.trim();
     const where = `お品書き（${id || 'id なし'}）`;

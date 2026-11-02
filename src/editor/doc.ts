@@ -1,5 +1,5 @@
 // 読み込んだファイルの中身（テキスト）⇄ エディタで編集する形。ファイルの読み書き自体は folder.ts。
-import { CsvError, formatCsv, outputColumns, parseCsv } from './csv';
+import { CsvError, formatCsv, parseCsv } from './csv';
 import { lossyJson } from './jsonCheck';
 import { CIRCLE_COLS, isDataRow, MENU_COLS, newRow, type JsonObject, type Row } from './model';
 
@@ -22,31 +22,30 @@ export type Doc = {
    */
   eventLocked: string[];
   circles: Row[];
-  /** circles.csv に書く列（決まった列 + ファイルにあったほかの列） */
-  circleCols: string[];
+  /** circles.csv の、決まった列にない列の列名（位置の順。決まった列のあとに書く） */
+  circleExtras: string[];
   menus: Row[];
-  menuCols: string[];
+  menuExtras: string[];
 };
 
 export type LoadNote = { file: string; message: string };
 
 /** CSV を読んで編集用の行にする。読めない（保存すると内容が失われる）ときは例外にして開かない。 */
-export function readTable(text: string, standard: readonly string[], file: string): { rows: Row[]; cols: string[] } {
+export function readTable(text: string, standard: readonly string[], file: string): { rows: Row[]; extras: string[] } {
   let table;
   try {
-    table = parseCsv(text);
+    table = parseCsv(text, standard);
   } catch (e) {
     if (e instanceof CsvError) throw new Error(`${file}: ${e.message}。内容が失われるので開きません。直接編集で直してから開き直してください`);
     throw e;
   }
-  const { header, rows } = table;
+  const { header, extraHeader, rows } = table;
   if (header.length && !header.includes('id')) {
     throw new Error(`${file} の1行目に列名（id など）がありません。直接編集で直してから開き直してください`);
   }
-  const cols = outputColumns(standard, header);
   return {
-    cols,
-    rows: rows.map((r) => ('comment' in r ? newRow({}, r.comment) : newRow(Object.fromEntries(cols.map((c) => [c, r.values[c] ?? '']))))),
+    extras: extraHeader,
+    rows: rows.map((r) => ('comment' in r ? newRow({}, r.comment) : newRow(r.values, undefined, r.extra))),
   };
 }
 
@@ -65,17 +64,17 @@ export function readEvent(text: string): JsonObject {
 }
 
 /** 行を CSV にする。コメントの行はそのまま、どの値も空の行（足したまま何も入れていない行など）は書かない */
-export function serializeTable(cols: readonly string[], rows: Row[]): string {
-  const out = rows.filter((r) => r.comment !== undefined || isDataRow(r.values));
-  return formatCsv(cols, out.map((r) => (r.comment !== undefined ? { comment: r.comment } : { values: r.values })));
+export function serializeTable(standard: readonly string[], extras: readonly string[], rows: Row[]): string {
+  const out = rows.filter((r) => r.comment !== undefined || isDataRow(r.values, r.extra));
+  return formatCsv(standard, extras, out.map((r) => (r.comment !== undefined ? { comment: r.comment } : { values: r.values, extra: r.extra })));
 }
 
-export function serializeCircles(doc: Pick<Doc, 'circles' | 'circleCols'>): string {
-  return serializeTable(doc.circleCols, doc.circles);
+export function serializeCircles(doc: Pick<Doc, 'circles' | 'circleExtras'>): string {
+  return serializeTable(CIRCLE_COLS, doc.circleExtras, doc.circles);
 }
 
-export function serializeMenus(doc: Pick<Doc, 'menus' | 'menuCols'>): string {
-  return serializeTable(doc.menuCols, doc.menus);
+export function serializeMenus(doc: Pick<Doc, 'menus' | 'menuExtras'>): string {
+  return serializeTable(MENU_COLS, doc.menuExtras, doc.menus);
 }
 
 export function serializeEvent(doc: Pick<Doc, 'event' | 'eventEol'>): string {
@@ -95,9 +94,9 @@ export function loadDoc(texts: Texts): { doc: Doc; notes: LoadNote[] } {
     eventEol: texts.event.includes('\r\n') ? '\r\n' : '\n',
     eventLocked: lossyJson(texts.event),
     circles: circles.rows,
-    circleCols: circles.cols,
+    circleExtras: circles.extras,
     menus: menus.rows,
-    menuCols: menus.cols,
+    menuExtras: menus.extras,
   };
   // 編集しなくても書式だけ変わるファイルを知らせる（保存するのは編集したファイルだけ）
   const csvStyle = '保存すると、CLI と同じ書式（列の順・行末 CRLF・必要なときだけ「"」で囲む・空の行を除く）にそろえて書きます';

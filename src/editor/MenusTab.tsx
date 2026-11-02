@@ -18,7 +18,7 @@ export default function MenusTab({ doc, edit, onOpenCircle }: Props) {
   const circles = useMemo(() => {
     const byId = new Map<string, { key: number; label: string }>();
     for (const c of doc.circles) {
-      if (!isDataRow(c.values)) continue;
+      if (!isDataRow(c.values, c.extra)) continue;
       const id = circleId(c.values);
       if (id && !byId.has(id)) byId.set(id, { key: c.key, label: `${c.values.space} ${c.values.name}`.trim() });
     }
@@ -26,7 +26,7 @@ export default function MenusTab({ doc, edit, onOpenCircle }: Props) {
   }, [doc.circles]);
   const options = useMemo(() => [...circles.entries()], [circles]);
 
-  const rows = doc.menus.filter((m) => isDataRow(m.values));
+  const rows = doc.menus.filter((m) => isDataRow(m.values, m.extra));
   const orphans = rows.filter((m) => !circles.has(m.values.id.trim()));
   const shown = rows.filter((m) => {
     if (orphansOnly && circles.has(m.values.id.trim())) return false;

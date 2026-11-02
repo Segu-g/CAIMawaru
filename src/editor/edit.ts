@@ -13,13 +13,13 @@ function setValue(rows: Row[], key: number, col: string, value: string): Row[] {
 /** そのサークルのお品書き（menus.csv の id がサークルの id と同じ行） */
 export function menusOf(doc: Doc, circle: Row): Row[] {
   const id = circleId(circle.values);
-  return id ? doc.menus.filter((m) => isDataRow(m.values) && m.values.id.trim() === id) : [];
+  return id ? doc.menus.filter((m) => isDataRow(m.values, m.extra) && m.values.id.trim() === id) : [];
 }
 
 /** 同じ id を使っているほかのサークル（id の重複。お品書きはどちらのものか決まらない） */
 export function sameIdCircles(doc: Doc, circle: Row): Row[] {
   const id = circleId(circle.values);
-  return id ? doc.circles.filter((c) => c.key !== circle.key && isDataRow(c.values) && circleId(c.values) === id) : [];
+  return id ? doc.circles.filter((c) => c.key !== circle.key && isDataRow(c.values, c.extra) && circleId(c.values) === id) : [];
 }
 
 export function addCircle(doc: Doc, values: Partial<Record<string, string>> = {}): { doc: Doc; key: number } {
@@ -38,7 +38,7 @@ export function updateCircle(doc: Doc, key: number, col: string, value: string):
 export function renameMenus(doc: Doc, oldId: string, newId: string): { doc: Doc; moved: number } {
   let moved = 0;
   const menus = doc.menus.map((m) => {
-    if (!oldId || !isDataRow(m.values) || m.values.id.trim() !== oldId) return m;
+    if (!oldId || !isDataRow(m.values, m.extra) || m.values.id.trim() !== oldId) return m;
     moved++;
     return { ...m, values: { ...m.values, id: newId } };
   });

@@ -118,7 +118,7 @@ describe('読み込みと書き戻し', () => {
 
   it('決まった列にない列は、決まった列のあとに値ごと残す', async () => {
     const { doc } = await open(exampleFolder().put('data/menus.csv', 'memo,url,id\r\nメモ,https://example.com/m,a-01\r\n'));
-    expect(doc.menuCols).toEqual(['id', 'url', 'note', 'checkedAt', 'memo']);
+    expect(doc.menuExtras).toEqual(['memo']);
     const next = addMenu(doc, 'a-02', 'https://example.com/n', '新刊', new Date(2030, 0, 1)).doc;
     expect(serializeMenus(next)).toBe(
       'id,url,note,checkedAt,memo\r\na-01,https://example.com/m,,,メモ\r\na-02,https://example.com/n,新刊,2030-01-01,\r\n',
@@ -139,10 +139,20 @@ describe('読み込みと書き戻し', () => {
     expect(serializeEvent({ ...doc, event: setTop(doc.event, 'title', 't') })).toBe('{\r\n  "storeId": "ev",\r\n  "title": "t"\r\n}\r\n');
   });
 
+  it('名前のない列があっても開け、編集して保存しても値と列名を残す', async () => {
+    const text = 'id,url,note,checkedAt,,memo\r\na-01,https://example.com/m,,2030-01-01,x,y\r\n';
+    const { doc } = await open(exampleFolder().put('data/menus.csv', text));
+    expect(doc.menuExtras).toEqual(['', 'memo']);
+    const next = updateMenu(addMenu(doc, 'a-02', 'https://example.com/n', '', new Date(2030, 0, 2)).doc, doc.menus[0].key, 'note', '新刊');
+    expect(serializeMenus(next)).toBe(
+      'id,url,note,checkedAt,,memo\r\na-01,https://example.com/m,新刊,2030-01-01,x,y\r\na-02,https://example.com/n,,2030-01-02,,\r\n',
+    );
+  });
+
   it('内容が失われる CSV・JSON として読めない event.json は開かない', async () => {
     const opens = (path: string, text: string) => open(exampleFolder().put(path, text));
     await expect(opens('data/circles.csv', 'a-01,A-01\r\n')).rejects.toThrow('列名');
-    await expect(opens('data/menus.csv', 'id,url,,checkedAt\r\n')).rejects.toThrow('3 番目の列名が空');
+    await expect(opens('data/menus.csv', ', ,\r\na-01,u\r\n')).rejects.toThrow('決まった列');
     await expect(opens('data/menus.csv', 'id,url,url\r\n')).rejects.toThrow('「url」が重複');
     await expect(opens('data/menus.csv', 'id,url\r\na-01,"https://example.com/m\r\n続き",余分\r\n')).rejects.toThrow('2 行目の値が列名より多く');
     await expect(opens('event.json', '{ "storeId": ')).rejects.toThrow('JSON');

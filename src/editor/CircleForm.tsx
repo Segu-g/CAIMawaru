@@ -62,7 +62,7 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
   const mine = issues.filter((i) => i.where === 'circle' && i.key === circle.key);
   const menuKeys = new Set(menus.map((m) => m.key));
   const menuIssues = issues.filter((i) => i.where === 'menu' && i.key !== undefined && menuKeys.has(i.key));
-  const events = useMemo(() => [...new Set(doc.circles.filter((c) => isDataRow(c.values)).map((c) => c.values.event.trim()).filter(Boolean))].sort(), [doc.circles]);
+  const events = useMemo(() => [...new Set(doc.circles.filter((c) => isDataRow(c.values, c.extra)).map((c) => c.values.event.trim()).filter(Boolean))].sort(), [doc.circles]);
   const [newUrl, setNewUrl] = useState('');
   const [newNote, setNewNote] = useState('');
 
@@ -80,7 +80,7 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
         alert('id もスペース番号もないと、お品書きを付けられません。どちらかを入れてください');
         return false;
       }
-      const taken = doc.circles.some((c) => c.key !== circle.key && isDataRow(c.values) && circleId(c.values) === after);
+      const taken = doc.circles.some((c) => c.key !== circle.key && isDataRow(c.values, c.extra) && circleId(c.values) === after);
       const message = shared.length
         ? `このサークルの id が「${id}」から「${after}」に変わります。\n` +
           `「${id}」はほかのサークル（${sharedNames}）も使っているので、お品書き ${menus.length} 件は付け替えず、id「${id}」のまま残します。`

@@ -81,7 +81,7 @@ export default function EventTab({ doc, issues, edit, slotDraft, setSlotDraft }:
 
   // circles.csv に出てくる参加イベント（eventSlots の候補）
   const circleEvents = useMemo(
-    () => [...new Set(doc.circles.filter((c) => isDataRow(c.values)).map((c) => c.values.event.trim()).filter(Boolean))].sort(),
+    () => [...new Set(doc.circles.filter((c) => isDataRow(c.values, c.extra)).map((c) => c.values.event.trim()).filter(Boolean))].sort(),
     [doc.circles],
   );
   const unslotted = circleEvents.filter((ev) => !slots.some((s) => s.name.trim() === ev));

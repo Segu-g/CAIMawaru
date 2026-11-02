@@ -23,15 +23,15 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
   const rows = useMemo(() => doc.circles.filter((c) => c.comment === undefined), [doc.circles]);
   const idCount = useMemo(() => {
     const n = new Map<string, number>();
-    for (const c of rows) if (isDataRow(c.values)) n.set(circleId(c.values), (n.get(circleId(c.values)) ?? 0) + 1);
+    for (const c of rows) if (isDataRow(c.values, c.extra)) n.set(circleId(c.values), (n.get(circleId(c.values)) ?? 0) + 1);
     return n;
   }, [rows]);
   // 件数とイベントの一覧は、保存する行（値のある行）だけで数える（タブの件数と同じ）
-  const dataRows = useMemo(() => rows.filter((c) => isDataRow(c.values)), [rows]);
+  const dataRows = useMemo(() => rows.filter((c) => isDataRow(c.values, c.extra)), [rows]);
   const events = useMemo(() => [...new Set(dataRows.map((c) => c.values.event.trim()))].sort(), [dataRows]);
   const menuCount = useMemo(() => {
     const n = new Map<string, number>();
-    for (const m of doc.menus) if (isDataRow(m.values)) n.set(m.values.id.trim(), (n.get(m.values.id.trim()) ?? 0) + 1);
+    for (const m of doc.menus) if (isDataRow(m.values, m.extra)) n.set(m.values.id.trim(), (n.get(m.values.id.trim()) ?? 0) + 1);
     return n;
   }, [doc.menus]);
   const withIssue = useMemo(() => new Set(issues.filter((i) => i.where === 'circle' && i.level === 'error').map((i) => i.key)), [issues]);
@@ -87,7 +87,7 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
           <button type="button" onClick={add}>＋ サークルを追加</button>
         </div>
         <p className="meta">
-          {shown.filter((c) => isDataRow(c.values)).length} / {dataRows.length} 件（ファイルの順）
+          {shown.filter((c) => isDataRow(c.values, c.extra)).length} / {dataRows.length} 件（ファイルの順）
           {rows.length > dataRows.length && `。ほかに、何も入れていない行が ${rows.length - dataRows.length} 件（保存しません）`}
         </p>
         <div className="ed-table-wrap">
@@ -116,7 +116,7 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
                     <td className="nowrap">{v.space}</td>
                     <td>
                       <button type="button" className="ed-row-link" onClick={(e) => { e.stopPropagation(); onSelect(c.key); }}>
-                        {v.name || (isDataRow(v) ? '（名前なし）' : '（空の行。保存しません）')}
+                        {v.name || (isDataRow(v, c.extra) ? '（名前なし）' : '（空の行。保存しません）')}
                       </button>
                     </td>
                     <td>{v.event}</td>
