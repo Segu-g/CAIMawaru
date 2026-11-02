@@ -37,7 +37,7 @@ uv run caimawaru import <eventId> --fetch
 ```
 
 - Sockbase 以外（配布 CSV・JSON など）は、元データを `sources/` に保存して `type` と `columns` を書く
-- 組み込みで読めない形式は、イベントのフォルダに Python のインポーターを置く（type: python）
+- 組み込みで読めない形式は、`tools/caimawaru/importers/` にインポーターを足す（[importers.md](importers.md)）
 - 元データがなければ、`data/circles.csv` に直接書いてもよい（[event-data.md](event-data.md)）
 - 取り込み後も `tags`・`notes` など取り込まない列は直接編集できる。次の取り込みでも残る
 

@@ -68,16 +68,18 @@ uv run caimawaru importers                    # 使えるインポーター
 
 - `records` はサークルの配列までのパス、`columns` の値は各サークル内のパス（`.` 区切り、配列は番号）
 
-## 独自の形式（type: python）
+## 新しい形式
 
-組み込みで読めない形式は、イベントのフォルダに Python ファイルを置いて読みます。
+組み込みで読めない形式は、`tools/caimawaru/importers/<type>.py` にインポーターを足し、その名前を `type` に書きます。
 
 ```json
-{ "type": "python", "module": "importer.py", "file": "sources/list.xlsx" }
+{ "type": "myformat", "file": "sources/list.xlsx" }
 ```
 
 ```python
-# events/<eventId>/importer.py
+# tools/caimawaru/importers/myformat.py
+DESCRIPTION = "○○の配布形式"
+
 def read(source, path):
     """path の元データを読み、イベントデータの列名をキーにした行のリストを返す。"""
     return [{"space": "A-01", "name": "サークル名", "penNames": ["作家"], "x": "example_user",
@@ -88,7 +90,9 @@ def fetch(source, path):  # 任意。--fetch で呼ばれる
 ```
 
 - 返す行のキーは circles.csv の列名と `menus`。`id` か `space` は必須。値の正規化は共通処理が行う
-- 何度も使う形式になったら、`tools/caimawaru/importers/<type>.py` に組み込みとして移し、テスト（`tools/tests/`）を足す
+- 形式の読み方だけを書き、実在のイベントの値（サークル名・URL など）は書かない。テスト（`tools/tests/`）は架空のデータで書く
+- `type` に書けるのはこのフォルダのモジュール名だけ。イベントのフォルダなど、ほかの場所の Python ファイルは読み込まない
+  （受け取ったイベントのデータで任意のコードが実行されないように）
 
 ## エージェントによる取得
 

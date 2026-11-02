@@ -10,8 +10,9 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
 - 実在のイベントの `events/<eventId>/` は .gitignore 済みで、公開リポジトリには `events/example/`（架空）だけを入れる。
   実在のサークル名・アカウント・URL をコード・テスト・ドキュメント・コミットに書かない
 - **主催の元データ（任意の形式）とイベントデータ（docs/event-data.md）を混ぜない。** 元データは `sources/` に置き、
-  変換は必ずインポーター（`tools/caimawaru/importers/` か、イベントごとの type python）で行う。イベントデータはページが読む唯一の形で、
-  形式ごとの事情（列名・表記揺れ）を持ち込まない。新しい形式は、まずイベントごとの Python で書き、繰り返し使うなら組み込みにしてテストを足す
+  変換は必ずインポーター（`tools/caimawaru/importers/`）で行う。イベントデータはページが読む唯一の形で、
+  形式ごとの事情（列名・表記揺れ）を持ち込まない。新しい形式は `tools/caimawaru/importers/` にモジュールを足し、架空のデータでテストを書く。
+  イベントのフォルダなど、リポジトリの外の Python を読み込んで実行する仕組みは作らない
 - `public/data/circles.json` は生成物。直接編集せず `uv run caimawaru data <eventId>` で作る
 - イベントデータ（event.json・layout.json・data/*.csv）はエージェントが直接編集してよい。編集後は `uv run caimawaru data <eventId>` で検証する
 - `storeId` は公開後に変えない（利用者の ★・タグ・メモが消える）

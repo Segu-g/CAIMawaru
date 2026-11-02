@@ -12,6 +12,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import date
 
+from caimawaru import importers
 from caimawaru import layout as layout_mod
 from caimawaru.project import is_http_url, make_id, read_csv
 
@@ -20,7 +21,6 @@ POST_URL = re.compile(r"^https://(x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/\d+"
 # プロフィールや検索結果など、投稿以外のXページを誤って登録していないかの確認用
 X_PAGE = re.compile(r"^https?://(?:www\.|mobile\.)?(x|twitter)\.com/", re.IGNORECASE)
 INFO_REQUIRED = ("name", "date", "venue")
-SOURCE_TYPES = ("sockbase", "csv", "json", "python")
 
 
 @dataclass
@@ -81,10 +81,10 @@ def check_config(event, r):
         sources = []
     for i, s in enumerate(sources):
         kind = s.get("type") if isinstance(s, dict) else None
-        if kind not in SOURCE_TYPES:
-            r.errors.append(f"{where}: sources[{i}].type は {' / '.join(SOURCE_TYPES)} のどれかにしてください: {kind!r}")
-        elif kind == "python" and not s.get("module"):
-            r.errors.append(f"{where}: sources[{i}] は type python なので module（Python ファイル）が必要です")
+        if kind == "python":
+            r.errors.append(f"{where}: sources[{i}] の type python は廃止しました。tools/caimawaru/importers/ にインポーターを足し、その名前を type に書いてください")
+        elif kind not in importers.available():
+            r.errors.append(f"{where}: sources[{i}].type は {' / '.join(importers.available())} のどれかにしてください: {kind!r}")
         elif kind in ("csv", "json") and not s.get("file"):
             r.errors.append(f"{where}: sources[{i}] は type {kind} なので file（元データ）が必要です")
         if isinstance(s, dict) and s.get("url") and not is_http_url(s["url"]):

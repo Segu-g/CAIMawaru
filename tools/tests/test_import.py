@@ -176,14 +176,16 @@ class SockbaseImporterTest(unittest.TestCase):
 
 
 class LoaderTest(unittest.TestCase):
-    def test_python_importer_from_event_dir(self):
-        p = tmpfile("my_importer.py", "def read(source, path):\n    return [{'space': 'A-01', 'name': source['x']}]\n")
-        mod = importers.load({"type": "python", "module": "my_importer.py"}, p.parent)
-        self.assertEqual(mod.read({"x": "名前"}, None), [{"space": "A-01", "name": "名前"}])
+    def test_builtin_types(self):
+        self.assertEqual(importers.available(), ["csv", "json", "sockbase"])
+        self.assertTrue(callable(importers.load({"type": "csv"}).read))
 
-    def test_unknown_type(self):
-        with self.assertRaises(ValueError):
-            importers.load({"type": "excel"}, Path("."))
+    def test_only_modules_in_the_package(self):
+        # ファイルのパス・親パッケージのモジュール・廃止した python は読み込まない
+        p = tmpfile("my_importer.py", "raise SystemExit('実行されてはいけない')\n")
+        for kind in ("excel", "python", str(p), "../cli", "caimawaru.cli", "cli", "__init__", "", None):
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                importers.load({"type": kind, "module": str(p)})
 
 
 if __name__ == "__main__":

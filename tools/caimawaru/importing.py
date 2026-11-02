@@ -8,7 +8,6 @@ data/circles.csv と data/menus.csv に取り込む（caimawaru import）。
 - 公式リストから消えたサークルは知らせる（配置変更・参加取り消しの可能性。menus.csv に残った行は検証でエラーになる）
 - 書き込んだあと検証・生成する（--no-build で省略）
 """
-import importlib
 import json
 import sys
 from datetime import date
@@ -125,10 +124,9 @@ def merge(imported, existing_circles, existing_menus, today):
 
 
 def list_importers():
-    for kind in importers.BUILTIN:
-        mod = importlib.import_module(f"caimawaru.importers.{kind}")
-        print(f"{kind:9} {mod.DESCRIPTION}{'（取得に対応）' if hasattr(mod, 'fetch') else ''}")
-    print(f"{'python':9} イベントごとの Python ファイル（events/<eventId>/ に置き、module で指定）")
+    for kind in importers.available():
+        mod = importers.load({"type": kind})
+        print(f"{kind:9} {getattr(mod, 'DESCRIPTION', '')}{'（取得に対応）' if hasattr(mod, 'fetch') else ''}")
 
 
 def run(event, fetch=False, input=None, dry_run=False, no_build=False):
@@ -146,7 +144,7 @@ def run(event, fetch=False, input=None, dry_run=False, no_build=False):
     for i, source in enumerate(sources):
         label = source.get("name") or source.get("type") or f"sources[{i}]"
         try:
-            mod = importers.load(source, event.dir)
+            mod = importers.load(source)
         except ValueError as e:
             raise CliError(f"{label}: {e}") from e
         default = getattr(mod, "DEFAULT_FILE", "")

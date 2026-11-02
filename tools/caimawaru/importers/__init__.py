@@ -16,30 +16,30 @@ read が返す行:
     - id か space のどちらかは必須
     - 返さなかった列は「直接編集する列」として、既存の circles.csv の値が残る
 
-イベント固有の形式には、events/<eventId>/ に置いた Python ファイルを type "python" で指定できる（同じ read / fetch を定義する）。
+event.json の type には、このフォルダにあるモジュールの名前だけを書ける（ファイルのパスは指定できない）。
+イベントのフォルダなど、リポジトリの外の Python は読み込まない（受け取ったイベントのデータでコードが実行されないように）。
+新しい形式は、ここにモジュールを足してテスト（tools/tests/）を書く。
 """
 import importlib
-import importlib.util
-from pathlib import Path
+import pkgutil
+import re
 
-BUILTIN = ("sockbase", "csv", "json")
+TYPE_NAME = re.compile(r"[a-z][a-z0-9_]*")
 
 
-def load(source: dict, event_dir: Path):
+def available():
+    """使えるインポーターの type（このパッケージのモジュール名。_ で始まるものは除く）。"""
+    return sorted(m.name for m in pkgutil.iter_modules(__path__) if not m.name.startswith("_") and not m.ispkg)
+
+
+def load(source: dict):
     """source（event.json の sources の1要素）に対応するインポーターのモジュールを返す。"""
     kind = source.get("type", "")
-    if kind == "python":
-        module = source.get("module", "")
-        path = (event_dir / module).resolve()
-        if not module or not path.is_file():
-            raise ValueError(f"type python の module が見つかりません: {module}")
-        spec = importlib.util.spec_from_file_location(f"event_importer_{path.stem}", path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-    elif kind in BUILTIN:
-        mod = importlib.import_module(f"caimawaru.importers.{kind}")
-    else:
-        raise ValueError(f"不明な type です: {kind!r}（{', '.join(BUILTIN)}, python のどれか）")
+    names = available()
+    # 名前の形と一覧の両方で確かめ、パスや親パッケージを指す値（"../x"・"caimawaru.cli" など）を読み込まない
+    if not isinstance(kind, str) or not TYPE_NAME.fullmatch(kind) or kind not in names:
+        raise ValueError(f"不明な type です: {kind!r}（{', '.join(names)} のどれか）")
+    mod = importlib.import_module(f"{__name__}.{kind}")
     if not callable(getattr(mod, "read", None)):
         raise ValueError(f"インポーター {kind} に read(source, path) がありません")
     return mod
