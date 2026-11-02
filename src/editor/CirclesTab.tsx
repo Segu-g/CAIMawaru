@@ -26,7 +26,9 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
     for (const c of rows) if (isDataRow(c.values)) n.set(circleId(c.values), (n.get(circleId(c.values)) ?? 0) + 1);
     return n;
   }, [rows]);
-  const events = useMemo(() => [...new Set(rows.map((c) => c.values.event.trim()))].sort(), [rows]);
+  // 件数とイベントの一覧は、保存する行（値のある行）だけで数える（タブの件数と同じ）
+  const dataRows = useMemo(() => rows.filter((c) => isDataRow(c.values)), [rows]);
+  const events = useMemo(() => [...new Set(dataRows.map((c) => c.values.event.trim()))].sort(), [dataRows]);
   const menuCount = useMemo(() => {
     const n = new Map<string, number>();
     for (const m of doc.menus) if (isDataRow(m.values)) n.set(m.values.id.trim(), (n.get(m.values.id.trim()) ?? 0) + 1);
@@ -50,11 +52,12 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
   const current = selected === null ? undefined : doc.circles.find((c) => c.key === selected);
 
   const add = () => {
-    // 絞り込み中のイベントがあれば、そのイベントで作る
-    const res = addCircle(doc, { event });
+    // 空の行として足す（何も入れずにやめたら保存しない）。絞り込みは外して、足した行が見えるようにする
+    const res = addCircle(doc);
     const row = res.doc.circles[res.doc.circles.length - 1];
     edit((d) => ({ ...d, circles: [...d.circles, row] }), 'circles');
     setQ('');
+    setEvent('');
     setMenu('');
     onSelect(res.key);
   };
@@ -83,7 +86,10 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
           </select>
           <button type="button" onClick={add}>＋ サークルを追加</button>
         </div>
-        <p className="meta">{shown.length} / {rows.length} 件（ファイルの順）</p>
+        <p className="meta">
+          {shown.filter((c) => isDataRow(c.values)).length} / {dataRows.length} 件（ファイルの順）
+          {rows.length > dataRows.length && `。ほかに、何も入れていない行が ${rows.length - dataRows.length} 件（保存しません）`}
+        </p>
         <div className="ed-table-wrap">
           <table className="ed-table">
             <thead>

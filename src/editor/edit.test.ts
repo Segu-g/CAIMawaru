@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadDoc, serializeCircles, serializeMenus } from './doc';
-import { addCircle, addMenu, changeCircleId, editableFields, removeCircle, sameIdCircles, slotsToObject, updateCircle, updateMenu } from './edit';
+import { addCircle, addMenu, changeCircleId, editableFields, removeCircle, sameIdCircles, slotsLockReason, slotsToObject, updateCircle, updateMenu } from './edit';
 
 const circlesCsv =
   'id,space,event,name,kana,penNames,tags,adult,x,pixiv,booth,web,notes,source\r\n' +
@@ -12,7 +12,7 @@ const open = () => loadDoc({ event: '{"storeId": "ev", "title": "t"}', circles: 
 const byName = (doc: ReturnType<typeof open>, name: string) => doc.circles.find((c) => c.values.name === name)!;
 
 describe('値がない行は書かない', () => {
-  it('「サークルを追加」したまま何も入れていない行は circles.csv に書かない', () => {
+  it('「サークルを追加」は空の行を足す（絞り込み中のイベントも入れない）ので、何も入れずにやめれば書かない', () => {
     const doc = open();
     const added = addCircle(doc).doc;
     expect(serializeCircles(added)).toBe(circlesCsv);
@@ -85,6 +85,18 @@ describe('eventSlots の行', () => {
     const rows = [{ name: '併設オンリー', slot: 2 }, { name: '併設', slot: 3 }];
     expect(slotsToObject(rows)).toEqual({ ok: true, value: { 併設オンリー: 2, 併設: 3 } });
     expect(slotsToObject([...rows, { name: '', slot: 4 }]).ok).toBe(false); // 「＋ イベントを追加」直後
+  });
+});
+
+describe('数字だけのイベント名がある eventSlots', () => {
+  it('eventSlots だけを読み取り専用にし、理由を正しく知らせる（ほかの欄は編集できる）', () => {
+    const event = { storeId: 'ev', title: 't', info: { name: 'n', eventSlots: { '2025': 1 } } };
+    const ok = editableFields(event);
+    expect(ok.eventSlots).toBe(false);
+    expect(Object.entries(ok).filter(([, v]) => !v).map(([k]) => k)).toEqual(['eventSlots']);
+    expect(slotsLockReason(event)).toContain('数字だけのイベント名（2025）');
+    expect(slotsLockReason({ info: { eventSlots: { サンプル即売会: 1 } } })).toBeNull();
+    expect(slotsLockReason({ info: { eventSlots: [] } })).toContain('オブジェクト');
   });
 });
 

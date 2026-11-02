@@ -3,6 +3,8 @@
 // - 数字だけのキー（"1" など）があるオブジェクト: キーの順が並べ替わる
 // - 同じキーが2回あるオブジェクト: 後ろの値だけが残る
 // - 数値の書き方: 1.0 → 1、1e16 → 10000000000000000、2^53 を超える整数は丸められる、-0 → 0 など
+// - 指数表記の数値（1.5e-7 など）: JavaScript と Python で書き方が違う（1.5e-7 と 1.5e-07）ので、変わらなくても読み取り専用にする
+// - 「__proto__」というキー: JavaScript では特別な名前なので、安全のため編集しない
 // 見つかったときは、エディタは event.json を読み取り専用にする（値を黙って変えないため）。
 
 const WS = /[ \t\n\r]*/y;
@@ -52,7 +54,9 @@ export function lossyJson(text: string): string[] {
         if (src[i++] === ',') continue;
         break;
       }
-      const o: Record<string, true> = {};
+      if (keys.includes('__proto__')) issues.push(`${label(path)} に「__proto__」というキーがあります（JavaScript では特別な名前なので、安全のため編集しません）`);
+      // キーの順は、JSON.parse と同じく自分のプロパティとして足したときの順で確かめる（__proto__ も普通のキーになる）
+      const o: Record<string, true> = Object.create(null) as Record<string, true>;
       for (const k of keys) o[k] = true;
       const order = Object.keys(o);
       if (order.length !== keys.length) issues.push(`${label(path)} に同じキーが複数あります`);
@@ -84,7 +88,8 @@ export function lossyJson(text: string): string[] {
       i = NUMBER.lastIndex;
       const token = m[0];
       const back = JSON.stringify(Number(token));
-      if (back !== token) issues.push(`${label(path)} の数値 ${token} が ${back} に変わります`);
+      if (/[eE]/.test(token)) issues.push(`${label(path)} の数値 ${token} は指数表記です（JavaScript と Python で書き方が違う）`);
+      else if (back !== token) issues.push(`${label(path)} の数値 ${token} が ${back} に変わります`);
       return;
     }
     LITERAL.lastIndex = i;

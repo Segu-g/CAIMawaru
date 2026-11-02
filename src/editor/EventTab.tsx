@@ -3,7 +3,7 @@
 // 想定と違う形の値（editableFields）は、その欄だけ読み取り専用にする。
 import { useMemo, useState, type ReactNode } from 'react';
 import type { Doc } from './doc';
-import { editableFields, infoOf, setInfo, setTop, slotsToObject, type Dirty, type SlotRow } from './edit';
+import { editableFields, infoOf, setInfo, setTop, slotsLockReason, slotsToObject, type Dirty, type SlotRow } from './edit';
 import { isDataRow, type Json, type JsonObject, type Link } from './model';
 import type { Issue } from './validate';
 
@@ -11,7 +11,16 @@ type Props = {
   doc: Doc;
   issues: Issue[];
   edit: (fn: (doc: Doc) => Doc, ...which: (keyof Dirty)[]) => void;
+  /** 入力中の eventSlots の行（タブを切り替えても消えないよう、エディタ全体で持つ。null は event.json のまま） */
+  slotDraft: SlotRow[] | null;
+  setSlotDraft: (rows: SlotRow[] | null) => void;
 };
+
+/** event.json の eventSlots を、画面で編集する行にする */
+export function slotRowsOf(doc: Doc): SlotRow[] {
+  const slots = infoOf(doc.event).eventSlots;
+  return isObj(slots) ? Object.entries(slots).map(([name, slot]) => ({ name, slot })) : [];
+}
 
 const str = (v: Json | undefined) => (typeof v === 'string' ? v : '');
 const isObj = (v: Json | undefined): v is JsonObject => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -20,10 +29,10 @@ const isObj = (v: Json | undefined): v is JsonObject => !!v && typeof v === 'obj
 const EDITED = ['name', 'date', 'venue', 'hours', 'links', 'hashtags', 'eventSlots', 'contact'];
 
 /** 形が想定と違うので編集しない欄（中身をそのまま見せる） */
-function Raw({ value }: { value: Json | undefined }) {
+function Raw({ value, reason }: { value: Json | undefined; reason?: string | null }) {
   return (
     <p className="meta">
-      想定と違う形の値なので、ここでは編集しません（event.json を直接編集してください）: <code>{JSON.stringify(value)}</code>
+      {reason ?? '想定と違う形の値なので、ここでは編集しません（event.json を直接編集してください）'}: <code>{JSON.stringify(value)}</code>
     </p>
   );
 }
@@ -39,7 +48,7 @@ function TextField({ label, value, ok, onChange, hint, ...rest }: { label: strin
   );
 }
 
-export default function EventTab({ doc, issues, edit }: Props) {
+export default function EventTab({ doc, issues, edit, slotDraft, setSlotDraft }: Props) {
   const event = doc.event;
   const info = infoOf(event);
   const ok = editableFields(event);
@@ -59,15 +68,14 @@ export default function EventTab({ doc, issues, edit }: Props) {
   const mine = issues.filter((i) => i.where === 'event');
 
   // eventSlots は入力中の行を手元に持ち、確定（フォーカスを外す・枠を選ぶ・削除）したときに、空・重複がなければ反映する
-  const [slots, setSlots] = useState<SlotRow[]>(() =>
-    isObj(info.eventSlots) ? Object.entries(info.eventSlots).map(([name, slot]) => ({ name, slot })) : [],
-  );
-  const [slotError, setSlotError] = useState('');
+  const slots = slotDraft ?? slotRowsOf(doc);
+  const setSlots = setSlotDraft;
+  const check = slotsToObject(slots);
+  const slotError = slotDraft !== null && !check.ok ? check.message : '';
   const commitSlots = (rows: SlotRow[]) => {
     setSlots(rows);
     const res = slotsToObject(rows);
-    if (!res.ok) return setSlotError(res.message);
-    setSlotError('');
+    if (!res.ok) return;
     if (JSON.stringify(res.value) !== JSON.stringify(info.eventSlots ?? {})) setI('eventSlots', res.value);
   };
 
@@ -193,7 +201,7 @@ export default function EventTab({ doc, issues, edit }: Props) {
               {unslotted.length > 0 && <span className="meta">色の枠がない参加イベント: {unslotted.join('・')}</span>}
             </div>
           </div>
-        ) : <Raw value={info.eventSlots} />}
+        ) : <Raw value={info.eventSlots} reason={slotsLockReason(event)} />}
 
         <h3>修正・削除の依頼先（contact）</h3>
         <p className="meta">X の URL ならヘッダーに X のボタンも出る。両方を空欄にすると contact を消す</p>

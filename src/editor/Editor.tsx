@@ -6,6 +6,7 @@ import CirclesTab from './CirclesTab';
 import { loadDoc, serializeCircles, serializeEvent, serializeMenus, type Doc, type LoadNote } from './doc';
 import type { Dirty } from './edit';
 import EventTab from './EventTab';
+import { slotsToObject, type SlotRow } from './edit';
 import { changedSince, findEventDirs, readAll, saveFiles, type DirHandleLike, type FilePath, type Snapshots } from './folder';
 import MenusTab from './MenusTab';
 import { circleId, isDataRow } from './model';
@@ -94,6 +95,10 @@ export default function Editor() {
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>('circles');
   const [selected, setSelected] = useState<number | null>(null);
+  // 入力中の eventSlots の行（イベント情報タブを離れても残す。null は event.json のまま）
+  const [slotDraft, setSlotDraft] = useState<SlotRow[] | null>(null);
+  const slotPending = slotDraft ? slotsToObject(slotDraft) : null;
+  const slotError = slotPending && !slotPending.ok ? slotPending.message : '';
 
   const dirty = !!opened && (opened.dirty.event || opened.dirty.circles || opened.dirty.menus);
   const eventId = opened?.dir.name ?? '';
@@ -107,6 +112,7 @@ export default function Editor() {
       setStatus({ kind: 'none' });
       setExternal([]);
       setSelected(null);
+      setSlotDraft(null);
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message });
     } finally {
@@ -115,7 +121,7 @@ export default function Editor() {
   }, []);
 
   const pick = async () => {
-    if (dirty && !confirm('保存していない変更があります。破棄して別のフォルダを開きますか？')) return;
+    if ((dirty || slotError) && !confirm('保存していない変更があります。破棄して別のフォルダを開きますか？')) return;
     let dir: DirHandleLike;
     try {
       dir = await picker()!({ id: 'caimawaru-event', mode: 'readwrite' });
@@ -141,7 +147,7 @@ export default function Editor() {
 
   const reload = async () => {
     if (!opened) return;
-    if (dirty && !confirm('保存していない変更を破棄して、ファイルから読み込み直しますか？')) return;
+    if ((dirty || slotError) && !confirm('保存していない変更を破棄して、ファイルから読み込み直しますか？')) return;
     await open(opened.dir);
   };
 
@@ -163,7 +169,12 @@ export default function Editor() {
   const errors = issues.filter((i) => i.level === 'error').length;
 
   const save = async () => {
-    if (!opened || !dirty) return;
+    if (!opened || (!dirty && !slotError)) return;
+    if (slotError) {
+      const go = confirm(`イベント情報の「イベントの色（eventSlots）」の入力に問題があり、まだ event.json に反映していません:\n${slotError}\n\nこの入力は保存されません。ほかの変更だけを保存しますか？`);
+      if (!go) return setTab('event');
+      if (!dirty) return;
+    }
     if (errors && !confirm(`確認でエラーが ${errors} 件あります（「確認」タブ）。このまま保存しますか？\nエラーがあると uv run caimawaru data は circles.json を作りません。`)) return;
     const { doc } = opened;
     const writes: Partial<Record<FilePath, string>> = {};
@@ -225,11 +236,11 @@ export default function Editor() {
 
   // 保存していない変更があるときは、閉じる前に確かめる
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty && !slotError) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+  }, [dirty, slotError]);
 
   /** 確認の項目から、その行を開く */
   const jump = (issue: Issue) => {
@@ -330,7 +341,7 @@ export default function Editor() {
   const tabs: [Tab, string][] = [
     ['circles', `サークル（${circleCount}）`],
     ['menus', `お品書き（${menuCount}）`],
-    ['event', 'イベント情報'],
+    ['event', slotError ? 'イベント情報（未反映の入力あり）' : 'イベント情報'],
     ['issues', `確認（${issues.length ? `エラー ${errors}・警告 ${issues.length - errors}` : 'OK'}）`],
   ];
 
@@ -349,7 +360,7 @@ export default function Editor() {
           )}
           <button type="button" onClick={pick} disabled={busy}>別のフォルダ</button>
           <button type="button" onClick={reload} disabled={busy}>読み込み直す</button>
-          <button type="button" className="ed-primary" onClick={save} disabled={busy || !dirty}>保存</button>
+          <button type="button" className="ed-primary" onClick={save} disabled={busy || (!dirty && !slotError)}>保存</button>
         </div>
       </header>
       <nav className="ed-tabs" aria-label="編集するもの">
@@ -372,7 +383,7 @@ export default function Editor() {
       <main className="ed-main">
         {tab === 'circles' && <CirclesTab doc={doc} issues={issues} selected={selected} onSelect={setSelected} edit={edit} />}
         {tab === 'menus' && <MenusTab doc={doc} edit={edit} onOpenCircle={(key) => { setSelected(key); setTab('circles'); }} />}
-        {tab === 'event' && <EventTab key={opened.loadId} doc={doc} issues={issues} edit={edit} />}
+        {tab === 'event' && <EventTab key={opened.loadId} doc={doc} issues={issues} edit={edit} slotDraft={slotDraft} setSlotDraft={setSlotDraft} />}
         {tab === 'issues' && (
           <section className="ed-issues">
             <p className="meta">

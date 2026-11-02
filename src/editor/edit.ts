@@ -137,6 +137,24 @@ export function slotsToObject(rows: SlotRow[]): { ok: true; value: JsonObject } 
 }
 
 const isObject = (v: Json | undefined): v is JsonObject => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** 数字だけのイベント名（JavaScript ではキーの順が並べ替わるので、eventSlots をこの画面では書き換えない） */
+function digitSlotNames(slots: JsonObject): string[] {
+  return Object.keys(slots).filter((k) => /^\d+$/.test(k));
+}
+
+/** eventSlots を読み取り専用にする理由（なければ null） */
+export function slotsLockReason(event: JsonObject): string | null {
+  const slots = infoOf(event).eventSlots;
+  if (slots === undefined) return null;
+  if (!isObject(slots)) return 'eventSlots がオブジェクト（{ "イベント名": 枠 }）ではないので、ここでは編集しません';
+  const digits = digitSlotNames(slots);
+  if (digits.length) {
+    return `数字だけのイベント名（${digits.join('・')}）があるので、ここでは編集しません（このエディタで書き戻すと、キーの順が変わることがあるため）。` +
+      'eventSlots は event.json を直接編集してください';
+  }
+  return null;
+}
 const optString = (v: Json | undefined) => v === undefined || typeof v === 'string';
 
 export type EditableField = 'storeId' | 'title' | 'name' | 'date' | 'venue' | 'hours' | 'links' | 'hashtags' | 'eventSlots' | 'contact';
@@ -157,7 +175,7 @@ export function editableFields(event: JsonObject): Record<EditableField, boolean
     hours: optString(info.hours),
     links: links === undefined || (Array.isArray(links) && links.every((l) => isObject(l) && optString(l.label) && optString(l.url))),
     hashtags: hashtags === undefined || (Array.isArray(hashtags) && hashtags.every((t) => typeof t === 'string')),
-    eventSlots: info.eventSlots === undefined || isObject(info.eventSlots),
+    eventSlots: info.eventSlots === undefined || (isObject(info.eventSlots) && !digitSlotNames(info.eventSlots).length),
     contact: contact === undefined || (isObject(contact) && optString(contact.label) && optString(contact.url)),
   };
   return {
