@@ -163,7 +163,7 @@ class SockbaseImporterTest(unittest.TestCase):
         self.assertEqual((row["id"], row["space"], row["name"]), ("c-07", "C-07", "架空書房"))
 
     def test_short_multi_space_is_written_in_full(self):
-        """「A-03,04」は配置図の番号と合うよう「A-03,A-04」にする。id は Sockbase の表記から作る（変えない）"""
+        """「A-03,04」は配置図の番号と合うよう「A-03,A-04」にする。id は書き直す前の spaceName から作る"""
         cases = {"A-03,04": ("A-03,A-04", "a-03-04"), "う-09,10": ("う-09,う-10", "う-09-10"),
                  "B-01,B-02": ("B-01,B-02", "b-01-b-02"), "1年C,D組": ("1年C,D組", "1年c-d組"), "C-05": ("C-05", "c-05")}
         circles = [[0, {"spaceName": [0, space], "circleName": [0, f"架空{n}"]}] for n, space in enumerate(cases)]

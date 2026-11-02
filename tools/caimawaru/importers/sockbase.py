@@ -1,10 +1,8 @@
 """Sockbase（https://list.sockbase.net/）の公式サークルリスト。
 
 元データは、公式リストのページの HTML。サークルの情報はページ内の astro-island の props に入っていて、
-サーバが返す HTML にそのまま含まれる（ブラウザで描画しなくてよい）。サークル一覧（下の部品の circles）は配置図の有無に
-かかわらず載っているのでそれを優先し、なければ配置図（SpaceMapViewer の spaces）から読む。
-サークル一覧の部品は多くのリストで SearchableCircleCardRack。SearchableCircleList を使うリストもある（配置の発表前のリストで見た）。
-どちらも読む。部品名は Sockbase 側の変更で変わることがある。
+サーバが返す HTML にそのまま含まれる（ブラウザで描画しなくてよい）。
+サークル一覧の部品は SearchableCircleCardRack か SearchableCircleList（props の circles を読む）。なければ配置図（SpaceMapViewer の spaces）から読む。
 配置が発表される前のリストは spaceName が空で、id を作れないので取り込まない（id はスペース番号から作り、公開後は変えないため）。
 
 event.json:
@@ -80,7 +78,7 @@ def read(source, path):
         space = _text(circle, "spaceName")
         menu = _text(links, "menuURL")
         rows.append({
-            "id": space.replace(",", "-").lower(),  # Sockbase の表記のまま（取り込み済みの id を変えない）
+            "id": space.replace(",", "-").lower(),  # 書き直す前の spaceName から作る
             "space": _full_spaces(space),
             "event": _text(circle, "eventName"),
             "name": _text(circle, "circleName"),
