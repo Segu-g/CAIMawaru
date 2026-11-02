@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "CAIMawaru のイベントデータ（サークル情報・お品書き・配置図）を検証・生成・取り込みする CLI"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]

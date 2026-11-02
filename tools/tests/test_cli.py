@@ -17,6 +17,7 @@ class CliTest(unittest.TestCase):
         self.root = Path(tempfile.mkdtemp())
         shutil.copytree(REPO / "events" / "example", self.root / "events" / "example",
                         ignore=shutil.ignore_patterns("public"))
+        (self.root / "pyproject.toml").write_text('[project]\nname = "caimawaru"\n', encoding="utf-8")
 
     def tearDown(self):
         shutil.rmtree(self.root)

@@ -14,7 +14,7 @@ from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, find_root, known
 
 def _parser():
     p = argparse.ArgumentParser(prog="caimawaru", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--root", type=Path, help="プロジェクトのフォルダ（既定はカレントディレクトリから上にたどって events/ のあるフォルダ）")
+    p.add_argument("--root", type=Path, help="CAIMawaru のリポジトリのフォルダ（pyproject.toml の name が caimawaru）。既定はカレントディレクトリから上にたどって最初に見つかる pyproject.toml のフォルダ")
     sub = p.add_subparsers(dest="command", required=True, metavar="<command>")
 
     s = sub.add_parser("list", help="イベントの一覧")
@@ -128,7 +128,7 @@ def _run(a):
     if a.command == "importers":
         importing.list_importers()
         return 0
-    root = find_root(a.root)
+    root = find_root(a.root, explicit=a.root is not None)
     if a.command == "list":
         for event_id in known_events(root):
             print(event_id)

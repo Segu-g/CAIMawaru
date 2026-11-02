@@ -4,7 +4,7 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 
 | | イベントデータの CLI | ページ |
 |---|---|---|
-| 言語・実行環境 | Python 3.10+（標準ライブラリのみ） | TypeScript / Node（Vite + React） |
+| 言語・実行環境 | Python 3.11+（標準ライブラリのみ） | TypeScript / Node（Vite + React） |
 | 入り口 | `uv run caimawaru <command>`（`pyproject.toml` の `[project.scripts]`） | `pnpm <command>`（`package.json` の `scripts`） |
 | コード | `tools/caimawaru/` | `src/`・`vite.config.ts`、エディタは `src/editor/`・`vite.editor.config.ts` |
 | テスト | `tools/tests/`（`uv run python -m unittest discover -s tools/tests`） | `*.test.ts`（`pnpm test`） |
