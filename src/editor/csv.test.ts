@@ -224,8 +224,16 @@ describe('Python の csv.reader と同じ読み方', () => {
     expect(parseRecords('a,"x\r\ny"\r\n')).toEqual([['a', 'x\r\ny']]);
   });
 
-  it('囲みのない値の中の「"」はそのまま、閉じた「"」の後ろの文字は値に足す', () => {
-    expect(parseRecords('1,ab"c\r\n1,"ab"c\r\n')).toEqual([['1', 'ab"c'], ['1', 'abc']]);
+  it('囲みのない値の中の「"」はそのまま', () => {
+    expect(parseRecords('1,ab"c\r\n')).toEqual([['1', 'ab"c']]);
+  });
+
+  it('閉じた「"」のすぐ後ろに「,」・行末以外があれば読まない（Python の strict=True と同じ。行は始まりの行で示す）', () => {
+    expect(() => parseRecords('1,"ab"c\r\n')).toThrow(CsvError);
+    expect(() => parse('id,url\r\na-01,u\r\na-02,"複数\n行"x\r\n')).toThrow('3 行目からの行で、「"」で囲んだ値の閉じる「"」の後ろに文字があります');
+    expect(() => parse('id,url\r\na-01,"ab" \r\n')).toThrow('2 行目からの行で');
+    // 閉じた「"」の後ろが「,」・行末・ファイルの終わりなら読める
+    expect(parseRecords('"a","b"\r\n"c"')).toEqual([['a', 'b'], ['c']]);
   });
 
   it('最後の値が空・閉じていない「"」', () => {
@@ -240,7 +248,7 @@ describe('Python の csv.reader と同じ読み方', () => {
 
 // CLI のテスト（tools/tests/test_edit.py の test_canonical_form・test_bad_headers_are_refused）と同じ入力。
 // どちらで保存しても同じバイト列になることを、両側で同じ入力・期待値で確かめる（docs/event-data.md の「CSV の書き方」）。
-// 見出しの重複・見出しより長い行は、読まずに止めていた規則から「読んで残す」規則に変えた（CLI 側も同じ規則にそろえる）
+// 見出しの重複・見出しより長い行は「読んで残す」規則（CLI と同じ）
 describe('CLI のテストと同じ例（CSV の書き方）', () => {
   it.each([
     ['﻿id,url,note,checkedAt\na-01,https://example.com/m,,2030-01-01\n\n', 'id,url,note,checkedAt\r\na-01,https://example.com/m,,2030-01-01\r\n'],

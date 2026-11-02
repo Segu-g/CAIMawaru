@@ -163,8 +163,20 @@ describe('読み込みと書き戻し', () => {
     }
   });
 
-  it('CSV として読めないもの（閉じていない「"」）・JSON として読めない event.json は開かない', async () => {
+  it('UTF-8 でないファイル（Shift_JIS など）は、文字を壊して保存しないよう開かない', async () => {
+    // 「id,name」「a,あ」を Shift_JIS（cp932）で書いたもの
+    const sjis = new Uint8Array([...new TextEncoder().encode('id,name\r\na,'), 0x82, 0xa0, 0x0d, 0x0a]);
+    await expect(open(exampleFolder().put('data/circles.csv', sjis))).rejects.toThrow('data/circles.csv は UTF-8 ではありません');
+    await expect(open(exampleFolder().put('event.json', new Uint8Array([0x7b, 0x22, 0x82, 0xa0, 0x22, 0x3a, 0x31, 0x7d])))).rejects.toThrow('event.json は UTF-8 ではありません');
+    // BOM つきの UTF-8 は読める（BOM は除く）
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('id,url,note,checkedAt\r\na-01,https://example.com/m,,\r\n')]);
+    const { doc } = await open(exampleFolder().put('data/menus.csv', bom));
+    expect(serializeMenus(doc)).toBe('id,url,note,checkedAt\r\na-01,https://example.com/m,,\r\n');
+  });
+
+  it('CSV として読めないもの（閉じていない「"」・閉じた「"」の後ろの文字）・JSON として読めない event.json は開かない', async () => {
     const opens = (path: string, text: string) => open(exampleFolder().put(path, text));
+    await expect(opens('data/circles.csv', 'id,name\r\na-01,"サンプル"堂\r\n')).rejects.toThrow('閉じる「"」の後ろに文字');
     await expect(opens('data/menus.csv', 'id,url\r\na-01,"https://example.com/m\r\n')).rejects.toThrow('閉じていません');
     await expect(opens('event.json', '{ "storeId": ')).rejects.toThrow('JSON');
   });

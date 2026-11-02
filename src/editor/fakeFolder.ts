@@ -1,7 +1,8 @@
 // テスト用の、メモリ上のフォルダ（File System Access API の FileSystemDirectoryHandle のうちエディタが使う部分）。
 import type { DirHandleLike, FileHandleLike, FileLike, WritableLike } from './folder';
 
-type Entry = { kind: 'file'; text: string; lastModified: number } | { kind: 'dir'; dir: FakeDir };
+/** bytes があれば中身はそのバイト列（UTF-8 でないファイルのテスト用）。なければ text を UTF-8 で */
+type Entry = { kind: 'file'; text: string; bytes?: Uint8Array; lastModified: number } | { kind: 'dir'; dir: FakeDir };
 
 let clock = 1_000;
 
@@ -21,7 +22,7 @@ export class FakeDir implements DirHandleLike {
   constructor(readonly name: string) {}
 
   /** パス（「data/circles.csv」）にファイルを置く。フォルダは作る */
-  put(path: string, text: string): this {
+  put(path: string, text: string | Uint8Array): this {
     const parts = path.split('/');
     const file = parts.pop()!;
     let d: FakeDir = this;
@@ -31,7 +32,7 @@ export class FakeDir implements DirHandleLike {
       if (e.kind !== 'dir') throw new Error(`${p} はファイルです`);
       d = e.dir;
     }
-    d.entries.set(file, { kind: 'file', text, lastModified: ++clock });
+    d.entries.set(file, typeof text === 'string' ? { kind: 'file', text, lastModified: ++clock } : { kind: 'file', text: '', bytes: text, lastModified: ++clock });
     return this;
   }
 
@@ -82,8 +83,8 @@ export class FakeDir implements DirHandleLike {
       async getFile(): Promise<FileLike> {
         const e = entries.get(name);
         if (e?.kind !== 'file') throw notFound(name);
-        const size = new TextEncoder().encode(e.text).length;
-        return { text: async () => e.text, lastModified: e.lastModified, size };
+        const bytes = e.bytes ?? new TextEncoder().encode(e.text);
+        return { arrayBuffer: async () => bytes.slice().buffer, lastModified: e.lastModified, size: bytes.length };
       },
       async createWritable(): Promise<WritableLike> {
         if (self.failOn.get(name) === 'createWritable') throw Object.assign(new Error(`${name} に書く許可がありません`), { name: 'NotAllowedError' });

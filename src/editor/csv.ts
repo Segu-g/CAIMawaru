@@ -4,7 +4,8 @@
 //   ほかの列は名前ではなく位置で扱うので、列名が空でも、同じ名前が2回あってもよい（列名の文字もそのまま書く）
 // - 行はファイルの順（足した行は最後）。足りない値は空欄。空の行と、どの値も空か空白だけの行は捨てる
 // - コメントの行（最初の値が「#」で始まる）はその位置に残し、読んだ値をすべてそのまま書く（値の数も変えない。列名より多くてもよい）
-// - 読み込みは Python の csv.reader と同じ（囲みの中の改行・「,」は値に入る。囲みの外の CRLF・LF・CR はどれも行の終わり。BOM は除く）
+// - 読み込みは Python の csv.reader（strict=True）と同じ（囲みの中の改行・「,」は値に入る。囲みの外の CRLF・LF・CR はどれも行の終わり。BOM は除く）。
+//   閉じていない「"」・閉じた「"」の後ろの文字は CSV として読めないので CsvError
 
 type Scanned = { fields: string[]; line: number };
 
@@ -89,9 +90,8 @@ function scan(text: string): Scanned[] {
           endRecord();
           state = 'start';
         } else {
-          // 閉じた「"」の後ろの文字は値に足す（Python の strict=False と同じ）
-          field += c;
-          state = 'plain';
+          // 閉じた「"」のすぐ後ろに「,」・行末以外があると、どこまでが値か決まらないので読まない（Python の csv の strict=True と同じ）
+          throw new CsvError(`${startLine} 行目からの行で、「"」で囲んだ値の閉じる「"」の後ろに文字があります（「"ab"c」のような形）`);
         }
         break;
     }

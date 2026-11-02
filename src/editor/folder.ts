@@ -3,7 +3,7 @@
 // 書く前に、読み込んだときから中身が変わっていないかを確かめ、変わっていたら書かない（CLI やエージェントの編集を消さないため）。
 
 // 使う API だけの型（ブラウザの FileSystemDirectoryHandle と、テスト用の偽物の両方が満たす）
-export type FileLike = { text(): Promise<string>; lastModified: number; size: number };
+export type FileLike = { arrayBuffer(): Promise<ArrayBuffer>; lastModified: number; size: number };
 export type WritableLike = { write(data: string): Promise<void>; close(): Promise<void>; abort?(): Promise<void> };
 export interface FileHandleLike {
   readonly kind: 'file';
@@ -44,11 +44,20 @@ async function fileHandle(dir: DirHandleLike, path: FilePath, create: boolean): 
   }
 }
 
+/** ファイルの中身を UTF-8 として読む（先頭の BOM は除く）。UTF-8 でなければ、置き換え文字で読んで保存してしまわないよう例外にする */
+export function decodeUtf8(path: string, bytes: ArrayBuffer | Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error(`${path} は UTF-8 ではありません（Shift_JIS などで保存されています）。そのまま開いて保存すると文字が壊れるので開きません。UTF-8 で保存し直してから開いてください`);
+  }
+}
+
 export async function readSnapshot(dir: DirHandleLike, path: FilePath): Promise<Snapshot> {
   const h = await fileHandle(dir, path, false);
   if (!h) return { path, exists: false, text: '', lastModified: 0, size: 0 };
   const f = await h.getFile();
-  return { path, exists: true, text: await f.text(), lastModified: f.lastModified, size: f.size };
+  return { path, exists: true, text: decodeUtf8(path, await f.arrayBuffer()), lastModified: f.lastModified, size: f.size };
 }
 
 export async function readAll(dir: DirHandleLike): Promise<Snapshots> {
