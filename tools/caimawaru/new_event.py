@@ -16,13 +16,13 @@ import re
 from caimawaru.project import CIRCLE_COLS, EVENT_ID, MENU_COLS, CliError, write_csv
 
 
-def run(root, a):
+def run(events_dir, a):
     """a は argparse の結果（event_id, name, date, venue, sockbase, map）。終了コードを返す。"""
     if not EVENT_ID.fullmatch(a.event_id):
         raise CliError("eventId は英数字・ハイフン・アンダースコアにしてください")
     if a.date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", a.date):
         raise CliError("--date は YYYY-MM-DD で指定してください")
-    d = root / "events" / a.event_id
+    d = events_dir / a.event_id
     if d.exists():
         raise CliError(f"events/{a.event_id}/ はすでにあります")
 

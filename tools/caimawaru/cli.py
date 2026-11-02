@@ -9,12 +9,12 @@ import sys
 from pathlib import Path
 
 from caimawaru import build, edit, importing, menu, new_event
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, find_root, known_events, load_event
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, find_events_dir, known_events, load_event
 
 
 def _parser():
     p = argparse.ArgumentParser(prog="caimawaru", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--root", type=Path, help="プロジェクトのフォルダ（events/ のあるフォルダ。既定はカレントディレクトリ）")
+    p.add_argument("--events-dir", type=Path, help="イベントのフォルダ（<eventId>/ を並べたフォルダ。既定はカレントディレクトリの events/）")
     sub = p.add_subparsers(dest="command", required=True, metavar="<command>")
 
     s = sub.add_parser("list", help="イベントの一覧")
@@ -128,21 +128,21 @@ def _run(a):
     if a.command == "importers":
         importing.list_importers()
         return 0
-    root = find_root(a.root)
+    events_dir = find_events_dir(a.events_dir)
     if a.command == "list":
-        for event_id in known_events(root):
+        for event_id in known_events(events_dir):
             print(event_id)
         return 0
     if a.command == "new-event":
-        return new_event.run(root, a)
+        return new_event.run(events_dir, a)
     if a.command == "check":
         failed = 0
-        for event_id in a.event_ids or known_events(root):
+        for event_id in a.event_ids or known_events(events_dir):
             print(f"{event_id}: ", end="", flush=True)
-            failed += build.run(load_event(root, event_id), check=True) != 0
+            failed += build.run(load_event(events_dir, event_id), check=True) != 0
         return 1 if failed else 0
 
-    event = load_event(root, a.event_id)
+    event = load_event(events_dir, a.event_id)
     if a.command == "data":
         return build.run(event, check=a.check)
     if a.command == "import":

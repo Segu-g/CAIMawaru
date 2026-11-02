@@ -31,28 +31,28 @@ def parse_json(text):
     return json.loads(text, object_pairs_hook=_no_duplicate_keys)
 
 
-def find_root(root=None):
-    """プロジェクトのフォルダ（events/ のあるフォルダ）を返す。--root がなければカレントディレクトリ。上にはたどらない。"""
-    root = Path(root) if root is not None else Path.cwd()
-    if not (root / "events").is_dir():
-        raise CliError(f"{root} に events/ がありません。リポジトリのフォルダで実行するか、--root で指定してください")
-    return root.resolve()
+def find_events_dir(events_dir=None):
+    """イベントのフォルダ（<eventId>/ を並べたフォルダ）を返す。既定はカレントディレクトリの events/。上にはたどらない。"""
+    d = Path(events_dir) if events_dir is not None else Path("events")
+    if not d.is_dir():
+        raise CliError(f"{d.resolve()} がありません。リポジトリのフォルダで実行するか、--events-dir で指定してください")
+    return d.resolve()
 
 
-def known_events(root):
-    return sorted(p.parent.name for p in (Path(root) / "events").glob("*/event.json"))
+def known_events(events_dir):
+    return sorted(p.parent.name for p in Path(events_dir).glob("*/event.json"))
 
 
 @dataclass(frozen=True)
 class Event:
     """events/<eventId>/ の各ファイルの場所。"""
 
-    root: Path
+    events_dir: Path
     id: str
 
     @property
     def dir(self):
-        return self.root / "events" / self.id
+        return self.events_dir / self.id
 
     @property
     def config_json(self):
@@ -82,19 +82,19 @@ class Event:
         return parse_json(self.config_json.read_text(encoding="utf-8"))
 
     def rel(self, path):
-        """表示用に、プロジェクトからの相対パスにする。"""
+        """表示用に、イベントのフォルダの親からの相対パス（events/<eventId>/…）にする。"""
         try:
-            return Path(path).resolve().relative_to(self.root).as_posix()
+            return Path(path).resolve().relative_to(self.events_dir.parent).as_posix()
         except ValueError:
             return str(path)
 
 
-def load_event(root, event_id):
-    known = known_events(root)
+def load_event(events_dir, event_id):
+    known = known_events(events_dir)
     if event_id not in known:
-        names = ", ".join(known) or "events/ にイベントがありません。caimawaru new-event <eventId> で作成できます"
+        names = ", ".join(known) or "イベントがありません。caimawaru new-event <eventId> で作成できます"
         raise CliError(f"イベント '{event_id}' がありません（{names}）")
-    return Event(Path(root), event_id)
+    return Event(Path(events_dir), event_id)
 
 
 # --- CSV とURL（データの読み書きで共通）---
