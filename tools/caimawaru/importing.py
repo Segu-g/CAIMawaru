@@ -10,207 +10,271 @@ data/circles.csv と data/menus.csv に取り込む（caimawaru import）。
 - 書き込んだあと検証・生成する（--no-build で省略）
 """
 import sys
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import NamedTuple
 
 from caimawaru import build, importers
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, Table, circle_id, is_comment, make_id
+from caimawaru.console import DRY_RUN_NOTICE, print_warnings
+from caimawaru.project import (CIRCLE_COLS, LIST_COLS, MENU_COLS, CliError, Table, circle_id, is_comment, make_id, split_list,
+                               stripped)
+from caimawaru.xurl import X_ORIGIN
 
 TRUE_WORDS = {"1", "true", "yes", "y", "有", "あり", "○", "◯", "r18", "成人向け"}
 FALSE_WORDS = {"0", "false", "no", "n", "無", "なし", "×", "-", "全年齢"}
+PIXIV_USER_URL = "https://www.pixiv.net/users/"
+# 取り込んだサークルで、インポーターが返さなくても取り込んだ列として扱う列（共通処理で作る）
+ALWAYS_PROVIDED_COLS = {"id", "source"}
+
+
+class ImportedCircle(NamedTuple):
+    row: dict             # circles.csv の列 → 文字列
+    menus: list           # お品書き [(URL, 説明)]
+    provided_cols: set    # インポーターが返した列（毎回上書きする列）
+
+
+@dataclass
+class MergeReport:
+    added: list           # 新しいサークルの id
+    changed: list         # 値が変わったサークルの id
+    removed: list         # 取り込み元から消えた id
+    orphan_menus: list    # menus.csv に残る、サークルのない id
+    added_menus: int      # 追加したお品書きの数
+    manual_cols: list     # 直接編集する列（既存の値を残す列）
 
 
 def as_list(value):
-    if isinstance(value, (list, tuple)):
-        return [s.strip() for v in value for s in str(v).split(";") if s.strip()]
-    return [s.strip() for s in str(value or "").split(";") if s.strip()]
+    """「;」区切りの文字列か、そのリストを、値のリストにする。"""
+    values = value if isinstance(value, (list, tuple)) else [value or ""]
+    return [item for element in values for item in split_list(str(element))]
+
+
+def _adult_value(value, warnings, where):
+    """adult 列の値を "1" / "0" / ""（判定できない）にする。"""
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    word = str(value or "").strip().lower()
+    if word in TRUE_WORDS:
+        return "1"
+    if word in FALSE_WORDS:
+        return "0"
+    if word:
+        warnings.append(f"{where}: adult の値 {value!r} を判定できません（空欄にします）")
+    return ""
+
+
+def _account_urls(row):
+    """X の ID・pixiv の数字だけの指定は URL にする。"""
+    x_account = row.get("x", "")
+    if x_account and not x_account.startswith("http"):
+        row["x"] = f"{X_ORIGIN}/{x_account.lstrip('@')}"
+    pixiv = row.get("pixiv", "")
+    if pixiv.isdigit():
+        row["pixiv"] = f"{PIXIV_USER_URL}{pixiv}"
+
+
+def _source_name(source):
+    """source 列の既定値（取り込み元を表すもの）。"""
+    return source.get("url") or source.get("label") or source.get("file") or source.get("type", "")
+
+
+def _menu_links(raw):
+    """インポーターが返した menus（URL の文字列か {"url", "note"}）を [(URL, 説明)] にする。"""
+    links = []
+    for menu in raw.get("menus") or []:
+        url, note = (menu.get("url", ""), menu.get("note", "")) if isinstance(menu, dict) else (str(menu), "")
+        if url.strip():
+            links.append((url.strip(), note.strip()))
+    return links
 
 
 def normalize(raw, source, warnings, where):
     """インポーターが返した行を、circles.csv の文字列の行と、お品書きのリストにする。"""
     row = {}
     for key, value in raw.items():
-        if key == "menus" or key not in CIRCLE_COLS:
-            if key not in ("menus",):
-                warnings.append(f"{where}: イベントデータにない列 {key!r} は無視します")
+        if key == "menus":
             continue
-        if key in ("penNames", "tags"):
+        if key not in CIRCLE_COLS:
+            warnings.append(f"{where}: イベントデータにない列 {key!r} は無視します")
+            continue
+        if key in LIST_COLS:
             row[key] = ";".join(as_list(value))
         elif key == "adult":
-            if isinstance(value, bool):
-                row[key] = "1" if value else "0"
-            else:
-                v = str(value or "").strip().lower()
-                row[key] = "1" if v in TRUE_WORDS else "0" if v in FALSE_WORDS else ""
-                if v and not row[key]:
-                    warnings.append(f"{where}: adult の値 {value!r} を判定できません（空欄にします）")
+            row[key] = _adult_value(value, warnings, where)
         else:
             row[key] = str(value if value is not None else "").strip()
-
-    # X の ID・pixiv の数字だけの指定は URL にする
-    x = row.get("x", "")
-    if x and not x.startswith("http"):
-        row["x"] = f"https://x.com/{x.lstrip('@')}"
-    px = row.get("pixiv", "")
-    if px.isdigit():
-        row["pixiv"] = f"https://www.pixiv.net/users/{px}"
-
+    _account_urls(row)
     if not row.get("id"):
         row["id"] = make_id(row.get("space", ""))
     if "source" not in raw:
-        row["source"] = source.get("url") or source.get("label") or source.get("file") or source.get("type", "")
-
-    menus = []
-    for m in raw.get("menus") or []:
-        url, note = (m.get("url", ""), m.get("note", "")) if isinstance(m, dict) else (str(m), "")
-        if url.strip():
-            menus.append((url.strip(), note.strip()))
-    return row, menus
+        row["source"] = _source_name(source)
+    return row, _menu_links(raw)
 
 
+def _combine_sources(imported):
+    """id ごとに1つの ImportedCircle にまとめる（取り込んだ順）。
+
+    複数の source に同じサークルがあれば、後の source の空でない値で上書きし、お品書きと取り込んだ列は足し合わせる。
+    """
+    combined = {}
+    for circle in imported:
+        circle_ref = circle.row["id"]
+        if circle_ref not in combined:
+            combined[circle_ref] = ImportedCircle(dict(circle.row), list(circle.menus), set(circle.provided_cols))
+            continue
+        current = combined[circle_ref]
+        current.row.update({key: value for key, value in circle.row.items() if value})
+        current.menus.extend(menu for menu in circle.menus if menu not in current.menus)
+        current.provided_cols.update(circle.provided_cols)
+    return combined
 
 
 def merge(imported, existing_circles, existing_menus, today):
-    """取り込んだ行 [(row, menus, provided_cols)] を既存の CSV の内容と合わせる。
+    """取り込んだ行 [ImportedCircle] を既存の CSV の内容と合わせる。
 
-    返り値: (circles, menus, report)
+    返り値: (circles, menus, MergeReport)。menus は既存の行のあとに追加した行を並べる。
     """
-    by_id, order, provided = {}, [], set()
-    for row, menus, cols in imported:
-        provided |= cols
-        cid = row["id"]
-        if cid in by_id:
-            # 複数の source に同じサークルがあれば、後の source の空でない値で上書きする
-            cur, cur_menus = by_id[cid]
-            cur.update({k: v for k, v in row.items() if v})
-            cur_menus.extend(m for m in menus if m not in cur_menus)
-        else:
-            by_id[cid] = (dict(row), list(menus))
-            order.append(cid)
-
-    existing = {circle_id(r): r for r in existing_circles}
-    manual = [c for c in CIRCLE_COLS if c not in provided]
+    combined = _combine_sources(imported)
+    provided_cols = set().union(*(circle.provided_cols for circle in combined.values()))
+    existing = {circle_id(row): row for row in existing_circles}
+    manual_cols = [col for col in CIRCLE_COLS if col not in provided_cols]
     circles = []
-    for cid in order:
-        row, _ = by_id[cid]
-        old = existing.get(cid, {})
-        out = {c: row.get(c, "") for c in CIRCLE_COLS}
-        for c in manual:
-            out[c] = old.get(c, "")
-        circles.append(out)
+    for circle_ref, imported_circle in combined.items():
+        old = existing.get(circle_ref, {})
+        circles.append({col: old.get(col, "") if col in manual_cols else imported_circle.row.get(col, "") for col in CIRCLE_COLS})
 
-    menus = [dict(m) for m in existing_menus]
-    known = {((m.get("id") or "").strip(), (m.get("url") or "").strip()) for m in menus}
+    menus = [dict(menu) for menu in existing_menus]
+    known_menus = {(stripped(menu, "id"), stripped(menu, "url")) for menu in menus}
     added_menus = 0
-    for cid in order:
-        for url, note in by_id[cid][1]:
-            if (cid, url) not in known:
-                menus.append({"id": cid, "url": url, "note": note, "checkedAt": today})
-                known.add((cid, url))
+    for circle_ref, imported_circle in combined.items():
+        for url, note in imported_circle.menus:
+            if (circle_ref, url) not in known_menus:
+                menus.append({"id": circle_ref, "url": url, "note": note, "checkedAt": today})
+                known_menus.add((circle_ref, url))
                 added_menus += 1
 
-    new_ids = set(order)
-    changed = [cid for cid in order if cid in existing
-               and any((existing[cid].get(c) or "").strip() != (circles[order.index(cid)][c] or "").strip() for c in CIRCLE_COLS)]
-    report = {
-        "added": [cid for cid in order if cid not in existing],
-        "changed": changed,
-        "removed": sorted(set(existing) - new_ids),
-        "orphan_menus": sorted({m["id"] for m in menus if m["id"] not in new_ids}),
-        "added_menus": added_menus,
-        "manual_cols": manual,
-    }
+    changed = [circle_ref for circle_ref, circle in zip(combined, circles) if circle_ref in existing
+               and any(stripped(existing[circle_ref], col) != (circle[col] or "").strip() for col in CIRCLE_COLS)]
+    report = MergeReport(
+        added=[circle_ref for circle_ref in combined if circle_ref not in existing],
+        changed=changed,
+        removed=sorted(set(existing) - set(combined)),
+        orphan_menus=sorted({menu["id"] for menu in menus if menu["id"] not in combined}),
+        added_menus=added_menus,
+        manual_cols=manual_cols,
+    )
     return circles, menus, report
 
 
 def keep_extras_and_comments(table, circles):
     """取り込み結果の circles に、table（今の circles.csv）にだけある列の値と「#」の行を戻した行のリストを返す。"""
-    extras = [c for c in table.cols if c not in CIRCLE_COLS]
-    old = {circle_id(r): r for r in table.data_rows()}
-    new_ids = {c["id"] for c in circles}
-    before, pending = {}, []  # id → その前に置くコメント行
-    for r in table.rows:
-        if is_comment(r):
-            pending.append(r)
-        elif pending and circle_id(r) in new_ids:
-            before.setdefault(circle_id(r), []).extend(pending)
-            pending = []
+    extra_cols = [col for col in table.cols if col not in CIRCLE_COLS]
+    old_rows = {circle_id(row): row for row in table.data_rows()}
+    imported_ids = {circle["id"] for circle in circles}
+    comments_before, pending_comments = {}, []  # id → その前に置くコメント行
+    for row in table.rows:
+        if is_comment(row):
+            pending_comments.append(row)
+        elif pending_comments and circle_id(row) in imported_ids:
+            comments_before.setdefault(circle_id(row), []).extend(pending_comments)
+            pending_comments = []
     rows = []
-    for c in circles:
-        rows.extend(before.get(c["id"], []))
-        rows.append({**c, **{e: old.get(c["id"], {}).get(e, "") for e in extras}})
-    return rows + pending
+    for circle in circles:
+        rows.extend(comments_before.get(circle["id"], []))
+        old_row = old_rows.get(circle["id"], {})
+        rows.append({**circle, **{col: old_row.get(col, "") for col in extra_cols}})
+    return rows + pending_comments
 
 
 def list_importers():
-    for kind in importers.available():
-        mod = importers.load({"type": kind})
-        print(f"{kind:9} {getattr(mod, 'DESCRIPTION', '')}{'（取得に対応）' if hasattr(mod, 'fetch') else ''}")
+    for source_type in importers.available():
+        module = importers.load({"type": source_type})
+        can_fetch = "（取得に対応）" if hasattr(module, "fetch") else ""
+        print(f"{source_type:9} {getattr(module, 'DESCRIPTION', '')}{can_fetch}")
 
 
-def run(event, fetch=False, input=None, dry_run=False, no_build=False):
-    """取り込む。終了コードを返す。"""
+def _read_sources_config(event):
     try:
         sources = event.config().get("sources") or []
     except ValueError as e:  # 書き方の誤り・キーの重複
         raise CliError(f"{event.rel(event.config_json)}: JSON として読めません: {e}")
     if not sources:
         raise CliError("event.json に sources（取り込み元）がありません。docs/importers.md を参照してください")
-    if input and len(sources) != 1:
+    return sources
+
+
+def _source_path(event, source, module, label, input_file):
+    """元データのファイル。--input があればそれ、なければ source の file かインポーターの DEFAULT_FILE（イベントのフォルダから）。"""
+    if input_file:
+        return Path(input_file).resolve()
+    file = source.get("file") or getattr(module, "DEFAULT_FILE", "")
+    if not file:
+        raise CliError(f"{label}: 元データの file を指定してください")
+    return event.dir / file
+
+
+def _import_source(event, index, source, input_file, fetch, warnings):
+    """1つの取り込み元を（必要なら取得して）読み、[ImportedCircle] を返す。"""
+    label = source.get("name") or source.get("type") or f"sources[{index}]"
+    try:
+        module = importers.load(source)
+    except ValueError as e:
+        raise CliError(f"{label}: {e}") from e
+    path = _source_path(event, source, module, label, input_file)
+    if fetch:
+        if not callable(getattr(module, "fetch", None)):
+            raise CliError(f"{label}: このインポーターは取得（fetch）に対応していません。元データを {event.rel(path)} に置いてください")
+        print(f"{label}: 取得しています → {event.rel(path)}")
+        module.fetch(source, path)
+    if not path.exists():
+        raise CliError(f"{label}: 元データ {event.rel(path)} がありません（--fetch で取得するか、ここに置いてください）")
+
+    try:
+        raw_rows = module.read(source, path)
+    except (ValueError, KeyError) as e:
+        raise CliError(f"{label}: 読み取れませんでした: {e}") from e
+    imported = []
+    for number, raw in enumerate(raw_rows, 1):
+        where = f"{label} {number}件目"
+        if not (raw.get("id") or raw.get("space")):
+            warnings.append(f"{where}: id も space もないため飛ばします")
+            continue
+        row, menus = normalize(raw, source, warnings, where)
+        provided_cols = {key for key in raw if key in CIRCLE_COLS} | ALWAYS_PROVIDED_COLS
+        imported.append(ImportedCircle(row, menus, provided_cols))
+    print(f"{label}: {len(raw_rows)} 件")
+    return imported
+
+
+def _print_report(circles, report):
+    print(f"サークル {len(circles)} 件（新規 {len(report.added)}・変更 {len(report.changed)}）、お品書きの追加 {report.added_menus} 件")
+    print(f"直接編集する列（既存の値を残す）: {', '.join(report.manual_cols) or 'なし'}")
+    if report.removed:
+        print(f"取り込み元から消えた id: {', '.join(report.removed)}", file=sys.stderr)
+    if report.orphan_menus:
+        print(f"menus.csv に残る、サークルのない id（検証でエラーになります）: {', '.join(report.orphan_menus)}", file=sys.stderr)
+
+
+def run(event, fetch=False, input_file=None, dry_run=False, no_build=False):
+    """取り込む。終了コードを返す。"""
+    sources = _read_sources_config(event)
+    if input_file and len(sources) != 1:
         raise CliError("--input は sources が1つのときだけ使えます")
 
     warnings, imported = [], []
-    for i, source in enumerate(sources):
-        label = source.get("name") or source.get("type") or f"sources[{i}]"
-        try:
-            mod = importers.load(source)
-        except ValueError as e:
-            raise CliError(f"{label}: {e}") from e
-        default = getattr(mod, "DEFAULT_FILE", "")
-        if input:
-            path = Path(input).resolve()
-        elif source.get("file") or default:
-            path = event.dir / (source.get("file") or default)
-        else:
-            raise CliError(f"{label}: 元データの file を指定してください")
-
-        if fetch:
-            if not callable(getattr(mod, "fetch", None)):
-                raise CliError(f"{label}: このインポーターは取得（fetch）に対応していません。元データを {event.rel(path)} に置いてください")
-            print(f"{label}: 取得しています → {event.rel(path)}")
-            mod.fetch(source, path)
-        if not path.exists():
-            raise CliError(f"{label}: 元データ {event.rel(path)} がありません（--fetch で取得するか、ここに置いてください）")
-
-        try:
-            raws = mod.read(source, path)
-        except (ValueError, KeyError) as e:
-            raise CliError(f"{label}: 読み取れませんでした: {e}") from e
-        for n, raw in enumerate(raws, 1):
-            where = f"{label} {n}件目"
-            if not (raw.get("id") or raw.get("space")):
-                warnings.append(f"{where}: id も space もないため飛ばします")
-                continue
-            row, menus = normalize(raw, source, warnings, where)
-            cols = {k for k in raw if k in CIRCLE_COLS} | {"id", "source"}
-            imported.append((row, menus, cols))
-        print(f"{label}: {len(raws)} 件")
+    for index, source in enumerate(sources):
+        imported += _import_source(event, index, source, input_file, fetch, warnings)
 
     circle_table, menu_table = Table(event.circles_csv, CIRCLE_COLS), Table(event.menus_csv, MENU_COLS)
     warnings += circle_table.warnings + menu_table.warnings
     existing_menus = menu_table.data_rows()
     circles, menus, report = merge(imported, circle_table.data_rows(), existing_menus, date.today().isoformat())
 
-    for w in warnings:
-        print(f"警告: {w}", file=sys.stderr)
-    print(f"サークル {len(circles)} 件（新規 {len(report['added'])}・変更 {len(report['changed'])}）、お品書きの追加 {report['added_menus']} 件")
-    print(f"直接編集する列（既存の値を残す）: {', '.join(report['manual_cols']) or 'なし'}")
-    if report["removed"]:
-        print(f"取り込み元から消えた id: {', '.join(report['removed'])}", file=sys.stderr)
-    if report["orphan_menus"]:
-        print(f"menus.csv に残る、サークルのない id（検証でエラーになります）: {', '.join(report['orphan_menus'])}", file=sys.stderr)
+    print_warnings(warnings)
+    _print_report(circles, report)
     if dry_run:
-        print("（--dry-run のため書き込みません）")
+        print(DRY_RUN_NOTICE)
         return 0
 
     circle_table.rows = keep_extras_and_comments(circle_table, circles)

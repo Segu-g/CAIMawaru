@@ -19,30 +19,30 @@ import sys
 from datetime import date
 
 from caimawaru import build
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, circle_id, is_http_url, read_csv
+from caimawaru.console import DRY_RUN_NOTICE
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, circle_id, circle_spaces, is_http_url, read_csv, stripped
 from caimawaru.xurl import normalize_url, x_handle
-
 
 def find_circles(circles, query):
     """検索語に一致するサークルを返す。完全一致（id・スペース・XのID）を優先し、なければサークル名の部分一致。"""
-    q = query.strip()
-    ql = q.lower().lstrip("@")
-    if not ql:
+    text = query.strip()
+    normalized_query = text.lower().lstrip("@")  # id・スペース・X の ID と比べる形（小文字、「@」なし）
+    if not normalized_query:
         return []  # 空・「@」だけの指定は、スペースや X が空欄のサークルに当たらないようにする
     exact = [
-        c for c in circles
-        if c["id"] == ql
-        or c["space"].strip().lower() == ql  # 「A-01,A-02」のように複数スペースをまとめた書き方
-        or ql in (s.strip().lower() for s in c["space"].split(","))
-        or x_handle(c) == ql
+        circle for circle in circles
+        if circle["id"] == normalized_query
+        or circle["space"].strip().lower() == normalized_query  # 「A-01,A-02」のようにまとめた書き方そのもの
+        or normalized_query in (space.lower() for space in circle_spaces(circle))  # 複数スペースのどれか
+        or x_handle(circle) == normalized_query
     ]
     if exact:
         return exact
-    return [c for c in circles if q and (q in c["name"] or q in c.get("kana", ""))]
+    return [circle for circle in circles if text in circle["name"] or text in circle.get("kana", "")]
 
 
-def describe(c):
-    return f"{c['space']} {c['name']}（{c['event']}）"
+def describe(circle):
+    return f"{circle['space']} {circle['name']}（{circle['event']}）"
 
 
 def choose(candidates, label):
@@ -54,30 +54,30 @@ def choose(candidates, label):
         return None
     if not sys.stdin.isatty():
         print(f"  ✗ {label}: 候補が複数あります。--circle でスペース番号を指定してください", file=sys.stderr)
-        for c in candidates:
-            print(f"      {describe(c)}", file=sys.stderr)
+        for circle in candidates:
+            print(f"      {describe(circle)}", file=sys.stderr)
         return None
     print(f"  {label}: 候補が複数あります")
-    for i, c in enumerate(candidates, 1):
-        print(f"    {i}. {describe(c)}")
+    for number, circle in enumerate(candidates, 1):
+        print(f"    {number}. {describe(circle)}")
     while True:
-        ans = input("  番号を選んでください（空欄でスキップ）: ").strip()
-        if not ans:
+        answer = input("  番号を選んでください（空欄でスキップ）: ").strip()
+        if not answer:
             return None
-        if ans.isdigit() and 1 <= int(ans) <= len(candidates):
-            return candidates[int(ans) - 1]
+        if answer.isdigit() and 1 <= int(answer) <= len(candidates):
+            return candidates[int(answer) - 1]
 
 
 def resolve(circles, url, query):
-    """登録するURLとサークルを決める。失敗したら None。"""
-    url, handle = normalize_url(url)
+    """登録するURLとサークルを決める。(サークル, そろえた URL) を返し、失敗したら None。"""
+    url, post_handle = normalize_url(url)
     if not is_http_url(url):
         print(f"  ✗ URLではありません: {url}", file=sys.stderr)
         return None
     if query:
         circle = choose(find_circles(circles, query), query)
-    elif handle:
-        circle = choose([c for c in circles if x_handle(c) == handle.lower()], f"@{handle}")
+    elif post_handle:
+        circle = choose([circle for circle in circles if x_handle(circle) == post_handle.lower()], f"@{post_handle}")
     else:
         print(f"  ✗ {url}: Xの投稿URL以外は --circle でサークルを指定してください", file=sys.stderr)
         return None
@@ -85,52 +85,60 @@ def resolve(circles, url, query):
 
 
 def parse_stdin_line(line):
-    """「URL」または「サークル指定 URL」。"""
-    parts = line.split()
-    if not parts:
+    """「URL」または「サークル指定 URL」を (サークル指定か None, URL) にする。空行は None。"""
+    words = line.split()
+    if not words:
         return None
-    url = parts[-1]
-    query = " ".join(parts[:-1]) or None
+    url = words[-1]
+    query = " ".join(words[:-1]) or None
     return query, url
+
+
+def _read_pasted_lines(default_query):
+    """標準入力の行を [(サークル指定, URL)] にする。サークル指定のない行は default_query（--circle）。"""
+    if sys.stdin.isatty():
+        print("URLを1行ずつ貼り付けてください（「サークル指定 URL」も可）。終わったら Ctrl+D（Windows は Ctrl+Z → Enter）")
+    entries = []
+    for line in sys.stdin.read().splitlines():
+        parsed = parse_stdin_line(line)
+        if parsed:
+            query, url = parsed
+            entries.append((query or default_query, url))
+    return entries
 
 
 def run(event, urls, circle=None, note="", dry_run=False):
     """登録する。終了コードを返す。"""
     # id が空欄のサークルはスペース番号から作った id で扱う（build と同じ。menus.csv にはこの id を書く）
-    circles = [{**c, "id": circle_id(c)} for c in read_csv(event.circles_csv, CIRCLE_COLS)]
+    circles = [{**row, "id": circle_id(row)} for row in read_csv(event.circles_csv, CIRCLE_COLS)]
     table = Table(event.menus_csv, MENU_COLS)  # 書き戻す（ファイルにだけある列・「#」の行も残す）
-    known = {(m["id"], m["url"]) for m in read_csv(event.menus_csv, MENU_COLS)}
+    registered = {(stripped(row, "id"), stripped(row, "url")) for row in table.data_rows()}
 
-    entries = []
-    for u in urls:
-        if u == "-":
-            if sys.stdin.isatty():
-                print("URLを1行ずつ貼り付けてください（「サークル指定 URL」も可）。終わったら Ctrl+D（Windows は Ctrl+Z → Enter）")
-            for line in sys.stdin.read().splitlines():
-                parsed = parse_stdin_line(line)
-                if parsed:
-                    entries.append((parsed[0] or circle, parsed[1]))
+    entries = []  # (サークル指定, URL)
+    for url in urls:
+        if url == "-":  # 標準入力から1行ずつ読む
+            entries += _read_pasted_lines(circle)
         else:
-            entries.append((circle, u))
+            entries.append((circle, url))
 
     today = date.today().isoformat()
     added = failed = 0
     for query, url in entries:
-        result = resolve(circles, url, query)
-        if not result:
+        resolved = resolve(circles, url, query)
+        if not resolved:
             failed += 1
             continue
-        c, url = result
-        if (c["id"], url) in known:
-            print(f"  - 登録済み: {c['id']}  {describe(c)}  {url}")
+        target, url = resolved
+        if (target["id"], url) in registered:
+            print(f"  - 登録済み: {target['id']}  {describe(target)}  {url}")
             continue
-        known.add((c["id"], url))
-        table.rows.append({"id": c["id"], "url": url, "note": note, "checkedAt": today})
+        registered.add((target["id"], url))
+        table.rows.append({"id": target["id"], "url": url, "note": note, "checkedAt": today})
         added += 1
-        print(f"  ✓ {c['id']}  {describe(c)}  {url}")
+        print(f"  ✓ {target['id']}  {describe(target)}  {url}")
 
     if dry_run:
-        print(f"（--dry-run のため書き込みません）{added} 件を登録できます")
+        print(f"{DRY_RUN_NOTICE}{added} 件を登録できます")
         return 0
     if not added:
         print("登録したお品書きはありません")

@@ -19,7 +19,14 @@ event.json:
 import csv as _csv
 from pathlib import Path
 
+from caimawaru.project import LIST_COLS
+
 DESCRIPTION = "CSV / TSV（列名の対応表で読み取る）"
+
+
+def source_names(spec):
+    """columns の値（元データの列名か、そのリスト）を列名のリストにする。"""
+    return spec if isinstance(spec, list) else [spec]
 
 
 def map_record(get, source):
@@ -28,15 +35,17 @@ def map_record(get, source):
     if not columns:
         raise ValueError("columns（イベントデータの列 ← 元データの列）を指定してください")
     row = dict(source.get("constants") or {})
-    for key, src in columns.items():
-        names = src if isinstance(src, list) else [src]
-        values = [v for v in (get(n) for n in names) if v not in (None, "")]
+    for key, spec in columns.items():
+        names = source_names(spec)
+        values = [str(value).strip() for value in (get(name) for name in names) if value not in (None, "")]
         if key == "menus":
-            row["menus"] = [str(u).strip() for v in values for u in str(v).split() if u.strip()]
-        elif key in ("penNames", "tags"):
-            row[key] = [str(v).strip() for v in values]
+            row["menus"] = [url for value in values for url in value.split()]  # 空白区切りで複数
+        elif key in LIST_COLS:
+            row[key] = values
+        elif len(names) > 1:
+            row[key] = ";".join(values)
         else:
-            row[key] = ";".join(str(v).strip() for v in values) if len(names) > 1 else (str(values[0]).strip() if values else "")
+            row[key] = values[0] if values else ""
     return row
 
 
@@ -46,11 +55,11 @@ def read(source, path):
     with path.open(encoding=source.get("encoding", "utf-8-sig"), newline="") as f:
         reader = _csv.DictReader(f, delimiter=delimiter)
         headers = set(reader.fieldnames or [])
-        missing = [n for src in (source.get("columns") or {}).values() for n in (src if isinstance(src, list) else [src]) if n not in headers]
+        missing = [name for spec in (source.get("columns") or {}).values() for name in source_names(spec) if name not in headers]
         if missing:
             raise ValueError(f"元データに列がありません: {', '.join(missing)}（あるのは: {', '.join(reader.fieldnames or [])}）")
         return [
-            map_record(lambda n, r=r: (r.get(n) or "").strip(), source)
-            for r in reader
-            if any((v or "").strip() for v in r.values())
+            map_record(lambda name, record=record: (record.get(name) or "").strip(), source)
+            for record in reader
+            if any((value or "").strip() for value in record.values())
         ]

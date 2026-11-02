@@ -29,17 +29,17 @@ TYPE_NAME = re.compile(r"[a-z][a-z0-9_]*")
 
 def available():
     """使えるインポーターの type（このパッケージのモジュール名。_ で始まるものは除く）。"""
-    return sorted(m.name for m in pkgutil.iter_modules(__path__) if not m.name.startswith("_") and not m.ispkg)
+    return sorted(module.name for module in pkgutil.iter_modules(__path__) if not module.name.startswith("_") and not module.ispkg)
 
 
 def load(source: dict):
     """source（event.json の sources の1要素）に対応するインポーターのモジュールを返す。"""
-    kind = source.get("type", "")
+    source_type = source.get("type", "")
     names = available()
     # 名前の形と一覧の両方で確かめ、パスや親パッケージを指す値（"../x"・"caimawaru.cli" など）を読み込まない
-    if not isinstance(kind, str) or not TYPE_NAME.fullmatch(kind) or kind not in names:
-        raise ValueError(f"不明な type です: {kind!r}（{', '.join(names)} のどれか）")
-    mod = importlib.import_module(f"{__name__}.{kind}")
-    if not callable(getattr(mod, "read", None)):
-        raise ValueError(f"インポーター {kind} に read(source, path) がありません")
-    return mod
+    if not isinstance(source_type, str) or not TYPE_NAME.fullmatch(source_type) or source_type not in names:
+        raise ValueError(f"不明な type です: {source_type!r}（{', '.join(names)} のどれか）")
+    module = importlib.import_module(f"{__name__}.{source_type}")
+    if not callable(getattr(module, "read", None)):
+        raise ValueError(f"インポーター {source_type} に read(source, path) がありません")
+    return module

@@ -60,9 +60,10 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 ```
 cli.py ─┬▶ build.py ──▶ layout.py
         │     ├──────▶ project.py
-        │     └──────▶ xurl.py（X の URL の規則。menu・edit も使う）
-        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json）
-        │                └▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
+        │     └──────▶ xurl.py（X の URL の規則。menu・edit・importing も使う）
+        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json。csv は project.py の LIST_COLS を使う）
+        │                ├▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
+        │                └▶ xurl.py（X の ID を URL にするときの x.com）
         ├▶ menu.py ──────┬▶ build.py
         │                └▶ xurl.py（X の投稿 URL の正規化・x 列のアカウント）
         ├▶ edit.py ──────┬▶ build.py（書き込む前に一時フォルダの写しを検証、書き込み後に生成）
@@ -71,6 +72,8 @@ cli.py ─┬▶ build.py ──▶ layout.py
         └▶ new_event.py ─▶ project.py
 importers/sockbase.py ──（--fetch のときだけ）──▶ list.sockbase.net（標準ライブラリの urllib で HTML を取得して保存）
 ```
+
+- build・importing・menu・edit は、警告の表示と --dry-run の文言を `console.py` から使う（ファイルは扱わない）
 
 - 外部のコマンドは起動しない（`subprocess` を使わない）。ネットワークに出るのは `import --fetch` だけ
 - 島の番号の振り方・島の記号の位置・初期表示の範囲は `layout.py` だけが決める（ページは展開済みのセルを描く）
@@ -102,7 +105,7 @@ pnpm build:editor ───────▶ tsc ─▶ vite build --config vite.e
 
 - `events/*/event.json` からイベントの一覧を作る処理（`tools/caimawaru/project.py` と `vite.config.ts`）。
   どちらも「`events/` の下で `event.json` があるフォルダ」というだけの規則
-- サークルの複数スペース（`A-01,A-02`）の分け方（`tools/caimawaru/build.py` の `circle_spaces` と `src/filter.ts` の `spacesOf`）。
+- サークルの複数スペース（`A-01,A-02`）の分け方（`tools/caimawaru/project.py` の `circle_spaces` と `src/filter.ts` の `spacesOf`）。
   「`,` で区切る」というだけの規則
 - イベントデータの CSV の読み書き（`tools/caimawaru/project.py` の `CIRCLE_COLS`・`MENU_COLS`・`read_table`・`format_csv`・`make_id` と、
   `src/editor/csv.ts`・`src/editor/model.ts`）。docs/event-data.md の「CSV の書き方」（列の並び・CRLF・囲み方・空の行・`#` の行・ほかの列）。

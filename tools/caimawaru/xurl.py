@@ -12,6 +12,8 @@ X_POST = re.compile(
 X_PROFILE = re.compile(
     r"https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/?(?:[?#].*)?", re.IGNORECASE | re.ASCII | re.DOTALL
 )
+# URL をそろえるときの X の正規の場所（twitter.com・www.・mobile. はこれに置き換える）
+X_ORIGIN = "https://x.com"
 # X のページ（投稿でないものを menus.csv に登録していないかの確認に使う）
 X_PAGE = re.compile(r"https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/", re.IGNORECASE | re.ASCII)
 # URL の前後から除く空白。Python の str.strip() と JavaScript の trim() は対象が少し違う（U+FEFF・\x1c〜\x1f・U+0085）ので、
@@ -38,9 +40,10 @@ def normalize_url(url):
     (URL, 投稿したアカウントの ID) を返す。X の投稿でなければ ID は None。前後の空白（TRIM）は除く。
     """
     url = trim(url)
-    m = X_POST.match(url)
-    if m:
-        return f"https://x.com/{m.group(1)}/status/{m.group(2)}", m.group(1)
+    post = X_POST.match(url)
+    if post:
+        handle, post_id = post.groups()
+        return f"{X_ORIGIN}/{handle}/status/{post_id}", handle
     return url, None
 
 
@@ -49,8 +52,11 @@ def profile_handle(url):
 
     www.・mobile.・twitter.com、末尾の「/」、クエリ（?lang=ja）・「#」以降は受け付ける。
     """
-    m = X_PROFILE.fullmatch(trim(url))
-    return m.group(1).lower() if m and m.group(1).lower() not in NOT_ACCOUNTS else None
+    profile = X_PROFILE.fullmatch(trim(url))
+    if not profile:
+        return None
+    handle = profile.group(1).lower()
+    return handle if handle not in NOT_ACCOUNTS else None
 
 
 def x_handle(circle):
