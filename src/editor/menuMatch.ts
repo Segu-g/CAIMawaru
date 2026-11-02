@@ -6,7 +6,6 @@ import { circleId, isDataRow, isHttpUrl, type Row } from './model';
 const X_POST = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d+)/i;
 // プロフィールの URL（menu.py の X_PROFILE と同じ。tools/tests/fixtures/x_urls.json の例を両方のテストが確かめる）
 const X_PROFILE = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/?(?:[?#][\s\S]*)?$/i;
-const X_PAGE = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\//i;
 // プロフィールの URL に見えても、アカウントではない X のページ（menu.py の NOT_ACCOUNTS と同じ）
 const NOT_ACCOUNTS = new Set(['home', 'search', 'explore', 'i', 'intent', 'share', 'hashtag', 'messages', 'notifications', 'settings', 'compose', 'login', 'signup', 'tos', 'privacy']);
 
@@ -32,6 +31,11 @@ export function profileHandle(url: string): string | null {
 /** サークルの x 列のアカウントの ID（小文字。menu.py の x_handle と同じく profileHandle の規則） */
 export function xHandleOf(values: Record<string, string>): string | null {
   return profileHandle(values.x ?? '');
+}
+
+/** X（x.com・twitter.com）のページの URL か（menu.py の is_x_page と同じ） */
+export function isXPage(url: string): boolean {
+  return /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\//i.test(url.trim());
 }
 
 /** アカウントの ID（@ なし）→ プロフィールの URL（x 列に書く形） */
@@ -113,7 +117,7 @@ export function checkMenuUrl(doc: Doc, circleKey: number, raw: string, replacing
   if (profile) {
     return { url, handle, profile, warnings, error: 'X のプロフィールの URL です。お品書きは投稿の URL（…/status/…）を貼ってください' };
   }
-  if (!handle && X_PAGE.test(url)) warnings.push('X の投稿ではないページです');
+  if (!handle && isXPage(url)) warnings.push('X の投稿ではないページです');
   const id = circle ? circleId(circle.values) : '';
   const menus = doc.menus.filter((m) => isDataRow(m.values, m.extra) && m.key !== replacing);
   const sameMenu = menus.find((m) => m.values.id.trim() === id && sameUrl(m.values.url, url));

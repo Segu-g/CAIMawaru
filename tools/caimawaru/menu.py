@@ -15,52 +15,12 @@
 
     --dry-run を付けると、判定結果を表示するだけで書き込まない。
 """
-import re
 import sys
 from datetime import date
 
 from caimawaru import build
 from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, circle_id, is_http_url, read_csv
-
-# 照合の規則はエディタ（src/editor/menuMatch.ts）と同じ。tools/tests/fixtures/x_urls.json の例を両方のテストが確かめる。
-# re.ASCII: 大文字小文字を区別しない照合で、[A-Za-z] が K（ケルビン記号）などに当たらないようにする（JavaScript と同じ）
-X_POST = re.compile(
-    r"https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/status/([0-9]+)", re.IGNORECASE | re.ASCII
-)
-X_PROFILE = re.compile(
-    r"https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/?(?:[?#].*)?", re.IGNORECASE | re.ASCII | re.DOTALL
-)
-# プロフィールの URL の形でも、アカウントではない X のページ
-NOT_ACCOUNTS = frozenset({
-    "home", "search", "explore", "i", "intent", "share", "hashtag", "messages", "notifications", "settings",
-    "compose", "login", "signup", "tos", "privacy",
-})
-
-
-def normalize_url(url):
-    """Xの投稿URLは https://x.com/<ID>/status/<番号> の形にそろえ、追跡用パラメータを落とす。
-
-    (URL, 投稿したアカウントの ID) を返す。X の投稿でなければ ID は None。前後の空白は除く。
-    """
-    url = url.strip()
-    m = X_POST.match(url)
-    if m:
-        return f"https://x.com/{m.group(1)}/status/{m.group(2)}", m.group(1)
-    return url, None
-
-
-def profile_handle(url):
-    """X のプロフィールの URL ならアカウントの ID（小文字）。投稿・検索などのページは None。
-
-    www.・mobile.・twitter.com、末尾の「/」、クエリ（?lang=ja）・「#」以降は受け付ける。
-    """
-    m = X_PROFILE.fullmatch(url.strip())
-    return m.group(1).lower() if m and m.group(1).lower() not in NOT_ACCOUNTS else None
-
-
-def x_handle(circle):
-    """サークルの x 列のアカウントの ID（小文字）。"""
-    return profile_handle(circle.get("x") or "")
+from caimawaru.xurl import normalize_url, x_handle
 
 
 def find_circles(circles, query):
@@ -162,12 +122,12 @@ def run(event, urls, circle=None, note="", dry_run=False):
             continue
         c, url = result
         if (c["id"], url) in known:
-            print(f"  - 登録済み: {describe(c)}  {url}")
+            print(f"  - 登録済み: {c['id']}  {describe(c)}  {url}")
             continue
         known.add((c["id"], url))
         table.rows.append({"id": c["id"], "url": url, "note": note, "checkedAt": today})
         added += 1
-        print(f"  ✓ {describe(c)}  {url}")
+        print(f"  ✓ {c['id']}  {describe(c)}  {url}")
 
     if dry_run:
         print(f"（--dry-run のため書き込みません）{added} 件を登録できます")

@@ -37,8 +37,9 @@ from collections import Counter
 from pathlib import Path
 
 from caimawaru import build
-from caimawaru.menu import describe, find_circles, normalize_url
+from caimawaru.menu import describe, find_circles
 from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, DuplicateKeyError, Event, Table, circle_id, is_comment, make_id, parse_json
+from caimawaru.xurl import normalize_url
 
 
 # --- CSV を書き戻す形のまま扱う ---

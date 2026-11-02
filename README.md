@@ -93,9 +93,9 @@ uv run caimawaru menu <eventId> -                                               
 ```
 
 サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `uv run caimawaru data` まで自動で実行します。
-id 列が空のサークルは、スペース番号から作った id（`A-10` → `a-10`）で menus.csv に書きます。
+id 列が空のサークルは、スペース番号から作った id（`A-10` → `a-10`）で menus.csv に書きます（`--dry-run` でも、書く id を表示します）。
 X の投稿からの自動判定と @X の ID での指定は、サークルの `x` 列のプロフィールの URL（`x.com`・`twitter.com`、`www.`・`mobile.` 付き、
-末尾の `/`・`?lang=ja`・`#…` があってもよい）と照らし合わせます。`x.com/home`・`x.com/search` などアカウントではないページは照合しません。
+末尾の `/`・`?lang=ja`・`#…` があってもよい）と照らし合わせます。`x.com/home`・`x.com/search` などアカウントではないページは照合しません。`caimawaru check`・`data` も同じ規則で、照合できない `x` 列を警告します。
 
 ### イベントデータを確かめる・編集する
 
@@ -210,6 +210,7 @@ pnpm editor        # 表示された URL（http://localhost:5173/ など）を P
 | `tools/caimawaru/importing.py` | Python | 取り込みの共通処理（正規化・既存データとの合流） |
 | `tools/caimawaru/importers/` | Python | 元データの形式ごとのインポーター（sockbase・csv・json） |
 | `tools/caimawaru/menu.py` | Python | お品書き URL の登録 |
+| `tools/caimawaru/xurl.py` | Python | X の URL の規則（照合・検証で共通。エディタの `menuMatch.ts` と同じ） |
 | `tools/caimawaru/edit.py` | Python | イベントデータを確かめる・編集する（circle・menus・config） |
 | `tools/caimawaru/new_event.py` | Python | イベントの雛形作成 |
 | `tools/tests/` | Python | CLI・配置図の展開・取り込み・編集のテスト |

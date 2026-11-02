@@ -1,5 +1,6 @@
 // 保存前の簡単な確認。正式な検証は Python の uv run caimawaru data <eventId>（tools/caimawaru/build.py）で、
 // ここでは入力の間違いに早く気づくための、明らかなものだけを見る。
+import { isXPage, normalizeUrl, xHandleOf } from './menuMatch';
 import { circleId, DATE, isDataRow, isHttpUrl, LINK_KEYS, type JsonObject, type Row } from './model';
 
 export type Issue = {
@@ -9,9 +10,6 @@ export type Issue = {
   key?: number;
   message: string;
 };
-
-const POST_URL = /^https:\/\/(x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/status\/\d+/;
-const X_PAGE = /^https?:\/\/(?:www\.|mobile\.)?(x|twitter)\.com\//i;
 
 function label(values: Record<string, string>): string {
   const s = values.space?.trim();
@@ -39,6 +37,11 @@ export function checkCircles(circles: Row[]): Issue[] {
       const url = v[k].trim();
       if (url && !isHttpUrl(url)) err(r, `${k} の URL が不正です: ${url}`);
     }
+    // x 列はお品書きの照合に使う（build.py と同じく、照合できない URL は知らせる）
+    const x = v.x.trim();
+    if (x && isHttpUrl(x) && !xHandleOf(v)) {
+      issues.push({ level: 'warning', where: 'circle', key: r.key, message: `${label(v)}: x が X のアカウントの URL ではありません（https://x.com/<ID> の形にしてください）: ${x}` });
+    }
     if (!['', '0', '1'].includes(v.adult.trim())) err(r, `adult は 0 / 1 / 空欄のいずれかにしてください: ${v.adult}`);
   }
   return issues;
@@ -57,10 +60,10 @@ export function checkMenus(menus: Row[], circles: Row[]): Issue[] {
     const where = `お品書き（${id || 'id なし'}）`;
     if (!ids.has(id)) add('error', r, `${where}: circles.csv に id「${id}」がありません`);
     if (!isHttpUrl(url)) add('error', r, `${where}: URL が不正です: ${url || '（空欄）'}`);
-    else if (X_PAGE.test(url) && !POST_URL.test(url)) add('warning', r, `${where}: X の投稿ではないページです（プロフィール等を登録していませんか）: ${url}`);
+    else if (isXPage(url) && !normalizeUrl(url).handle) add('warning', r, `${where}: X の投稿ではないページです（プロフィール等を登録していませんか）: ${url}`);
     const checked = v.checkedAt.trim();
     if (checked && !DATE.test(checked)) add('warning', r, `${where}: checkedAt は YYYY-MM-DD にしてください: ${checked}`);
-    const dup = `${id}\n${url.split('?')[0]}`;
+    const dup = `${id}\n${normalizeUrl(url).url}`;
     if (seen.has(dup)) add('warning', r, `${where}: 同じ URL が重複しています: ${url}`);
     seen.add(dup);
   }

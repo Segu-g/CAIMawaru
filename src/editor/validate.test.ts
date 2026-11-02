@@ -41,6 +41,17 @@ describe('サークルの確認', () => {
     ]);
     expect(issues.every((i) => i.level === 'error')).toBe(true);
   });
+  it('x 列は照合できる X のアカウントの URL か（build.py・menu.py と同じ規則）', () => {
+    const issues = checkCircles([
+      circle({ id: 'a-01', name: 'ok', x: 'https://mobile.twitter.com/Example_User?lang=ja' }),
+      circle({ id: 'a-02', name: 'ホーム', x: 'https://x.com/home' }),
+      circle({ id: 'a-03', name: 'X以外', x: 'https://example.com/example_user' }),
+    ]);
+    expect(issues.map((i) => [i.level, i.message])).toEqual([
+      ['warning', 'ホーム: x が X のアカウントの URL ではありません（https://x.com/<ID> の形にしてください）: https://x.com/home'],
+      ['warning', 'X以外: x が X のアカウントの URL ではありません（https://x.com/<ID> の形にしてください）: https://example.com/example_user'],
+    ]);
+  });
 });
 
 describe('お品書きの確認', () => {
@@ -52,7 +63,9 @@ describe('お品書きの確認', () => {
         menu({ id: 'zz', url: 'https://example.com/m' }),
         menu({ id: 'a-01', url: 'not a url' }),
         menu({ id: 'a-01', url: 'https://x.com/example_user', checkedAt: '1/2' }),
-        menu({ id: 'a-01', url: 'https://example.com/m?ref=1' }),
+        menu({ id: 'a-01', url: 'https://example.com/m?ref=1' }), // X 以外はクエリも URL のうち（重複ではない）
+        menu({ id: 'a-01', url: 'https://x.com/example_user/status/1' }),
+        menu({ id: 'a-01', url: 'http://www.twitter.com/example_user/status/1?s=20' }),
         newRow({}, ['#あとで', '']),
       ],
       circles,
@@ -62,11 +75,13 @@ describe('お品書きの確認', () => {
       ['error', 'お品書き（a-01）: URL が不正です: not a url'],
       ['warning', 'お品書き（a-01）: X の投稿ではないページです（プロフィール等を登録していませんか）: https://x.com/example_user'],
       ['warning', 'お品書き（a-01）: checkedAt は YYYY-MM-DD にしてください: 1/2'],
-      ['warning', 'お品書き（a-01）: 同じ URL が重複しています: https://example.com/m?ref=1'],
+      ['warning', 'お品書き（a-01）: 同じ URL が重複しています: http://www.twitter.com/example_user/status/1?s=20'],
     ]);
   });
   it('X の投稿 URL は警告しない', () => {
     expect(checkMenus([menu({ id: 'a-01', url: 'https://x.com/example_user/status/123' })], circles)).toEqual([]);
+    // caimawaru menu が受け付ける形（http・www.・mobile.・twitter.com）も投稿として扱う
+    expect(checkMenus([menu({ id: 'a-01', url: 'http://mobile.twitter.com/example_user/status/123?s=20' })], circles)).toEqual([]);
   });
 });
 

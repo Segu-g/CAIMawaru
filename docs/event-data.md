@@ -54,7 +54,7 @@ events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/eve
 | `penNames` | | 作家名。複数は `;` 区切り |
 | `tags` | | 掲載側で付けるタグ。`;` 区切り |
 | `adult` | | 成人向け頒布物があれば `1`、なければ `0` か空欄 |
-| `x` / `pixiv` / `booth` / `web` | | 各リンクの URL（http/https）。`x` は `https://x.com/<ID>` の形で書く（お品書きの照合では `twitter.com`・`www.`・`mobile.`・`?lang=ja` なども読む） |
+| `x` / `pixiv` / `booth` / `web` | | 各リンクの URL（http/https）。`x` は `https://x.com/<ID>` の形で書く（お品書きの照合では `twitter.com`・`www.`・`mobile.`・`?lang=ja` なども読む。照合できない URL は検証で警告） |
 | `notes` | | 補足。欠席などの事情（健康・家族など）は書かない |
 | `source` | | 情報の出典（公式リストの URL など） |
 
@@ -65,7 +65,7 @@ events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/eve
 | 列 | 必須 | 内容 |
 |---|---|---|
 | `id` | ✓ | circles.csv の id |
-| `url` | ✓ | お品書きの URL。X の投稿は `https://x.com/<ID>/status/<番号>`（画像の転載・本文の書き写しはしない） |
+| `url` | ✓ | お品書きの URL。X の投稿は `https://x.com/<ID>/status/<番号>`（画像の転載・本文の書き写しはしない）。`twitter.com`・`www.`・`mobile.`・`?s=20` などの付いた投稿も、`circles.json` ではこの形にそろえる |
 | `note` | | リンク名に添える説明（例: 新刊） |
 | `checkedAt` | | 確認した日（YYYY-MM-DD） |
 
