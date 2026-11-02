@@ -1,7 +1,7 @@
 """Sockbase（https://list.sockbase.net/）の公式サークルリスト。
 
-元データは、ブラウザで描画済みの HTML（JavaScript で描画されるため）。
-ページ内の astro-island の props を読む。サークル一覧（SearchableCircleCardRack の circles）は配置図の有無に
+元データは、公式リストのページの HTML。サークルの情報はページ内の astro-island の props に入っていて、
+サーバが返す HTML にそのまま含まれる（ブラウザで描画しなくてよい）。サークル一覧（SearchableCircleCardRack の circles）は配置図の有無に
 かかわらず載っているのでそれを優先し、なければ配置図（SpaceMapViewer の spaces）から読む。
 Sockbase 側の変更で壊れることがある。
 
@@ -11,11 +11,11 @@ event.json:
 import html
 import json
 import re
-import shutil
-import subprocess
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
-DESCRIPTION = "Sockbase の公式サークルリスト（描画済み HTML）"
+DESCRIPTION = "Sockbase の公式サークルリスト（ページの HTML）"
 DEFAULT_FILE = "sources/sockbase.html"
 
 
@@ -43,7 +43,7 @@ def _circles(src):
             records = _astro(json.loads(html.unescape(islands[name]))).get(key)
             if isinstance(records, list):
                 return records
-    raise ValueError("サークルデータが見つかりません。描画済みの HTML（--dump-dom の出力）を指定してください")
+    raise ValueError("サークルデータが見つかりません。Sockbase の公式リストのページの HTML か確かめてください")
 
 
 def _text(d, key):
@@ -75,17 +75,24 @@ def read(source, path):
     return rows
 
 
+HOST = "list.sockbase.net"
+
+
+def _is_official(url):
+    u = urllib.parse.urlsplit(url)
+    return u.scheme == "https" and u.hostname == HOST
+
+
 def fetch(source, path):
-    """headless Chrome で公式リストを描画し、HTML を保存する。"""
+    """公式リストのページの HTML を取得して保存する（標準ライブラリの urllib。外部のコマンドは起動しない）。"""
     url = source.get("url", "")
-    if not url.startswith("https://list.sockbase.net/"):
+    if not _is_official(url):
         raise ValueError(f"Sockbase の公式リストの URL ではありません: {url!r}")
-    chrome = next((c for c in ("google-chrome", "chromium", "chromium-browser") if shutil.which(c)), None)
-    if not chrome:
-        raise RuntimeError("Google Chrome（または Chromium）が見つかりません。ブラウザで描画済みの HTML を保存して file に置いてください")
-    out = subprocess.run(
-        [chrome, "--headless=new", "--disable-gpu", "--virtual-time-budget=15000", "--dump-dom", url],
-        check=True, capture_output=True, text=True, timeout=120,
-    ).stdout
+    req = urllib.request.Request(url, headers={"User-Agent": "caimawaru"})
+    with urllib.request.urlopen(req, timeout=60) as res:
+        # リダイレクトで別のサイトに移っていないこと
+        if not _is_official(res.geturl()):
+            raise ValueError(f"Sockbase 以外のページに移動しました: {res.geturl()!r}")
+        body = res.read().decode(res.headers.get_content_charset() or "utf-8")
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(out, encoding="utf-8")
+    Path(path).write_text(body, encoding="utf-8")

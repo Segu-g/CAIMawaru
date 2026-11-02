@@ -42,10 +42,10 @@ cli.py ─┬▶ build.py ──▶ layout.py
         │                └▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
         ├▶ menu.py ──────▶ build.py
         └▶ new_event.py ─▶ project.py
-importers/sockbase.py ──（--fetch のときだけ）──▶ google-chrome（headless で公式リストを描画して保存）
+importers/sockbase.py ──（--fetch のときだけ）──▶ list.sockbase.net（標準ライブラリの urllib で HTML を取得して保存）
 ```
 
-- 外部のプロセスを起動するのは、Sockbase の取得（Chrome）だけ
+- 外部のコマンドは起動しない（`subprocess` を使わない）。ネットワークに出るのは `import --fetch` だけ
 - 島の番号の振り方・島の記号の位置・初期表示の範囲は `layout.py` だけが決める（ページは展開済みのセルを描く）
 
 ## ページの中の依存

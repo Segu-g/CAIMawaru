@@ -16,7 +16,7 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
 - イベントデータ（event.json・layout.json・data/*.csv）はエージェントが直接編集してよい。編集後は `uv run caimawaru data <eventId>` で検証する
 - `storeId` は公開後に変えない（利用者の ★・タグ・メモが消える）
 - **Python の CLI（`tools/caimawaru/`）とページ（`src/`・`vite.config.ts`）は互いを呼び出さない。** 境界は `circles.json` だけ（docs/architecture.md）。
-  ページ側から Python を、`tools/` から Node を起動しない。`circles.json` の形（`src/types.ts` の `CircleData`）を変えるときは両側とテストを直す
+  ページ側から Python を、`tools/` から Node を起動しない。外部のコマンドも起動しない（`subprocess`・`child_process` を使わず、標準ライブラリで済ませる）。`circles.json` の形（`src/types.ts` の `CircleData`）を変えるときは両側とテストを直す
 - 配置図の番号の振り方・島の記号の位置は `tools/caimawaru/layout.py` だけで決める（ページは展開済みのセルを描く）
 
 ## 情報の扱い

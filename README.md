@@ -24,7 +24,6 @@ pnpm dev example                  # ページの開発サーバ（Node）
 
 - ページ: Node.js（`.node-version`。fnm などで合わせる）と pnpm
 - イベントデータの CLI: [uv](https://docs.astral.sh/uv/)（Python 3.10 以上を自動で用意する）。uv を使わない場合は `pip install -e .` で `caimawaru` コマンドが入る
-- Sockbase から取得する場合は Google Chrome（headless で描画済み HTML を保存するため）
 - Linux・macOS・Windows で動く（CI で3つの OS を確かめている）
 
 ## イベントの置き方

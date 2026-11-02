@@ -168,8 +168,11 @@ class SockbaseImporterTest(unittest.TestCase):
             sockbase.read({}, tmpfile("list.html", "<html></html>"))
 
     def test_fetch_only_official_list(self):
-        with self.assertRaises(ValueError):
-            sockbase.fetch({"url": "https://example.com/"}, Path("/nonexistent"))
+        # ネットワークに出る前に止まること
+        for url in ("https://example.com/", "http://list.sockbase.net/circle-lists/x",
+                    "https://list.sockbase.net.example.com/circle-lists/x", "https://evil.example/?https://list.sockbase.net/"):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                sockbase.fetch({"url": url}, Path("/nonexistent"))
 
 
 class LoaderTest(unittest.TestCase):
