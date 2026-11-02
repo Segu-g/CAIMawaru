@@ -6,7 +6,7 @@ CAIMawaru は、それを **取得 → 変換 → イベントデータ** の3�
 | 段階 | 置き場所 | 誰が・何で |
 |---|---|---|
 | 取得 | `events/<eventId>/sources/` | 人が保存する／インポーターの `fetch`（`uv run caimawaru import --fetch`）／エージェントが取得する |
-| 変換 | `tools/caimawaru/importers/`・イベントごとの Python | `uv run caimawaru import`（インポーターの `read`） |
+| 変換 | `tools/caimawaru/importers/` | `uv run caimawaru import`（インポーターの `read`） |
 | イベントデータ | `events/<eventId>/data/*.csv` | 取り込み結果。人・エージェントが直接編集してもよい |
 
 ## 使い方
@@ -22,6 +22,7 @@ uv run caimawaru importers                    # 使えるインポーター
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きします。返さなかった列（多くは `tags`・`notes` など）は直接編集した値が残ります
 - お品書き URL は menus.csv に追加し、直接追加した行は残します
+- イベントデータにない列（直接足した列）と `#` の行も残します（保存の形は [event-data.md の「CSV の書き方」](event-data.md#csv-の書き方保存時の形)）
 - 取り込み元から消えたサークルは表示します（配置変更・参加取り消しの可能性）
 - `sources` が複数あると、同じ id のサークルは後の source の空でない値で上書きします（例: 公式リスト＋読みがなの表）
 - 共通の正規化: X の ID だけなら `https://x.com/<ID>`、pixiv の数字だけなら `https://www.pixiv.net/users/<番号>`、`adult` は `1`/`0`（「あり」「○」「R18」なども可）、`id` が空ならスペース番号から作る。`source` 列は source の `url` か `label`

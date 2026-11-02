@@ -22,11 +22,14 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
                                caimawaru data ──書く──▶ events/<eventId>/public/data/circles.json ──読む──▶ ページ
 ```
 
+イベントデータの直接編集は、ファイルを書き換えても、CLI の編集コマンド（`caimawaru circle`・`menus`・`config`）を使ってもよい。
+コマンドは書き込む前に検証し、変更後に `circles.json` を作り直す。
+
 | ファイル | 書く | 読む |
 |---|---|---|
-| `event.json` | 人・エージェント（`caimawaru new-event` が雛形） | CLI（全コマンド）、ページ（`vite.config.ts`: `storeId`・`title` だけ） |
+| `event.json` | 人・エージェント、CLI（`config set`・`config unset`。`new-event` が雛形） | CLI（全コマンド）、ページ（`vite.config.ts`: `storeId`・`title` だけ） |
 | `layout.json` | 人・エージェント | CLI だけ（展開して `circles.json` に入れる） |
-| `data/circles.csv`・`data/menus.csv` | 人・エージェント、CLI（`import`・`menu`） | CLI だけ |
+| `data/circles.csv`・`data/menus.csv` | 人・エージェント、CLI（`import`・`menu`・`circle add/set/remove`・`menus set/remove`） | CLI だけ |
 | `sources/` | 人・エージェント、CLI（`import --fetch`） | CLI だけ（インポーター） |
 | `public/data/circles.json` | CLI だけ（`caimawaru data`） | ページだけ（実行時に読み込む。`vite.config.ts` は配置図の有無を見る。テストは形を確かめる） |
 
@@ -38,9 +41,11 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 ```
 cli.py ─┬▶ build.py ──▶ layout.py
         │     └──────▶ project.py
-        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json、イベントごとの python）
+        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json）
         │                └▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
         ├▶ menu.py ──────▶ build.py
+        ├▶ edit.py ──────┬▶ build.py（書き込む前に一時フォルダの写しを検証、書き込み後に生成）
+        │                └▶ menu.py（サークル指定の照合 find_circles・X の URL の正規化）
         └▶ new_event.py ─▶ project.py
 importers/sockbase.py ──（--fetch のときだけ）──▶ list.sockbase.net（標準ライブラリの urllib で HTML を取得して保存）
 ```

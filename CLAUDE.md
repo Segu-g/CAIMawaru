@@ -14,7 +14,11 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
   形式ごとの事情（列名・表記揺れ）を持ち込まない。新しい形式は `tools/caimawaru/importers/` にモジュールを足し、架空のデータでテストを書く。
   イベントのフォルダなど、リポジトリの外の Python を読み込んで実行する仕組みは作らない
 - `public/data/circles.json` は生成物。直接編集せず `uv run caimawaru data <eventId>` で作る
-- イベントデータ（event.json・layout.json・data/*.csv）はエージェントが直接編集してよい。編集後は `uv run caimawaru data <eventId>` で検証する
+- イベントデータ（event.json・layout.json・data/*.csv）はエージェントが直接編集してよい。circles.csv・menus.csv・event.json は、
+  ファイルを書き換えるより編集コマンド（`uv run caimawaru circle` / `menus` / `config`。README の「イベントデータを確かめる・編集する」）を使う。
+  まず `--dry-run` で差分と検証結果を見てから書き込む。確かめるときは `circle list` / `circle show` / `menus list` の `--json` と `config get`。
+  候補が複数ならスペース番号か id で指定し直す（推測で選ばない）。サークルを消すときにお品書きが残るなら、`--with-menus` の前にユーザーに知らせる。
+  layout.json はファイルを直接編集する。どちらの場合も編集後は `uv run caimawaru data <eventId>` で検証する（コマンドは自動で行う）
 - `storeId` は公開後に変えない（利用者の ★・タグ・メモが消える）
 - **Python の CLI（`tools/caimawaru/`）とページ（`src/`・`vite.config.ts`）は互いを呼び出さない。** 境界は `circles.json` だけ（docs/architecture.md）。
   ページ側から Python を、`tools/` から Node を起動しない。外部のコマンドも起動しない（`subprocess`・`child_process` を使わず、標準ライブラリで済ませる）。`circles.json` の形（`src/types.ts` の `CircleData`）を変えるときは両側とテストを直す
