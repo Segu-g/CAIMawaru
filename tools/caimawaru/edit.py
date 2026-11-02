@@ -103,15 +103,19 @@ def _q(value):
 
 # --- 検証して書き込む ---
 
-_LINE = re.compile(r"\b(circles|menus)\.csv:\d+")
+_LINE = re.compile(r"\b(circles|menus)\.csv:\d+|\d+行目")
+
+
+def _unnumber(m):
+    return f"{m.group(1)}.csv" if m.group(1) else "N行目"
 
 
 def _new_messages(before, after):
     """after にだけあるメッセージ（行番号は行の増減でずれるので比べない）。"""
-    left = Counter(_LINE.sub(r"\1.csv", m) for m in before)
+    left = Counter(_LINE.sub(_unnumber, m) for m in before)
     out = []
     for m in after:
-        key = _LINE.sub(r"\1.csv", m)
+        key = _LINE.sub(_unnumber, m)
         if left[key]:
             left[key] -= 1
         else:
@@ -209,6 +213,8 @@ def commit(event, files, dry_run=False, no_build=False):
 def _load(event):
     circles = Table(event.circles_csv, CIRCLE_COLS)
     menus = Table(event.menus_csv, MENU_COLS)
+    for w in circles.warnings + menus.warnings:
+        print(f"警告: {w}", file=sys.stderr)
     return circles, _views(circles, True), menus, _views(menus, False)
 
 

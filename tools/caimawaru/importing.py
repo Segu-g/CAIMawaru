@@ -202,6 +202,7 @@ def run(event, fetch=False, input=None, dry_run=False, no_build=False):
         print(f"{label}: {len(raws)} 件")
 
     circle_table, menu_table = Table(event.circles_csv, CIRCLE_COLS), Table(event.menus_csv, MENU_COLS)
+    warnings += circle_table.warnings + menu_table.warnings
     existing_menus = menu_table.data_rows()
     circles, menus, report = merge(imported, circle_table.data_rows(), existing_menus, date.today().isoformat())
 
