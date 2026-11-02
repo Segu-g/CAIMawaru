@@ -13,7 +13,8 @@ events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/eve
 
 - **eventId**: イベントを指す ID。`events/` の下のフォルダ名で、英数字・ハイフン・アンダースコア（例: `example`、`2030-05-05-mycon`）。
   コマンドでは `pnpm dev <eventId>` のように指定し、`storeId` の既定値と、ページの出力先（`dist/<eventId>/`）にもなる
-- イベントデータは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）
+- イベントデータは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）。
+  ブラウザのエディタ（`pnpm editor`。README の「GUI で編集する」）でも編集でき、CLI と同じ書式で書き戻す
 - `public/data/circles.json` は生成物で、直接編集しない
 - 検証は `uv run caimawaru data <eventId> --check`（`tools/caimawaru/build.py`）。エラーがあると `circles.json` は更新されない
 

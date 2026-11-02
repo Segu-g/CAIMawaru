@@ -7,7 +7,7 @@
 
 - **ページ**: Vite + React + TypeScript（`pnpm`）
 - **イベントデータの CLI `caimawaru`**: Python 3（標準ライブラリのみ。`uv run caimawaru`）。データの検証・生成・取り込み
-- 2つは互いを呼び出さない。境界はファイル（`circles.json`）だけ（[docs/architecture.md](docs/architecture.md)）
+- 2つは互いを呼び出さない。境界はファイル（`circles.json`）だけ（[docs/architecture.md](docs/architecture.md)）。ブラウザのエディタ（`pnpm editor`）はイベントデータを CLI と同じ書式で読み書きする
 - イベントに依存する情報はすべて `events/<eventId>/` に置き、コードには書かない
 - 出力は相対パスの静的ファイルなので、GitHub Pages・nginx などどこにでも置ける
 
@@ -70,7 +70,9 @@ events/<eventId>/
 | `pnpm dev <eventId>` | 開発サーバ |
 | `pnpm build <eventId>` | 型チェックのうえ、そのイベントのページを `dist/<eventId>/` にビルド |
 | `pnpm preview <eventId>` | ビルド結果の確認（先に `pnpm build <eventId>`） |
-| `pnpm test` | テスト（検索・保存形式・配置図の操作など、生成済みの `circles.json` の形） |
+| `pnpm test` | テスト（検索・保存形式・配置図の操作など、生成済みの `circles.json` の形、エディタの CSV の読み書き） |
+| `pnpm editor` | イベントデータのエディタ（下記）の開発サーバ。イベントを指定しない |
+| `pnpm build:editor` | エディタを静的なページとして `dist/editor/` にビルド |
 
 ページのコマンドは Vite をそのまま呼びます（`pnpm build example` は `vite build -- example`）。1回に1イベントで、
 複数のイベントはコマンドを並べて実行します（`pnpm build a && pnpm build b`）。Vite のオプションを付けるときは
@@ -88,6 +90,28 @@ uv run caimawaru menu <eventId> -                                               
 ```
 
 サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `uv run caimawaru data` まで自動で実行します。
+
+### GUI で編集する
+
+イベントデータ（event.json・data/circles.csv・data/menus.csv）は、ブラウザのエディタでも編集できます。
+
+```sh
+pnpm editor        # 表示された URL（http://localhost:5173/ など）を PC の Chrome か Edge で開く
+```
+
+1. 「イベントのフォルダを選ぶ」で `events/<eventId>/` を選び、ファイルの編集を許可する（リポジトリや `events/` を選ぶと、中のイベントから選べる）
+2. サークル（検索・絞り込み・追加・編集・削除）、サークルごとのお品書き（URL・説明・確認した日）、イベント情報（event.json の storeId・title・info）を編集する
+3. 「保存」で同じフォルダに書き戻す（編集したファイルだけ。書式は CLI と同じ）
+4. ターミナルで `uv run caimawaru data <eventId>` を実行して検証し、`circles.json` を作り直す（エディタからは実行しない）
+
+- ファイルを読み書きするのはブラウザだけで、選んだフォルダの3つのファイルだけ（layout.json・sources/・circles.json は触らない）。ファイルはどこにも送らない
+- 保存の前に、読み込んだ後でほかに（CLI・エージェント・別のエディタなど）変更されたファイルがないかを確かめ、あれば上書きせずに「読み込み直す」よう知らせる
+- 画面での確認（必須の列・URL の形・adult・id の重複・宙に浮いたお品書き）は簡単なものだけ。正式な検証は `uv run caimawaru data`
+- サークルを消すときは、そのサークルのお品書きも一緒に消すか、やめるかを選ぶ。id を変えるときは、お品書きの id も付け替える
+- お品書きの URL は自分で貼り付ける（エディタは X などのページを読み込まない）
+- `storeId` は公開後に変えない（画面でも、確認のチェックを入れないと変えられない）
+- File System Access API（`showDirectoryPicker`）を使うので、PC の Chrome・Edge だけで動く。Firefox・Safari・スマホでは使えない旨を表示する
+- `pnpm build:editor` で `dist/editor/` に静的なページを作れる。`localhost` 以外に置くときは HTTPS が必要（ブラウザの制限）
 
 ## 情報の集め方（方針）
 
@@ -121,6 +145,8 @@ uv run caimawaru menu <eventId> -                                               
 | `src/useMine.ts` | TS | 閲覧者の ★・タグ・メモ（localStorage のみに保存） |
 | `src/components/SpaceMap.tsx` | TS | 配置図の描画とタッチ操作 |
 | `vite.config.ts` | TS | ページのビルド設定。引数の eventId から `event.json` を読み、出力先などを決める |
+| `src/editor/` | TS | イベントデータのエディタ（ブラウザで event.json・data/*.csv を編集して書き戻す） |
+| `vite.editor.config.ts` | TS | エディタのビルド設定（イベントに依存しない） |
 | `tools/caimawaru/cli.py` | Python | `caimawaru` コマンドの入り口 |
 | `tools/caimawaru/build.py` | Python | イベントデータの検証と `circles.json` の生成 |
 | `tools/caimawaru/layout.py` | Python | `layout.json` の展開（島の番号の振り方・記号の位置・表示範囲） |

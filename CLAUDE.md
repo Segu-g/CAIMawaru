@@ -17,6 +17,8 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
 - イベントデータ（event.json・layout.json・data/*.csv）はエージェントが直接編集してよい。編集後は `uv run caimawaru data <eventId>` で検証する
 - `storeId` は公開後に変えない（利用者の ★・タグ・メモが消える）
 - **Python の CLI（`tools/caimawaru/`）とページ（`src/`・`vite.config.ts`）は互いを呼び出さない。** 境界は `circles.json` だけ（docs/architecture.md）。
+  例外はエディタ（`src/editor/`）で、イベントデータ（event.json・data/*.csv）を CLI と同じ書式で読み書きする。CSV の列・書式を変えるときは
+  `tools/caimawaru/project.py` と `src/editor/`（`csv.ts`・`model.ts`）とテストを両方直す。エディタはブラウザの中だけで書く（ファイルを書くサーバや Node のスクリプトを作らない）
   ページ側から Python を、`tools/` から Node を起動しない。外部のコマンドも起動しない（`subprocess`・`child_process` を使わず、標準ライブラリで済ませる）。`circles.json` の形（`src/types.ts` の `CircleData`）を変えるときは両側とテストを直す
 - 配置図の番号の振り方・島の記号の位置は `tools/caimawaru/layout.py` だけで決める（ページは展開済みのセルを描く）
 
@@ -46,6 +48,6 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
 ## 確認
 
 - 変更後は、CLI 側は `uv run python -m unittest discover -s tools/tests` と `uv run caimawaru check`、
-  ページ側は `pnpm test` と `pnpm build <eventId>`（`example` と変更に関わるイベント）を通す
+  ページ側は `pnpm test` と `pnpm build <eventId>`（`example` と変更に関わるイベント）を通す。エディタ（`src/editor/`）を変えたら `pnpm build:editor` も
 - 画面の変更はスマホ幅（〜400px）と PC 幅（900px 以上）の両方で見る。横にはみ出しやすい（グリッドは `minmax(0,1fr)`、見出しは `min-width:0`）。入力欄は 16px（iOS の自動拡大対策）
 - X の埋め込みは StrictMode で二重に出やすい（実行ごとに専用の入れ物を使っている）。成人向けなどの投稿は埋め込みに出ないことがある
