@@ -30,15 +30,15 @@ STDIN = "-"  # URL の代わりに書くと、標準入力から1行ずつ読む
 def find_circles(circles, query):
     """検索語に一致するサークルを返す。完全一致（id・スペース・XのID）を優先し、なければサークル名の部分一致。"""
     text = query.strip()
-    key = text.lower().lstrip("@")
-    if not key:
+    normalized_query = text.lower().lstrip("@")  # id・スペース・X の ID と比べる形（小文字、「@」なし）
+    if not normalized_query:
         return []  # 空・「@」だけの指定は、スペースや X が空欄のサークルに当たらないようにする
     exact = [
         circle for circle in circles
-        if circle["id"] == key
-        or circle["space"].strip().lower() == key  # 「A-01,A-02」のようにまとめた書き方そのもの
-        or key in (space.lower() for space in circle_spaces(circle))  # 複数スペースのどれか
-        or x_handle(circle) == key
+        if circle["id"] == normalized_query
+        or circle["space"].strip().lower() == normalized_query  # 「A-01,A-02」のようにまとめた書き方そのもの
+        or normalized_query in (space.lower() for space in circle_spaces(circle))  # 複数スペースのどれか
+        or x_handle(circle) == normalized_query
     ]
     if exact:
         return exact
