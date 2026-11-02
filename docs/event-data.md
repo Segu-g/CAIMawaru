@@ -14,12 +14,16 @@ events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/eve
 - **eventId**: イベントを指す ID。`events/` の下のフォルダ名で、英数字・ハイフン・アンダースコア（例: `example`、`2030-05-05-mycon`）。
   コマンドでは `pnpm dev <eventId>` のように指定し、`storeId` の既定値と、ページの出力先（`dist/<eventId>/`）にもなる
 - イベントデータは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）
+- 直接編集は、ファイルを書き換えるほか、`uv run caimawaru circle` / `menus` / `config` でもできる（README の「イベントデータを確かめる・編集する」）。
+  コマンドは変更前 → 変更後を表示し（`--dry-run` は表示だけ）、変更で検証エラーが増えるなら書き込まない。CSV は列の順・引用符・改行を
+  取り込みと同じ形で書き戻し、この文書にない列・空行・`#` の行も残す
 - `public/data/circles.json` は生成物で、直接編集しない
 - 検証は `uv run caimawaru data <eventId> --check`（`tools/caimawaru/build.py`）。エラーがあると `circles.json` は更新されない
 
 ## event.json
 
-イベントの設定とページに出すイベント情報。取り込みや生成では作られないので、人かエージェントが直接編集する。
+イベントの設定とページに出すイベント情報。取り込みや生成では作られないので、人かエージェントが直接編集する
+（`uv run caimawaru config set <eventId> info.venue "…"` のようにキーを `.` でつないで変えることもできる。ほかのキーと順は保つ）。
 
 | キー | 必須 | 内容 |
 |---|---|---|
