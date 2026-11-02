@@ -145,6 +145,24 @@ class SockbaseImporterTest(unittest.TestCase):
         self.assertEqual(norm["x"], "https://x.com/example_user")
         self.assertEqual(norm["adult"], "0")
 
+    def test_circle_list_without_map(self):
+        """配置図のないリストはサークル一覧（SearchableCircleCardRack）だけ。項目が欠けていても読む"""
+        circle = {"spaceName": [0, "B-03"], "circleName": [0, "架空工房"], "hasAdult": [0, True],
+                  "links": [0, {"twitterScreenName": [0, None]}]}
+        props = html.escape(json.dumps({"circles": [1, [[0, circle]]]}), quote=True)
+        p = tmpfile("list.html", f'<astro-island component-url="/x/SearchableCircleCardRack.abc.js" props="{props}"></astro-island>')
+        [row] = sockbase.read({}, p)
+        self.assertEqual((row["space"], row["name"], row["kana"], row["x"], row["menus"], row["adult"]),
+                         ("B-03", "架空工房", "", "", [], True))
+
+    def test_prefers_circle_list_over_map(self):
+        def island(comp, key, name):
+            rec = {"spaceName": [0, "A-01"], "circleName": [0, name]}
+            props = html.escape(json.dumps({key: [1, [[0, rec]]]}), quote=True)
+            return f'<astro-island component-url="/x/{comp}.js" props="{props}"></astro-island>'
+        p = tmpfile("list.html", island("SpaceMapViewer", "spaces", "配置図") + island("SearchableCircleCardRack", "circles", "一覧"))
+        self.assertEqual([r["name"] for r in sockbase.read({}, p)], ["一覧"])
+
     def test_not_rendered_html(self):
         with self.assertRaises(ValueError):
             sockbase.read({}, tmpfile("list.html", "<html></html>"))

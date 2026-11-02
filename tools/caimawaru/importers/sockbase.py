@@ -1,7 +1,9 @@
 """Sockbase（https://list.sockbase.net/）の公式サークルリスト。
 
 元データは、ブラウザで描画済みの HTML（JavaScript で描画されるため）。
-ページ内の astro-island（SpaceMapViewer）の props を読むので、Sockbase 側の変更で壊れることがある。
+ページ内の astro-island の props を読む。サークル一覧（SearchableCircleCardRack の circles）は配置図の有無に
+かかわらず載っているのでそれを優先し、なければ配置図（SpaceMapViewer の spaces）から読む。
+Sockbase 側の変更で壊れることがある。
 
 event.json:
     { "type": "sockbase", "url": "https://list.sockbase.net/circle-lists/<id>" }
@@ -29,27 +31,44 @@ def _astro(v):
     return v
 
 
+# サークルの一覧が入っている部品と、その props のキー（先にあるものを優先）
+COMPONENTS = (("SearchableCircleCardRack", "circles"), ("SpaceMapViewer", "spaces"))
+ISLAND = re.compile(r'<astro-island[^>]*component-url="[^"]*/([A-Za-z]+)\.[^"]*"[^>]*props="([^"]*)"')
+
+
+def _circles(src):
+    islands = {name: props for name, props in ISLAND.findall(src)}
+    for name, key in COMPONENTS:
+        if name in islands:
+            records = _astro(json.loads(html.unescape(islands[name]))).get(key)
+            if isinstance(records, list):
+                return records
+    raise ValueError("サークルデータが見つかりません。描画済みの HTML（--dump-dom の出力）を指定してください")
+
+
+def _text(d, key):
+    """項目がない・null でも空文字として読む。"""
+    v = (d or {}).get(key)
+    return v.strip() if isinstance(v, str) else ""
+
+
 def read(source, path):
-    src = Path(path).read_text(encoding="utf-8")
-    m = re.search(r'<astro-island[^>]*component-url="[^"]*SpaceMapViewer[^"]*"[^>]*props="([^"]*)"', src)
-    if not m:
-        raise ValueError("サークルデータが見つかりません。描画済みの HTML（--dump-dom の出力）を指定してください")
     rows = []
-    for s in _astro(json.loads(html.unescape(m.group(1))))["spaces"]:
-        links = s["links"]
-        space = s["spaceName"].strip()
-        menu = links["menuURL"].strip()
+    for s in _circles(Path(path).read_text(encoding="utf-8")):
+        links = s.get("links") or {}
+        space = _text(s, "spaceName")
+        menu = _text(links, "menuURL")
         rows.append({
             "id": space.replace(",", "-").lower(),
             "space": space,
-            "event": s["eventName"].strip(),
-            "name": s["circleName"].strip(),
-            "kana": s["circleNameYomi"].strip(),
-            "penNames": s["penName"].strip(),
-            "adult": bool(s["hasAdult"]),
-            "x": links["twitterScreenName"].strip(),     # ID だけ。共通処理で URL にする
-            "pixiv": links["pixivUserId"].strip(),       # 数字だけ。共通処理で URL にする
-            "web": links["websiteURL"].strip(),
+            "event": _text(s, "eventName"),
+            "name": _text(s, "circleName"),
+            "kana": _text(s, "circleNameYomi"),
+            "penNames": _text(s, "penName"),
+            "adult": bool(s.get("hasAdult")),
+            "x": _text(links, "twitterScreenName"),     # ID だけ。共通処理で URL にする
+            "pixiv": _text(links, "pixivUserId"),       # 数字だけ。共通処理で URL にする
+            "web": _text(links, "websiteURL"),
             "menus": [menu] if menu else [],
         })
     # サークルカット画像は取り込まない（署名付き URL で期限切れになるうえ、転載になる）
