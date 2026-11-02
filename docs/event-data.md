@@ -14,11 +14,11 @@ events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/eve
 - **eventId**: イベントを指す ID。`events/` の下のフォルダ名で、英数字・ハイフン・アンダースコア（例: `example`、`2030-05-05-mycon`）。
   コマンドでは `pnpm dev <eventId>` のように指定し、`storeId` の既定値と、ページの出力先（`dist/<eventId>/`）にもなる
 - イベントデータは人もエージェントも直接編集してよい（取り込みは「取り込んだ列」だけを上書きし、それ以外は残す）
-- 直接編集は、ファイルを書き換えるほか、`uv run caimawaru circle` / `menus` / `config` でもできる（README の「イベントデータを確かめる・編集する」）。
+- 直接編集は、ファイルを書き換えるほか、`uv run caimawaru circle` / `menus` / `config` でもできる（[cli.md の「イベントデータを確かめる・編集する」](cli.md#イベントデータを確かめる編集する)）。
   コマンドは変更前 → 変更後を表示し（`--dry-run` は表示だけ）、変更で検証エラーが増えるなら書き込まない。
   エラーが増えたかは行番号を除いたメッセージで比べるので、同じ内容のエラーが別の行で出たり消えたりすると見分けられない。
   CSV は下の「CSV の書き方」の形で書き戻す
-- ブラウザのエディタ（`pnpm editor`。README の「GUI で編集する」）でも編集でき、CSV は下の「CSV の書き方」の形で書き戻す
+- ブラウザのエディタ（`pnpm editor`。[editor.md](editor.md)）でも編集でき、CSV は下の「CSV の書き方」の形で書き戻す
 - `public/data/circles.json` は生成物で、直接編集しない
 - 検証は `uv run caimawaru data <eventId> --check`（`tools/caimawaru/build.py`）。エラーがあると `circles.json` は更新されない
 

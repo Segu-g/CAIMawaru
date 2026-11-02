@@ -1,6 +1,7 @@
 # CAIMawaru — エージェント向けの作業ルール
 
-README.md（使い方）と docs/（イベント追加・配置図）を先に読むこと。
+先に読むもの: docs/getting-started.md（手順と、サークル・お品書きの集め方）、docs/cli.md（コマンド）、docs/event-data.md（イベントデータの仕様）、
+コードを変えるなら CONTRIBUTING.md と docs/architecture.md。どの文書が誰向けかは README.md の「読む人別の案内」。
 
 ## 設計の約束
 
@@ -15,7 +16,7 @@ README.md（使い方）と docs/（イベント追加・配置図）を先に�
   イベントのフォルダなど、リポジトリの外の Python を読み込んで実行する仕組みは作らない
 - `public/data/circles.json` は生成物。直接編集せず `uv run caimawaru data <eventId>` で作る
 - イベントデータ（event.json・layout.json・data/*.csv）はエージェントが直接編集してよい。circles.csv・menus.csv・event.json は、
-  ファイルを書き換えるより編集コマンド（`uv run caimawaru circle` / `menus` / `config`。README の「イベントデータを確かめる・編集する」）を使う。
+  ファイルを書き換えるより編集コマンド（`uv run caimawaru circle` / `menus` / `config`。docs/cli.md の「イベントデータを確かめる・編集する」）を使う。
   まず `--dry-run` で差分と検証結果を見てから書き込む。確かめるときは `circle list` / `circle show` / `menus list` の `--json` と `config get`。
   候補が複数ならスペース番号か id で指定し直す（推測で選ばない）。サークルを消すときにお品書きが残るなら、`--with-menus` の前にユーザーに知らせる。
   layout.json はファイルを直接編集する。どちらの場合も編集後は `uv run caimawaru data <eventId>` で検証する（コマンドは自動で行う）
