@@ -35,7 +35,7 @@
 
   /* 配置図のイベント色（枠 1〜5）の既定値。色覚の違いに配慮した Okabe–Ito の配色から選んだもの。
      イベントごとに event.json の info.slotColors で上書きできる。上書きしたときは、配置図で隣り合う色が
-     色覚の違いでも区別できるか確かめる（docs/new-event.md） */
+     色覚の違いでも区別できるか確かめる（docs/getting-started.md の「合同開催の色」） */
   --ev-1: #e69f00; --ev-1-ink: #141413;
   --ev-2: #56b4e9; --ev-2-ink: #141413;
   --ev-3: #009e73; --ev-3-ink: #ffffff;

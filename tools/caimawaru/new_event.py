@@ -8,7 +8,7 @@
     ほかの形式（CSV・JSON・独自形式）は event.json の sources に書く（docs/importers.md）。
     --map を付けると配置図の雛形 layout.json も作る（主催が配置図の二次利用を認めているときだけ載せる）。
 
-作ったあとは event.json を埋め、docs/new-event.md の手順でサークル情報を入れる。
+作ったあとは event.json を埋め、docs/getting-started.md の手順でサークル情報を入れる。
 """
 import re
 
