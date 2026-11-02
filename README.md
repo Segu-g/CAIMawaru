@@ -23,7 +23,7 @@ pnpm dev example                  # ページの開発サーバ（Node）
 ## 必要なもの
 
 - ページ: Node.js（`.node-version`。fnm などで合わせる）と pnpm
-- イベントデータの CLI: [uv](https://docs.astral.sh/uv/)（Python 3.11 以上を自動で用意する）。uv を使わない場合は `pip install -e .` で `caimawaru` コマンドが入る
+- イベントデータの CLI: [uv](https://docs.astral.sh/uv/)（Python 3.10 以上を自動で用意する）。uv を使わない場合は `pip install -e .` で `caimawaru` コマンドが入る
 - Linux・macOS・Windows で動く（CI で3つの OS を確かめている）
 
 ## イベントの置き方
@@ -64,7 +64,7 @@ events/<eventId>/
 | `uv run caimawaru check [<eventId>…]` | イベントデータを検証（省略すると全イベント） |
 | `uv run python -m unittest discover -s tools/tests` | テスト（配置図の展開・取り込み・編集・CLI） |
 
-`<eventId>` はイベントのフォルダ名（`events/` の下）。リポジトリ（`pyproject.toml` の `name` が `caimawaru` のフォルダ）の中ならどこから実行してもよい。上のフォルダにたどって最初に見つかった `pyproject.toml` で決め、リポジトリの外や別のプロジェクトの中では実行を断る（`events/` があるだけのフォルダは使わない）。リポジトリの外から使うときは `--root` でリポジトリのフォルダを指定する（こちらも同じ確かめをする）。
+`<eventId>` はイベントのフォルダ名（`events/` の下）。対象はいつも CLI のコードがあるリポジトリ（`uv run` は編集可能な形で入れるので、この checkout）で、どこから実行しても同じ。別のフォルダのイベントデータを扱うときや、編集可能でない形で入れたときは `--root` で `events/` のあるフォルダを指定する。
 
 ### ページ（Node: `pnpm <command>`）
 

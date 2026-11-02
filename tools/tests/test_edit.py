@@ -20,7 +20,6 @@ class EditTest(unittest.TestCase):
         self.root = Path(tempfile.mkdtemp())
         shutil.copytree(REPO / "events" / "example", self.root / "events" / "example",
                         ignore=shutil.ignore_patterns("public"))
-        (self.root / "pyproject.toml").write_text('[project]\nname = "caimawaru"\n', encoding="utf-8")
         self.dir = self.root / "events" / "example"
         self.circles = self.dir / "data" / "circles.csv"
         self.menus = self.dir / "data" / "menus.csv"

@@ -3,7 +3,6 @@ import csv
 import io
 import json
 import re
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -32,43 +31,26 @@ def parse_json(text):
     return json.loads(text, object_pairs_hook=_no_duplicate_keys)
 
 
-PROJECT_NAME = "caimawaru"
-ROOT_HINT = "CAIMawaru のリポジトリの中で実行するか、--root でリポジトリのフォルダを指定してください"
+# このファイルは <リポジトリ>/tools/caimawaru/project.py（uv は編集可能な形で入れるので、ここがリポジトリそのもの）
+CODE_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _project_name(pyproject):
-    """pyproject.toml の [project] name。読めない・書かれていないときは None。"""
-    try:
-        with pyproject.open("rb") as f:
-            name = tomllib.load(f).get("project", {}).get("name")
-    except (OSError, tomllib.TOMLDecodeError):
-        return None
-    return name if isinstance(name, str) else None
+def find_root(root=None):
+    """プロジェクトのフォルダを返す。既定は CLI のコードがあるリポジトリ（どこから実行しても同じ）。
 
-
-def find_root(start=None, explicit=False):
-    """プロジェクト（pyproject.toml の [project] name が caimawaru のフォルダ）を返す。
-
-    explicit が偽なら start（既定はカレントディレクトリ）から上にたどり、最初に見つかった pyproject.toml で決める。
-    それが別のプロジェクトのものならそこで止めてエラーにする（events/ があるだけのフォルダは採らない）。
-    explicit が真（--root）なら start そのものが CAIMawaru のリポジトリかを確かめる。
+    root（--root）を指定したときは、そのフォルダに events/ があることだけを確かめる。
     """
-    here = Path(start or Path.cwd()).resolve()
-    if explicit:
-        pyproject = here / "pyproject.toml"
-        if not pyproject.is_file():
-            raise CliError(f"--root に指定したフォルダに pyproject.toml がありません（{here}）。{ROOT_HINT}")
-        if _project_name(pyproject) != PROJECT_NAME:
-            raise CliError(f"--root に指定したフォルダは CAIMawaru のリポジトリではありません（{pyproject}）。{ROOT_HINT}")
-        return here
-    for d in (here, *here.parents):
-        pyproject = d / "pyproject.toml"
-        if not pyproject.is_file():
-            continue
-        if _project_name(pyproject) == PROJECT_NAME:
-            return d
-        raise CliError(f"別のプロジェクトの中です（{pyproject}）。{ROOT_HINT}")
-    raise CliError(f"CAIMawaru のリポジトリが見つかりません（{here} から上を探しました）。{ROOT_HINT}")
+    if root is None:
+        if not (CODE_ROOT / "pyproject.toml").is_file():
+            raise CliError(f"CLI のコードがリポジトリの中にありません（{CODE_ROOT}）。--root でリポジトリのフォルダを指定してください")
+        return CODE_ROOT
+    try:
+        root = Path(root).resolve()
+    except OSError as e:  # 相対パスでカレントディレクトリが消えている など
+        raise CliError(f"--root に指定したフォルダを確かめられません（{root}: {e}）") from e
+    if not (root / "events").is_dir():
+        raise CliError(f"--root に指定したフォルダに events/ がありません（{root}）")
+    return root
 
 
 def known_events(root):
