@@ -60,9 +60,10 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 ```
 cli.py ─┬▶ build.py ──▶ layout.py
         │     ├──────▶ project.py
-        │     └──────▶ xurl.py（X の URL の規則。menu・edit も使う）
+        │     └──────▶ xurl.py（X の URL の規則。menu・edit・importing も使う）
         ├▶ importing.py ─┬▶ importers/（sockbase・csv・json）
-        │                └▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
+        │                ├▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
+        │                └▶ xurl.py（X の ID を URL にするときの x.com）
         ├▶ menu.py ──────┬▶ build.py
         │                └▶ xurl.py（X の投稿 URL の正規化・x 列のアカウント）
         ├▶ edit.py ──────┬▶ build.py（書き込む前に一時フォルダの写しを検証、書き込み後に生成）
