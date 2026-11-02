@@ -37,13 +37,22 @@ ROOT_HINT = "CAIMawaru のリポジトリの中で実行するか、--root で�
 
 
 def _project_name(pyproject):
-    """pyproject.toml の [project] name。読めない・書かれていないときは None。"""
+    """pyproject.toml の [project] name（書かれていなければ None）。読めない・書き方が誤っているときは CliError。"""
     try:
         with pyproject.open("rb") as f:
-            name = tomllib.load(f).get("project", {}).get("name")
-    except (OSError, tomllib.TOMLDecodeError):
-        return None
+            data = tomllib.load(f)
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
+        raise CliError(f"pyproject.toml を読めませんでした（{pyproject}: {e}）。{ROOT_HINT}") from e
+    project = data.get("project")
+    name = project.get("name") if isinstance(project, dict) else None
     return name if isinstance(name, str) else None
+
+
+def _start_dir(start):
+    try:
+        return Path(start or Path.cwd()).resolve()
+    except OSError as e:  # カレントディレクトリが消えている など
+        raise CliError(f"カレントディレクトリを確かめられません（{e}）。{ROOT_HINT}") from e
 
 
 def find_root(start=None, explicit=False):
@@ -52,8 +61,9 @@ def find_root(start=None, explicit=False):
     explicit が偽なら start（既定はカレントディレクトリ）から上にたどり、最初に見つかった pyproject.toml で決める。
     それが別のプロジェクトのものならそこで止めてエラーにする（events/ があるだけのフォルダは採らない）。
     explicit が真（--root）なら start そのものが CAIMawaru のリポジトリかを確かめる。
+    pyproject.toml が読めないときは、どちらでもそのことを伝えてエラーにする。
     """
-    here = Path(start or Path.cwd()).resolve()
+    here = _start_dir(start)
     if explicit:
         pyproject = here / "pyproject.toml"
         if not pyproject.is_file():
