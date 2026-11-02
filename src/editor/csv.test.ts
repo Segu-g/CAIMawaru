@@ -90,16 +90,42 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
     expect(bytes(out).slice(0, 3)).not.toEqual([0xef, 0xbb, 0xbf]);
   });
 
-  it('コメントの行はその位置に、最初の値だけを1つの値として書く（必要なら「"」で囲む）', () => {
-    const text = 'id,url,note,checkedAt\r\n# 確認中,,,\r\na-01,https://example.com/m,,\r\n"#あとで, 見る",x,y\r\n#末尾\r\n';
+  it('コメントの行はその位置に、読んだ値をすべてそのまま書く（数を変えず、空欄で埋めない）', () => {
+    const text = 'id,url,note,checkedAt\r\n# 確認中,,,\r\na-01,https://example.com/m,,\r\n#末尾\r\n#2つ, 前後の空白 \r\n';
     const { rows } = parseCsv(text);
     expect(rows).toEqual([
-      { comment: '# 確認中' },
+      { comment: ['# 確認中', '', '', ''] },
       values({ id: 'a-01', url: 'https://example.com/m', note: '', checkedAt: '' }),
-      { comment: '#あとで, 見る' },
-      { comment: '#末尾' },
+      { comment: ['#末尾'] },
+      { comment: ['#2つ', ' 前後の空白 '] },
     ]);
-    expect(roundTrip(text)).toBe('id,url,note,checkedAt\r\n# 確認中\r\na-01,https://example.com/m,,\r\n"#あとで, 見る"\r\n#末尾\r\n');
+    expect(roundTrip(text)).toBe(text);
+  });
+
+  it('サークルの行をまるごとコメントにしたものは、値も数もそのまま残す', () => {
+    const text =
+      'id,space,event,name,kana,penNames,tags,adult,x,pixiv,booth,web,notes,source\r\n' +
+      '#a-02,A-02,サンプル即売会,まどろみ書房,,作家2,,0,,,,https://example.com/circle2,,架空の公式サークル一覧\r\n' +
+      'a-03-a-04,"A-03,A-04",サンプル即売会,青い鳥工房,,作家3,,0,,,,https://example.com/circle3,,架空の公式サークル一覧\r\n';
+    const { rows } = parseCsv(text);
+    expect(rows[0]).toEqual({
+      comment: ['#a-02', 'A-02', 'サンプル即売会', 'まどろみ書房', '', '作家2', '', '0', '', '', '', 'https://example.com/circle2', '', '架空の公式サークル一覧'],
+    });
+    expect(roundTrip(text, CIRCLE_COLS)).toBe(text);
+  });
+
+  it('「,」「"」改行を含むコメントの行は必要な値だけ「"」で囲む', () => {
+    const text = 'id,url,note,checkedAt\r\n"#あとで, 見る","say ""hi""","複数\n行",x\r\n';
+    expect(parseCsv(text).rows).toEqual([{ comment: ['#あとで, 見る', 'say "hi"', '複数\n行', 'x'] }]);
+    expect(roundTrip(text)).toBe(text);
+    // 余計な囲みは外れる（Python の csv と同じ書き方にそろう）
+    expect(roundTrip('id,url\r\n"#メモ","a"\r\n', ['id', 'url'])).toBe('id,url\r\n#メモ,a\r\n');
+  });
+
+  it('列名より値が多いコメントの行は読めて、そのまま書く', () => {
+    const text = 'id,url\r\n#メモ,a,b,c\r\na-01,https://example.com/m\r\n';
+    expect(parseCsv(text).rows[0]).toEqual({ comment: ['#メモ', 'a', 'b', 'c'] });
+    expect(roundTrip(text, ['id', 'url'])).toBe(text);
   });
 
   it('「#」が最初の値でなければコメントではない', () => {
@@ -121,8 +147,6 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
     expect(() => parseCsv('id,url,\r\n')).toThrow('3 番目の列名が空');
     expect(() => parseCsv('id,url,id\r\n')).toThrow('「id」が重複');
     expect(() => parseCsv('id,url\r\na-01,u\r\na-02,"複数\n行",余分\r\n')).toThrow('3 行目の値が列名より多く');
-    // コメントの行は値が多くてもよい（最初の値だけを書く）
-    expect(parseCsv('id,url\r\n#メモ,a,b,c\r\n').rows).toEqual([{ comment: '#メモ' }]);
   });
 });
 

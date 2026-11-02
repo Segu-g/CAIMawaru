@@ -2,7 +2,7 @@
 // - UTF-8（BOM なし）、行末 CRLF。「,」「"」CR・LF を含む値だけ「"」で囲み、中の「"」は「""」にする（Python の csv の QUOTE_MINIMAL）
 // - 列名の行は、決まった列（CIRCLE_COLS・MENU_COLS）をこの順に、そのあとにファイルにあったほかの列を元の順に（値も残す）
 // - 行はファイルの順（足した行は最後）。足りない値は空欄。空の行と、どの値も空か空白だけの行は捨てる
-// - コメントの行（最初の値が「#」で始まる）はその位置に残し、最初の値だけを1つの値として書く
+// - コメントの行（最初の値が「#」で始まる）はその位置に残し、読んだ値をすべてそのまま書く（値の数も変えない。列名より多くてもよい）
 // - 読み込みは Python の csv.reader と同じ（囲みの中の改行・「,」は値に入る。囲みの外の CRLF・LF・CR はどれも行の終わり。BOM は除く）
 
 type Scanned = { fields: string[]; line: number };
@@ -110,8 +110,8 @@ function scan(text: string): Scanned[] {
 /** 読めない（そのまま保存すると内容が失われる）CSV */
 export class CsvError extends Error {}
 
-/** 1行。普通の行は列名 → 値、コメントの行（最初の値が「#」で始まる）は最初の値だけを持つ */
-export type CsvRow = { values: Record<string, string> } | { comment: string };
+/** 1行。普通の行は列名 → 値、コメントの行（最初の値が「#」で始まる）は読んだ値の並びをそのまま持つ */
+export type CsvRow = { values: Record<string, string> } | { comment: string[] };
 
 export type CsvTable = {
   /** ファイルの1行目（列名） */
@@ -134,7 +134,7 @@ export function parseCsv(text: string): CsvTable {
   const dup = header.find((c, i) => header.indexOf(c) !== i);
   if (dup !== undefined) throw new CsvError(`${first.line} 行目（列名）の「${dup}」が重複しています`);
   const rows = records.map(({ fields, line }): CsvRow => {
-    if (fields[0].startsWith('#')) return { comment: fields[0] };
+    if (fields[0].startsWith('#')) return { comment: fields }; // 列名より値が多くても残す
     if (fields.length > header.length) {
       throw new CsvError(`${line} 行目の値が列名より多くあります（値 ${fields.length} 個・列名 ${header.length} 個）`);
     }
@@ -153,13 +153,13 @@ function quote(value: string): string {
 }
 
 /** 書く1行。値（列名 → 値）か、コメントの行 */
-export type CsvOutRow = { values: Record<string, string | undefined> } | { comment: string };
+export type CsvOutRow = { values: Record<string, string | undefined> } | { comment: readonly string[] };
 
 /**
  * 列名の行と各行を CSV にする（UTF-8・BOM なし・行末 CRLF・必要なときだけ「"」で囲む。Python の csv と同じ書き方）。
- * 足りない値は空欄。コメントの行は最初の値だけを1つの値として書く。
+ * 足りない値は空欄。コメントの行は読んだ値をそのまま（数も変えず、空欄で埋めずに）書く。
  */
 export function formatCsv(columns: readonly string[], rows: readonly CsvOutRow[]): string {
   const line = (values: (string | undefined)[]) => values.map((v) => quote(v ?? '')).join(',') + '\r\n';
-  return line([...columns]) + rows.map((row) => ('comment' in row ? line([row.comment]) : line(columns.map((c) => row.values[c])))).join('');
+  return line([...columns]) + rows.map((row) => ('comment' in row ? line([...row.comment]) : line(columns.map((c) => row.values[c])))).join('');
 }

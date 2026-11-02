@@ -11,12 +11,12 @@ export type MenuCol = (typeof MENU_COLS)[number];
 
 /**
  * 表の1行。key は画面の中だけで使う番号（ファイルには書かない）。
- * comment はコメントの行（最初の値が「#」で始まる行）の最初の値で、そのときの values は空。一覧には出さず、そのまま書き戻す
+ * comment はコメントの行（最初の値が「#」で始まる行）の値の並びで、そのときの values は空。一覧には出さず、そのまま書き戻す
  */
-export type Row = { key: number; values: Record<string, string>; comment?: string };
+export type Row = { key: number; values: Record<string, string>; comment?: string[] };
 
 let nextKey = 1;
-export function newRow(values: Record<string, string>, comment?: string): Row {
+export function newRow(values: Record<string, string>, comment?: string[]): Row {
   return comment === undefined ? { key: nextKey++, values } : { key: nextKey++, values, comment };
 }
 

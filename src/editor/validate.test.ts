@@ -30,7 +30,7 @@ describe('サークルの確認', () => {
       circle({ space: 'A-01', name: '' }),
       circle({ id: 'a-01', name: '同じid', x: 'example.com/x', adult: 'yes' }),
       circle({ name: 'idなし' }),
-      newRow({}, '#コメント'), // コメントの行（csv.ts が見分ける）は確かめない
+      newRow({}, ['#コメント']), // コメントの行（csv.ts が見分ける）は確かめない
     ]);
     expect(messages(issues)).toEqual([
       'A-01: サークル名（name）が空です',
@@ -53,7 +53,7 @@ describe('お品書きの確認', () => {
         menu({ id: 'a-01', url: 'not a url' }),
         menu({ id: 'a-01', url: 'https://x.com/example_user', checkedAt: '1/2' }),
         menu({ id: 'a-01', url: 'https://example.com/m?ref=1' }),
-        newRow({}, '#あとで'),
+        newRow({}, ['#あとで', '']),
       ],
       circles,
     );
