@@ -20,24 +20,47 @@ import sys
 from datetime import date
 
 from caimawaru import build
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, is_http_url, read_csv
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, circle_id, is_http_url, read_csv
 
+# 照合の規則はエディタ（src/editor/menuMatch.ts）と同じ。tools/tests/fixtures/x_urls.json の例を両方のテストが確かめる。
+# re.ASCII: 大文字小文字を区別しない照合で、[A-Za-z] が K（ケルビン記号）などに当たらないようにする（JavaScript と同じ）
 X_POST = re.compile(
-    r"^https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/status/(\d+)", re.IGNORECASE
+    r"https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/status/([0-9]+)", re.IGNORECASE | re.ASCII
 )
+X_PROFILE = re.compile(
+    r"https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/?(?:[?#].*)?", re.IGNORECASE | re.ASCII | re.DOTALL
+)
+# プロフィールの URL の形でも、アカウントではない X のページ
+NOT_ACCOUNTS = frozenset({
+    "home", "search", "explore", "i", "intent", "share", "hashtag", "messages", "notifications", "settings",
+    "compose", "login", "signup", "tos", "privacy",
+})
 
 
 def normalize_url(url):
-    """Xの投稿URLは https://x.com/<ID>/status/<番号> の形にそろえ、追跡用パラメータを落とす。"""
+    """Xの投稿URLは https://x.com/<ID>/status/<番号> の形にそろえ、追跡用パラメータを落とす。
+
+    (URL, 投稿したアカウントの ID) を返す。X の投稿でなければ ID は None。前後の空白は除く。
+    """
+    url = url.strip()
     m = X_POST.match(url)
     if m:
         return f"https://x.com/{m.group(1)}/status/{m.group(2)}", m.group(1)
     return url, None
 
 
+def profile_handle(url):
+    """X のプロフィールの URL ならアカウントの ID（小文字）。投稿・検索などのページは None。
+
+    www.・mobile.・twitter.com、末尾の「/」、クエリ（?lang=ja）・「#」以降は受け付ける。
+    """
+    m = X_PROFILE.fullmatch(url.strip())
+    return m.group(1).lower() if m and m.group(1).lower() not in NOT_ACCOUNTS else None
+
+
 def x_handle(circle):
-    m = re.match(r"^https?://(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/?$", circle.get("x", ""), re.IGNORECASE)
-    return m.group(1).lower() if m else None
+    """サークルの x 列のアカウントの ID（小文字）。"""
+    return profile_handle(circle.get("x") or "")
 
 
 def find_circles(circles, query):
@@ -87,7 +110,7 @@ def choose(candidates, label):
 
 def resolve(circles, url, query):
     """登録するURLとサークルを決める。失敗したら None。"""
-    url, handle = normalize_url(url.strip())
+    url, handle = normalize_url(url)
     if not is_http_url(url):
         print(f"  ✗ URLではありません: {url}", file=sys.stderr)
         return None
@@ -113,7 +136,8 @@ def parse_stdin_line(line):
 
 def run(event, urls, circle=None, note="", dry_run=False):
     """登録する。終了コードを返す。"""
-    circles = read_csv(event.circles_csv, CIRCLE_COLS)
+    # id が空欄のサークルはスペース番号から作った id で扱う（build と同じ。menus.csv にはこの id を書く）
+    circles = [{**c, "id": circle_id(c)} for c in read_csv(event.circles_csv, CIRCLE_COLS)]
     table = Table(event.menus_csv, MENU_COLS)  # 書き戻す（ファイルにだけある列・「#」の行も残す）
     known = {(m["id"], m["url"]) for m in read_csv(event.menus_csv, MENU_COLS)}
 

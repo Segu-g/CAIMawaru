@@ -93,6 +93,9 @@ uv run caimawaru menu <eventId> -                                               
 ```
 
 サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `uv run caimawaru data` まで自動で実行します。
+id 列が空のサークルは、スペース番号から作った id（`A-10` → `a-10`）で menus.csv に書きます。
+X の投稿からの自動判定と @X の ID での指定は、サークルの `x` 列のプロフィールの URL（`x.com`・`twitter.com`、`www.`・`mobile.` 付き、
+末尾の `/`・`?lang=ja`・`#…` があってもよい）と照らし合わせます。`x.com/home`・`x.com/search` などアカウントではないページは照合しません。
 
 ### イベントデータを確かめる・編集する
 

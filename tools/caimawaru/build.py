@@ -14,7 +14,7 @@ from datetime import date
 
 from caimawaru import importers
 from caimawaru import layout as layout_mod
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, DuplicateKeyError, is_http_url, make_id, read_csv
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, DuplicateKeyError, circle_id, is_http_url, read_csv
 
 LINK_KEYS = ("x", "pixiv", "booth", "web")
 POST_URL = re.compile(r"^https://(x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/\d+")
@@ -143,7 +143,7 @@ def check_circles(event, r):
     circles, seen = [], {}
     for line, row in enumerate(read_csv(event.circles_csv, CIRCLE_COLS, r.warnings), start=2):
         where = f"circles.csv:{line}"
-        cid = row.get("id") or make_id(row.get("space", ""))
+        cid = circle_id(row)
         if not cid:
             r.errors.append(f"{where}: id もスペース番号もありません")
             continue

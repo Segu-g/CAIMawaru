@@ -114,4 +114,9 @@ pnpm build:editor ───────▶ tsc ─▶ vite build --config vite.e
 - イベントデータの CSV の読み書き（`tools/caimawaru/project.py` の `CIRCLE_COLS`・`MENU_COLS`・`read_table`・`format_csv`・`make_id` と、
   `src/editor/csv.ts`・`src/editor/model.ts`）。docs/event-data.md の「CSV の書き方」（列の並び・CRLF・囲み方・空の行・`#` の行・ほかの列）。
   `src/editor/csv.test.ts` が events/example の CSV を読み直して同じバイト列になることと、それぞれの規則を確かめる
+- サークルの id（空欄ならスペース番号から作る。`tools/caimawaru/project.py` の `circle_id` と `src/editor/model.ts` の `circleId`）。
+  build・import・menu・編集コマンドはどれも `circle_id` を使う
+- X の URL の照合（`tools/caimawaru/menu.py` の `normalize_url`・`profile_handle`・`x_handle`・`find_circles` と `src/editor/menuMatch.ts` の
+  `normalizeUrl`・`profileHandle`・`xHandleOf`・`findCircles`）。例は `tools/tests/fixtures/x_urls.json` にまとめ、
+  `tools/tests/test_menu.py` と `src/editor/menuMatch.test.ts` がそれぞれこのファイルを読んで確かめる（互いのコードは呼ばない）
 - 簡単な検証（`src/editor/validate.ts`）は `build.py` のエラーの一部と同じ規則。正式な検証は `build.py` だけ

@@ -38,7 +38,7 @@ from pathlib import Path
 
 from caimawaru import build
 from caimawaru.menu import describe, find_circles, normalize_url
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, DuplicateKeyError, Event, Table, is_comment, make_id, parse_json
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, DuplicateKeyError, Event, Table, circle_id, is_comment, make_id, parse_json
 
 
 # --- CSV を書き戻す形のまま扱う ---
@@ -55,8 +55,8 @@ def _views(table, derive_id):
         if not _is_data_row(row):
             continue
         v = {name: (row.get(key) or "").strip() for name, key in table.names.items()}
-        if derive_id and not v["id"]:
-            v["id"] = make_id(v.get("space", ""))
+        if derive_id:
+            v["id"] = circle_id(v)
         v["_row"] = i
         out.append(v)
     return out
@@ -285,7 +285,7 @@ def circle_set(event, query, fields, force=False, dry_run=False, no_build=False)
         row[key] = value
     files = {event.circles_csv: circles.text()}
 
-    new_id = (row.get("id") or "").strip() or make_id((row.get("space") or "").strip())
+    new_id = circle_id(row)
     if new_id != c["id"]:
         if any(o["id"] == new_id for o in views if o is not c):
             raise CliError(f"id '{new_id}' のサークルはすでにあります")

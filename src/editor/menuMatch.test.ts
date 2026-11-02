@@ -4,6 +4,7 @@ import { addCircle, addMenu, applyDefaults, changeCircleId, idUsers, moveAside, 
 import { isComposing, keyAction } from './keys';
 import { checkMenuUrl, circleHay, findCircles, normalizeUrl, profileHandle, searchCircles, xHandleOf } from './menuMatch';
 import { loadMarks, parseMarks, saveMarks, setMark } from './workMarks';
+import xUrlsJson from '../../tools/tests/fixtures/x_urls.json?raw';
 
 // 架空のサークルとアカウント
 const circlesCsv =
@@ -31,20 +32,23 @@ describe('URL の正規化（menu.py の normalize_url と同じ）', () => {
     expect(profileHandle('https://x.com/a/status/1')).toBeNull();
   });
 
-  it('サークルの x 列の照合は menu.py の x_handle と同じ（www.・mobile.・クエリ・# は照合しない。x.com/home も ID として扱う）', () => {
-    const h = (x: string) => xHandleOf({ x });
+  it('サークルの x 列の照合は profileHandle と同じ規則（menu.py の x_handle と同じ）', () => {
     expect(xHandleOf(byName(open(), 'まどろみ書房').values)).toBe('madoromi_ex');
-    expect(h(' https://x.com/Hoshikuzu_Ex ')).toBe('hoshikuzu_ex');
-    expect(h('http://twitter.com/a_b/')).toBe('a_b');
-    expect(h('https://www.x.com/a_b')).toBeNull();
-    expect(h('https://mobile.twitter.com/a_b')).toBeNull();
-    expect(h('https://x.com/a_b?lang=ja')).toBeNull();
-    expect(h('https://x.com/a_b#a')).toBeNull();
-    expect(h('https://x.com/a_b//')).toBeNull();
-    expect(h('https://x.com/abcdefghijklmnop')).toBeNull(); // 16 文字
-    expect(h('https://x.com/home')).toBe('home');
-    expect(h('https://x.com/search')).toBe('search');
-    expect(h('')).toBeNull();
+    expect(xHandleOf({ x: 'https://www.x.com/A_B?lang=ja' })).toBe('a_b');
+    expect(xHandleOf({ x: 'https://x.com/home' })).toBeNull();
+    expect(xHandleOf({})).toBeNull();
+  });
+});
+
+// tools/tests/test_menu.py も同じ例を確かめる（CLI とエディタの規則がずれないように）
+describe('X の URL の例（tools/tests/fixtures/x_urls.json）', () => {
+  const cases = JSON.parse(xUrlsJson) as { profileHandle: [string, string | null][]; normalizeUrl: [string, string, string | null][] };
+  it.each(cases.profileHandle)('profileHandle(%j) → %j', (url, expected) => {
+    expect(profileHandle(url)).toBe(expected);
+    expect(xHandleOf({ x: url })).toBe(expected);
+  });
+  it.each(cases.normalizeUrl)('normalizeUrl(%j) → %j', (raw, url, handle) => {
+    expect(normalizeUrl(raw)).toEqual({ url, handle });
   });
 });
 

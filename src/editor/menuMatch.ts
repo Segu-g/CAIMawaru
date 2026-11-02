@@ -4,12 +4,10 @@ import type { Doc } from './doc';
 import { circleId, isDataRow, isHttpUrl, type Row } from './model';
 
 const X_POST = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d+)/i;
-// サークルの x 列のアカウント（menu.py の x_handle と同じ形だけ。照合の規則を CLI とそろえる）
-const X_HANDLE = /^https?:\/\/(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/?$/i;
-// 貼り付けたプロフィールの URL（x 列に登録するときは https://x.com/<ID> の形にそろえて書くので、ここは広めに受け付ける）
-const X_PROFILE = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/?(?:[?#].*)?$/i;
+// プロフィールの URL（menu.py の X_PROFILE と同じ。tools/tests/fixtures/x_urls.json の例を両方のテストが確かめる）
+const X_PROFILE = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/?(?:[?#][\s\S]*)?$/i;
 const X_PAGE = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\//i;
-// プロフィールの URL に見えても、アカウントではない X のページ
+// プロフィールの URL に見えても、アカウントではない X のページ（menu.py の NOT_ACCOUNTS と同じ）
 const NOT_ACCOUNTS = new Set(['home', 'search', 'explore', 'i', 'intent', 'share', 'hashtag', 'messages', 'notifications', 'settings', 'compose', 'login', 'signup', 'tos', 'privacy']);
 
 /**
@@ -23,21 +21,17 @@ export function normalizeUrl(raw: string): { url: string; handle: string | null 
 }
 
 /**
- * 貼り付けた URL が X のプロフィールなら、そのアカウントの ID（小文字）。投稿・検索などのページは null。
- * 照合（xHandleOf）より広く受け付ける（www.・mobile.・?lang=ja など）。登録するときは profileUrl の形で書く
+ * X のプロフィールの URL なら、そのアカウントの ID（小文字）。投稿・検索などのページは null（menu.py の profile_handle と同じ）。
+ * www.・mobile.・twitter.com、末尾の「/」、クエリ（?lang=ja）・「#」以降は受け付ける。x 列に登録するときは profileUrl の形で書く
  */
 export function profileHandle(url: string): string | null {
   const m = X_PROFILE.exec(url.trim());
   return m && !NOT_ACCOUNTS.has(m[1].toLowerCase()) ? m[1].toLowerCase() : null;
 }
 
-/**
- * サークルの x 列のアカウントの ID（小文字）。menu.py の x_handle と同じ規則（値の前後の空白を除いて
- * https://x.com/<ID> か https://twitter.com/<ID>、末尾の「/」は可。www.・クエリなどは照合しない）
- */
+/** サークルの x 列のアカウントの ID（小文字。menu.py の x_handle と同じく profileHandle の規則） */
 export function xHandleOf(values: Record<string, string>): string | null {
-  const m = X_HANDLE.exec((values.x ?? '').trim());
-  return m ? m[1].toLowerCase() : null;
+  return profileHandle(values.x ?? '');
 }
 
 /** アカウントの ID（@ なし）→ プロフィールの URL（x 列に書く形） */
