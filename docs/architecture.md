@@ -73,6 +73,8 @@ cli.py ─┬▶ build.py ──▶ layout.py
 importers/sockbase.py ──（--fetch のときだけ）──▶ list.sockbase.net（標準ライブラリの urllib で HTML を取得して保存）
 ```
 
+- build・importing・menu・edit は、警告の表示と --dry-run の文言を `console.py` から使う（ファイルは扱わない）
+
 - 外部のコマンドは起動しない（`subprocess` を使わない）。ネットワークに出るのは `import --fetch` だけ
 - 島の番号の振り方・島の記号の位置・初期表示の範囲は `layout.py` だけが決める（ページは展開済みのセルを描く）
 

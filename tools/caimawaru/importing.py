@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import NamedTuple
 
 from caimawaru import build, importers
-from caimawaru.project import (CIRCLE_COLS, DRY_RUN_NOTICE, LIST_COLS, MENU_COLS, CliError, Table, circle_id, is_comment, make_id,
-                               print_warnings, split_list, stripped)
+from caimawaru.console import DRY_RUN_NOTICE, print_warnings
+from caimawaru.project import (CIRCLE_COLS, LIST_COLS, MENU_COLS, CliError, Table, circle_id, is_comment, make_id, split_list,
+                               stripped)
 from caimawaru.xurl import X_ORIGIN
 
 TRUE_WORDS = {"1", "true", "yes", "y", "有", "あり", "○", "◯", "r18", "成人向け"}

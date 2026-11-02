@@ -38,9 +38,10 @@ from pathlib import Path
 from typing import NamedTuple
 
 from caimawaru import build
+from caimawaru.console import DRY_RUN_NOTICE, print_warnings
 from caimawaru.menu import describe, find_circles
-from caimawaru.project import (CIRCLE_COLS, DRY_RUN_NOTICE, MENU_COLS, CliError, DuplicateKeyError, Event, Table, circle_id,
-                               format_json, is_comment, make_id, parse_json, print_warnings, stripped)
+from caimawaru.project import (CIRCLE_COLS, MENU_COLS, CliError, DuplicateKeyError, Event, Table, circle_id, format_json,
+                               is_comment, make_id, parse_json, stripped)
 from caimawaru.xurl import normalize_url
 
 

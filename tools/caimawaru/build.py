@@ -13,8 +13,8 @@ from datetime import date
 
 from caimawaru import importers
 from caimawaru import layout as layout_mod
-from caimawaru.project import (CIRCLE_COLS, MENU_COLS, DuplicateKeyError, circle_id, format_json, is_http_url,
-                               print_warnings, read_csv, split_list)
+from caimawaru.console import print_warnings
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, DuplicateKeyError, circle_id, format_json, is_http_url, read_csv, split_list
 from caimawaru.xurl import is_x_page, normalize_url, x_handle
 
 LINK_KEYS = ("x", "pixiv", "booth", "web")

@@ -3,14 +3,11 @@ import csv
 import io
 import json
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
 EVENT_ID = re.compile(r"[0-9A-Za-z][0-9A-Za-z_-]*")
-
-DRY_RUN_NOTICE = "（--dry-run のため書き込みません）"
 
 
 class CliError(Exception):
@@ -37,11 +34,6 @@ def parse_json(text):
 def format_json(value):
     """イベントのフォルダに書く JSON の形（インデント 2・日本語はそのまま・末尾に改行）。"""
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
-
-
-def print_warnings(messages):
-    for message in messages:
-        print(f"警告: {message}", file=sys.stderr)
 
 
 def find_events_dir(events_dir=None):

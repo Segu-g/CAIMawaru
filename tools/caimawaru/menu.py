@@ -20,7 +20,8 @@ from datetime import date
 
 from caimawaru import build
 from caimawaru.build import circle_spaces
-from caimawaru.project import CIRCLE_COLS, DRY_RUN_NOTICE, MENU_COLS, Table, circle_id, is_http_url, read_csv, stripped
+from caimawaru.console import DRY_RUN_NOTICE
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, circle_id, is_http_url, read_csv, stripped
 from caimawaru.xurl import normalize_url, x_handle
 
 STDIN = "-"  # URL の代わりに書くと、標準入力から1行ずつ読む
