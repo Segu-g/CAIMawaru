@@ -3,8 +3,10 @@ import { useMemo, useState } from 'react';
 import CircleForm from './CircleForm';
 import type { Doc } from './doc';
 import { addCircle, type Dirty } from './edit';
+import { circleHay, searchCircles } from './menuMatch';
 import { circleId, isDataRow } from './model';
 import type { Issue } from './validate';
+import type { Marks } from './workMarks';
 
 type Props = {
   doc: Doc;
@@ -12,9 +14,12 @@ type Props = {
   selected: number | null;
   onSelect: (key: number | null) => void;
   edit: (fn: (doc: Doc) => Doc, ...which: (keyof Dirty)[]) => void;
+  marks: Marks;
 };
 
-export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Props) {
+export default function CirclesTab({ doc, issues, selected, onSelect, edit, marks }: Props) {
+  // 足した行に、最初に入力したとき入れる値（直前のサークルの参加イベント・出典）
+  const [defaults, setDefaults] = useState<{ key: number; values: Record<string, string> } | null>(null);
   const [q, setQ] = useState('');
   const [event, setEvent] = useState('');
   const [menu, setMenu] = useState<'' | 'yes' | 'no'>('');
@@ -36,17 +41,17 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
   }, [doc.menus]);
   const withIssue = useMemo(() => new Set(issues.filter((i) => i.where === 'circle' && i.level === 'error').map((i) => i.key)), [issues]);
 
+  // 検索は部分一致。スペース・id・@X の完全一致を先頭に並べる（ほかはファイルの順）
   const shown = useMemo(() => {
-    const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return rows.filter((c) => {
+    const filtered = rows.filter((c) => {
       const v = c.values;
       if (event && v.event.trim() !== event) return false;
       const n = menuCount.get(circleId(v)) ?? 0;
       if (menu === 'yes' && !n) return false;
       if (menu === 'no' && n) return false;
-      const hay = [v.id, v.space, v.name, v.kana, v.penNames, v.event, v.tags, v.x, v.notes].join('\n').toLowerCase();
-      return words.every((w) => hay.includes(w));
+      return true;
     });
+    return searchCircles(filtered, q, circleHay);
   }, [rows, q, event, menu, menuCount]);
 
   const current = selected === null ? undefined : doc.circles.find((c) => c.key === selected);
@@ -56,6 +61,8 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
     const res = addCircle(doc);
     const row = res.doc.circles[res.doc.circles.length - 1];
     edit((d) => ({ ...d, circles: [...d.circles, row] }), 'circles');
+    const last = dataRows[dataRows.length - 1];
+    setDefaults(last ? { key: res.key, values: { event: last.values.event.trim(), source: last.values.source.trim() } } : null);
     setQ('');
     setEvent('');
     setMenu('');
@@ -72,6 +79,10 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
             onChange={(e) => setQ(e.target.value)}
             placeholder="検索（サークル名・スペース・id・作家名など）"
             aria-label="検索"
+            onKeyDown={(e) => {
+              // Enter で先頭のサークルを開く（日本語の変換の確定は除く）
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && shown.length) onSelect(shown[0].key);
+            }}
           />
           <select value={event} onChange={(e) => setEvent(e.target.value)} aria-label="参加イベント">
             <option value="">すべてのイベント</option>
@@ -118,6 +129,7 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
                       <button type="button" className="ed-row-link" onClick={(e) => { e.stopPropagation(); onSelect(c.key); }}>
                         {v.name || (isDataRow(v, c.extra) ? '（名前なし）' : '（空の行。保存しません）')}
                       </button>
+                      {marks[id]?.later && <span className="ed-badge star" title="作業用の印（このブラウザだけ）">☆</span>}
                     </td>
                     <td>{v.event}</td>
                     <td className="nowrap ed-mono">
@@ -136,7 +148,8 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit }: Pr
       </section>
       <section className="ed-detail-pane" aria-label="サークルの編集">
         {current ? (
-          <CircleForm key={current.key} doc={doc} circle={current} issues={issues} edit={edit} onRemoved={() => onSelect(null)} />
+          <CircleForm key={current.key} doc={doc} circle={current} issues={issues} edit={edit} onRemoved={() => onSelect(null)}
+            defaults={defaults?.key === current.key ? defaults.values : undefined} onAddNext={add} onSelect={onSelect} />
         ) : (
           <p className="empty">一覧からサークルを選ぶと、ここで編集できます</p>
         )}

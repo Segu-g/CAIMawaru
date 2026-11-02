@@ -1,7 +1,8 @@
 // 1つのサークルの編集（circles.csv の1行）と、そのサークルのお品書き（menus.csv の行）。
-import { useEffect, useMemo, useRef, useState, type InputHTMLAttributes } from 'react';
+import { useEffect, useMemo, useRef, useState, type InputHTMLAttributes, type Ref } from 'react';
 import type { Doc } from './doc';
-import { addMenu, changeCircleId, menusOf, removeCircle, sameIdCircles, updateCircle, type Dirty } from './edit';
+import { addMenu, applyDefaults, changeCircleId, menusOf, moveKeepingId, removeCircle, sameIdCircles, spaceUsers, updateCircle, type Dirty } from './edit';
+import { checkMenuUrl } from './menuMatch';
 import MenuRow from './MenuRow';
 import { circleId, isDataRow, type Row } from './model';
 import type { Issue } from './validate';
@@ -12,23 +13,29 @@ type Props = {
   issues: Issue[];
   edit: (fn: (doc: Doc) => Doc, ...which: (keyof Dirty)[]) => void;
   onRemoved: () => void;
+  /** 足したばかりの行に、最初の入力と一緒に入れる値（参加イベント・出典） */
+  defaults?: Record<string, string>;
+  /** 「続けて追加」 */
+  onAddNext: () => void;
+  onSelect: (key: number) => void;
 };
 
 // 1行の入力欄（docs/event-data.md の circles.csv の列）
-const TEXT_FIELDS: { col: string; label: string; hint?: string; type?: string }[] = [
-  { col: 'name', label: 'サークル名（name・必須）' },
-  { col: 'kana', label: '読み（kana）', hint: '検索と並べ替えに使う' },
+// 登録でよく入れる欄を先に（スペース → 名前 → イベント → 作家名 → X → 出典）、そのあとにほかの欄
+const MAIN_FIELDS: { col: string; label: string; hint?: string; type?: string }[] = [
   { col: 'penNames', label: '作家名（penNames）', hint: '複数は「;」区切り' },
+  { col: 'x', label: 'X（x）', type: 'url', hint: 'https://x.com/<ID>（お品書き探しで X の投稿と照らし合わせる）' },
+];
+const MORE_FIELDS: { col: string; label: string; hint?: string; type?: string }[] = [
+  { col: 'kana', label: '読み（kana）', hint: '検索と並べ替えに使う' },
   { col: 'tags', label: 'タグ（tags）', hint: '掲載側で付けるタグ。「;」区切り' },
-  { col: 'x', label: 'X（x）', type: 'url' },
   { col: 'pixiv', label: 'pixiv（pixiv）', type: 'url' },
   { col: 'booth', label: 'BOOTH（booth）', type: 'url' },
   { col: 'web', label: 'Web サイト（web）', type: 'url' },
-  { col: 'source', label: '出典（source）', hint: '主催の公式リストの名前や URL' },
 ];
 
 /** 入力中は手元に持ち、確定（フォーカスを外す・Enter）したときに反映する入力欄（id・スペース番号） */
-function DraftInput({ value, onCommit, ...rest }: { value: string; onCommit: (v: string) => boolean } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+function DraftInput({ value, onCommit, ref, ...rest }: { value: string; onCommit: (v: string) => boolean; ref?: Ref<HTMLInputElement> } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
   const [draft, setDraft] = useState(value);
   const busy = useRef(false); // 確認のダイアログでフォーカスが外れても、2回確定しない
   useEffect(() => setDraft(value), [value]);
@@ -44,6 +51,7 @@ function DraftInput({ value, onCommit, ...rest }: { value: string; onCommit: (v:
   return (
     <input
       {...rest}
+      ref={ref}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -55,7 +63,22 @@ function DraftInput({ value, onCommit, ...rest }: { value: string; onCommit: (v:
   );
 }
 
-export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Props) {
+type Pending =
+  /** スペース番号を変えると id（スペース番号から作ったもの）も変わるので、どうするかを選ぶ */
+  | { kind: 'move'; space: string; after: string }
+  /** 変えたスペースをほかのサークルも使っている（入れ替えを出す） */
+  | { kind: 'clash'; before: string; others: Row[] };
+
+export default function CircleForm({ doc, circle, issues, edit: editDoc, onRemoved, defaults, onAddNext, onSelect }: Props) {
+  // 足したばかりの行には、最初の入力と一緒に既定値を入れる（何も入れずにやめたら書かない、を保つ）
+  const edit: Props['edit'] = (fn, ...which) => editDoc((d) => fn(defaults ? applyDefaults(d, circle.key, defaults) : d), ...which);
+  const blankRow = !isDataRow(circle.values, circle.extra);
+  const spaceInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (blankRow) spaceInput.current?.focus();
+    // 開いたときだけ（足したばかりの行なら、スペース番号の欄へ）
+  }, []);
+  const [pending, setPending] = useState<Pending | null>(null);
   const v = circle.values;
   const id = circleId(v);
   const menus = menusOf(doc, circle);
@@ -65,6 +88,7 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
   const events = useMemo(() => [...new Set(doc.circles.filter((c) => isDataRow(c.values, c.extra)).map((c) => c.values.event.trim()).filter(Boolean))].sort(), [doc.circles]);
   const [newUrl, setNewUrl] = useState('');
   const [newNote, setNewNote] = useState('');
+  const newCheck = newUrl.trim() ? checkMenuUrl(doc, circle.key, newUrl) : null;
 
   const set = (col: string, value: string) => edit((d) => updateCircle(d, circle.key, col, value), 'circles');
 
@@ -74,6 +98,16 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
   /** id かスペース番号を変える。id が変わってお品書きがあるときは、付け替えることを利用者に確かめる */
   const commitIdField = (col: 'id' | 'space', value: string): boolean => {
     const after = circleId({ ...v, [col]: value });
+    if (col === 'space') {
+      // id 列が空のサークルを動かすと id が変わる。公開後は id を変えたくないので、どうするかを選んでもらう
+      if (!blankRow && !v.id.trim() && id && after !== id && !shared.length) {
+        setPending({ kind: 'move', space: value, after });
+        return false;
+      }
+      const others = spaceUsers(doc, circle.key, value);
+      if (others.length && value.trim()) setPending({ kind: 'clash', before: v.space, others });
+      else setPending(null);
+    }
     const plan = changeCircleId(doc, circle.key, col, value);
     if (after !== id && menus.length > 0) {
       if (!after) {
@@ -108,9 +142,28 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
     onRemoved();
   };
 
+  /** スペースを変える（id はそのまま。id 列が空なら今の id を書く） */
+  const moveKeep = (space: string) => {
+    edit((d) => moveKeepingId(d, circle.key, space), 'circles');
+    const others = spaceUsers(doc, circle.key, space);
+    setPending(others.length && space.trim() ? { kind: 'clash', before: v.space, others } : null);
+  };
+  /** スペースを変え、id も変える（お品書きも付け替える） */
+  const moveWithId = (space: string) => {
+    const plan = changeCircleId(doc, circle.key, 'space', space);
+    edit((d) => changeCircleId(d, circle.key, 'space', space).doc, ...plan.dirty);
+    const others = spaceUsers(doc, circle.key, space);
+    setPending(others.length && space.trim() ? { kind: 'clash', before: v.space, others } : null);
+  };
+  /** 同じスペースのサークルを、このサークルの元のスペースへ（入れ替え。相手の id も変えない） */
+  const swapWith = (other: Row, space: string) => {
+    edit((d) => moveKeepingId(d, other.key, space), 'circles');
+    setPending(null);
+  };
+
   const add = () => {
-    const url = newUrl.trim();
-    if (!url) return;
+    if (!newCheck || newCheck.error) return;
+    const url = newCheck.url;
     const res = addMenu(doc, id, url, newNote.trim());
     const row = res.doc.menus[res.doc.menus.length - 1];
     edit((d) => ({ ...d, menus: [...d.menus, row] }), 'menus');
@@ -119,7 +172,16 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
   };
 
   return (
-    <div className="ed-form">
+    <div
+      className="ed-form"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          (document.activeElement as HTMLElement | null)?.blur?.();
+          setTimeout(onAddNext, 0);
+        }
+      }}
+    >
       <div className="ed-form-head">
         <h2>{v.name || '（名前なし）'}</h2>
         <button type="button" className="danger" onClick={remove}>削除</button>
@@ -141,27 +203,79 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
       <div className="ed-fields">
         <label>
           <span>スペース番号（space）</span>
-          <DraftInput value={v.space} onCommit={(s) => commitIdField('space', s)} placeholder="A-01（複数は A-01,A-02）" />
+          <DraftInput ref={spaceInput} value={v.space} onCommit={(s) => commitIdField('space', s)} placeholder="A-01（複数は A-01,A-02）" />
         </label>
         <label>
-          <span>id</span>
-          <DraftInput value={v.id} onCommit={(s) => commitIdField('id', s)} placeholder={id ? `空欄なら ${id}` : '空欄ならスペース番号から作る'} className="ed-mono" />
-          <small>英数字とハイフン。menus.csv と閲覧者の ★ が参照するので、公開後は変えない</small>
+          <span>サークル名（name・必須）</span>
+          <input value={v.name} onChange={(e) => set('name', e.target.value)} />
         </label>
+        {pending?.kind === 'move' && (
+          <div className="ed-box warn wide" role="alert">
+            <p>
+              スペース番号を「{v.space}」から「{pending.space}」に変えると、id が「{id}」から「{pending.after}」に変わります（id 列が空で、スペース番号から作っているため）。
+              公開後に id が変わると、閲覧者の ★・メモがこのサークルに付かなくなります。
+            </p>
+            <div className="ed-row-buttons">
+              <button type="button" className="ed-primary" onClick={() => moveKeep(pending.space)}>id を「{id}」のまま移動（公開後はこちら）</button>
+              <button type="button" onClick={() => moveWithId(pending.space)}>
+                id も「{pending.after}」に変える{menus.length ? `（お品書き ${menus.length} 件も付け替え）` : ''}
+              </button>
+              <button type="button" onClick={() => setPending(null)}>やめる</button>
+            </div>
+          </div>
+        )}
+        {pending?.kind === 'clash' && (
+          <div className="ed-box warn wide" role="status">
+            <p>
+              「{v.space}」はほかのサークルも使っています: {pending.others.map((o) => `${o.values.space} ${o.values.name}`.trim()).join('・')}
+            </p>
+            <div className="ed-row-buttons">
+              {pending.others.length === 1 && pending.before.trim() && (
+                <button type="button" onClick={() => swapWith(pending.others[0], pending.before)}>
+                  入れ替える（{pending.others[0].values.name || pending.others[0].values.space} を {pending.before} へ。id は変えない）
+                </button>
+              )}
+              {pending.others.map((o) => (
+                <button type="button" key={o.key} onClick={() => onSelect(o.key)}>{o.values.name || o.values.space} を開く</button>
+              ))}
+              <button type="button" onClick={() => setPending(null)}>このままにする</button>
+            </div>
+          </div>
+        )}
         <label>
           <span>参加イベント（event）</span>
-          <input value={v.event} onChange={(e) => set('event', e.target.value)} list="ed-events" />
+          <input value={v.event} onChange={(e) => set('event', e.target.value)} list="ed-events" placeholder={defaults?.event || undefined} />
           <datalist id="ed-events">
             {events.map((ev) => <option key={ev} value={ev} />)}
           </datalist>
+          {defaults?.event && !v.event && <small>空欄なら、ほかの欄を入れたときに直前のサークルと同じ「{defaults.event}」が入ります</small>}
         </label>
-        {TEXT_FIELDS.map((f) => (
+        {MAIN_FIELDS.map((f) => (
           <label key={f.col}>
             <span>{f.label}</span>
             <input type={f.type ?? 'text'} value={v[f.col]} onChange={(e) => set(f.col, e.target.value)} />
             {f.hint && <small>{f.hint}</small>}
           </label>
         ))}
+        <label>
+          <span>出典（source）</span>
+          <input value={v.source} onChange={(e) => set('source', e.target.value)} placeholder={defaults?.source || undefined} />
+          <small>
+            {defaults?.source && !v.source ? `空欄なら、ほかの欄を入れたときに直前のサークルと同じ「${defaults.source}」が入ります` : '主催の公式リストの名前や URL'}
+          </small>
+        </label>
+        {MORE_FIELDS.map((f) => (
+          <label key={f.col}>
+            <span>{f.label}</span>
+            <input type={f.type ?? 'text'} value={v[f.col]} onChange={(e) => set(f.col, e.target.value)} />
+            {f.hint && <small>{f.hint}</small>}
+          </label>
+        ))}
+        <label>
+          <span>id</span>
+          <DraftInput value={v.id} onCommit={(s) => commitIdField('id', s)} placeholder={id ? `空欄なら ${id}` : '空欄ならスペース番号から作る'} className="ed-mono" />
+          <small>英数字とハイフン。menus.csv と閲覧者の ★ が参照するので、公開後は変えない</small>
+        </label>
         <label>
           <span>成人向け（adult）</span>
           <select value={v.adult} onChange={(e) => set('adult', e.target.value)}>
@@ -176,6 +290,10 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
           <textarea value={v.notes} onChange={(e) => set('notes', e.target.value)} rows={3} />
           <small>欠席などの事情（健康・家族など）は書かない</small>
         </label>
+      </div>
+      <div className="ed-row-buttons">
+        <button type="button" onClick={onAddNext} title="Ctrl+Enter">続けてサークルを追加</button>
+        <span className="meta"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
       </div>
 
       <h3>お品書き（{menus.length}）</h3>
@@ -194,7 +312,14 @@ export default function CircleForm({ doc, circle, issues, edit, onRemoved }: Pro
             onKeyDown={(e) => e.key === 'Enter' && add()} />
           <input value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="説明（例: 新刊）" aria-label="追加するお品書きの説明"
             onKeyDown={(e) => e.key === 'Enter' && add()} />
-          <button type="button" onClick={add} disabled={!newUrl.trim()}>追加</button>
+          <button type="button" onClick={add} disabled={!newCheck || !!newCheck.error}>追加</button>
+        </div>
+      )}
+      {newCheck && (
+        <div className="ed-hunt-check" aria-live="polite">
+          {newCheck.url !== newUrl.trim() && !newCheck.error && <p className="meta">登録する形: {newCheck.url}</p>}
+          {newCheck.error && <p className="ed-inline-error">{newCheck.error}</p>}
+          {newCheck.warnings.map((w, i) => <p key={i} className="ed-inline-warn">⚠ {w}</p>)}
         </div>
       )}
       <p className="meta">

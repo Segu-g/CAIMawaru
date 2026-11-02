@@ -88,6 +88,61 @@ export function updateMenu(doc: Doc, key: number, col: string, value: string, no
   return { ...doc, menus };
 }
 
+/** お品書きを差し替える（URL を変え、確認した日を今日にする）。note を渡せば説明も変える */
+export function replaceMenu(doc: Doc, key: number, url: string, note?: string, now = new Date()): Doc {
+  let next = updateMenu(doc, key, 'url', url, now);
+  if (note !== undefined) next = { ...next, menus: setValue(next.menus, key, 'note', note) };
+  return next;
+}
+
+const spacesOf = (space: string) => space.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+/** スペース番号（複数ならどれか）が重なるほかのサークル */
+export function spaceUsers(doc: Doc, key: number, space: string): Row[] {
+  const want = new Set(spacesOf(space));
+  if (!want.size) return [];
+  return doc.circles.filter((c) => c.key !== key && c.comment === undefined && isDataRow(c.values, c.extra)
+    && spacesOf(c.values.space).some((s) => want.has(s)));
+}
+
+/**
+ * スペース番号を変える。id 列が空なら、今の id（スペース番号から作ったもの）を id 列に書いてから変える。
+ * id が変わらないので、お品書きと閲覧者の ★ はそのまま（公開後の配置換え向け）
+ */
+export function moveKeepingId(doc: Doc, key: number, space: string): Doc {
+  const circle = doc.circles.find((c) => c.key === key);
+  if (!circle) return doc;
+  const id = circleId(circle.values);
+  let next = doc;
+  if (!circle.values.id.trim() && id) next = updateCircle(next, key, 'id', id);
+  return updateCircle(next, key, 'space', space);
+}
+
+/** 2つのサークルのスペース番号を入れ替える。id は変えない（id 列が空なら、今の id を書く） */
+export function swapSpaces(doc: Doc, a: number, b: number): Doc {
+  const ca = doc.circles.find((c) => c.key === a);
+  const cb = doc.circles.find((c) => c.key === b);
+  if (!ca || !cb || a === b) return doc;
+  const sa = ca.values.space;
+  const sb = cb.values.space;
+  return moveKeepingId(moveKeepingId(doc, a, sb), b, sa);
+}
+
+/**
+ * 足したまま何も入れていない行に、最初の入力と一緒に既定値（参加イベント・出典など）を入れる。
+ * 何も入れずにやめた行は書かない、を保つため、既定値は追加したときではなく最初に入力したときに入れる。
+ * すでに値がある行と、空でない列は変えない。
+ */
+export function applyDefaults(doc: Doc, key: number, defaults: Partial<Record<string, string>>): Doc {
+  const circle = doc.circles.find((c) => c.key === key);
+  if (!circle || isDataRow(circle.values, circle.extra)) return doc;
+  let next = doc;
+  for (const [col, value] of Object.entries(defaults)) {
+    if (value && !circle.values[col]?.trim()) next = updateCircle(next, key, col, value);
+  }
+  return next;
+}
+
 export function removeMenu(doc: Doc, key: number): Doc {
   return { ...doc, menus: doc.menus.filter((m) => m.key !== key) };
 }

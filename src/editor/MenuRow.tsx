@@ -9,9 +9,11 @@ type Props = {
   edit: (fn: (doc: Doc) => Doc, ...which: (keyof Dirty)[]) => void;
   /** 先頭に置く欄（「お品書き」タブではサークルの選択） */
   lead?: ReactNode;
+  /** 行に出す注意（投稿者がサークルの X と違う・重複など） */
+  warnings?: string[];
 };
 
-export default function MenuRow({ menu, edit, lead }: Props) {
+export default function MenuRow({ menu, edit, lead, warnings }: Props) {
   const v = menu.values;
   const set = (col: string, value: string) => edit((d) => updateMenu(d, menu.key, col, value), 'menus');
   const url = v.url.trim();
@@ -35,6 +37,7 @@ export default function MenuRow({ menu, edit, lead }: Props) {
           削除
         </button>
       </span>
+      {warnings?.map((w, i) => <p key={i} className="ed-inline-warn ed-menu-warn">⚠ {w}</p>)}
     </div>
   );
 }

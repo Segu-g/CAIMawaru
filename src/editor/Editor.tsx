@@ -1,21 +1,23 @@
 // イベントデータのエディタ。利用者が選んだ events/<eventId>/ の event.json・data/circles.csv・data/menus.csv を
 // ブラウザの中で編集し、同じフォルダに書き戻す（Chrome・Edge の File System Access API）。
 // 正式な検証と circles.json の生成は Python の uv run caimawaru data <eventId>（ページからは実行しない）。
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CirclesTab from './CirclesTab';
 import { loadDoc, serializeCircles, serializeEvent, serializeMenus, type Doc, type LoadNote } from './doc';
 import type { Dirty } from './edit';
 import EventTab from './EventTab';
 import { slotsToObject, type SlotRow } from './edit';
 import { changedSince, findEventDirs, readAll, saveFiles, type DirHandleLike, type FilePath, type Snapshots } from './folder';
+import HuntTab from './HuntTab';
 import MenusTab from './MenusTab';
 import { circleId, isDataRow } from './model';
 import { checkCircles, checkEvent, checkMenus, type Issue } from './validate';
+import { loadMarks, saveMarks, setMark as setMarkIn, type Mark, type Marks } from './workMarks';
 
 /** loadId は読み込むたびに変わる番号（読み込み直したときに、画面の入力中の状態を作り直すため） */
 type Opened = { dir: DirHandleLike; snapshots: Snapshots; doc: Doc; notes: LoadNote[]; dirty: Dirty; loadId: number };
 let loads = 0;
-type Tab = 'circles' | 'menus' | 'event' | 'issues';
+type Tab = 'hunt' | 'circles' | 'menus' | 'event' | 'issues';
 type Status =
   | { kind: 'none' }
   | { kind: 'error'; message: string }
@@ -95,6 +97,10 @@ export default function Editor() {
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>('circles');
   const [selected, setSelected] = useState<number | null>(null);
+  const [huntSelected, setHuntSelected] = useState<number | null>(null);
+  // 作業用の印・メモ（このブラウザの localStorage だけ。イベントのファイルには書かない）
+  const [marks, setMarks] = useState<Marks>({});
+  const [marksSaved, setMarksSaved] = useState(true);
   // 入力中の eventSlots の行（イベント情報タブを離れても残す。null は event.json のまま）
   const [slotDraft, setSlotDraft] = useState<SlotRow[] | null>(null);
   const slotPending = slotDraft ? slotsToObject(slotDraft) : null;
@@ -102,6 +108,15 @@ export default function Editor() {
 
   const dirty = !!opened && (opened.dirty.event || opened.dirty.circles || opened.dirty.menus);
   const eventId = opened?.dir.name ?? '';
+  const storage = typeof localStorage === 'undefined' ? undefined : localStorage;
+  useEffect(() => setMarks(eventId ? loadMarks(storage, eventId) : {}), [eventId, storage]);
+  const setMark = useCallback((id: string, change: Mark) => {
+    setMarks((m) => {
+      const next = setMarkIn(m, id, change);
+      setMarksSaved(saveMarks(storage, eventId, next));
+      return next;
+    });
+  }, [storage, eventId]);
 
   const open = useCallback(async (dir: DirHandleLike) => {
     setBusy(true);
@@ -112,6 +127,7 @@ export default function Editor() {
       setStatus({ kind: 'none' });
       setExternal([]);
       setSelected(null);
+      setHuntSelected(null);
       setSlotDraft(null);
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message });
@@ -242,6 +258,32 @@ export default function Editor() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty, slotError]);
 
+  // Ctrl+S（⌘S）で保存、「/」で検索欄へ。入力中の欄は先に確定させる（フォーカスを外すと確定する欄があるため）
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        setTimeout(() => saveRef.current(), 0);
+        return;
+      }
+      const el = e.target as HTMLElement;
+      const typing = el.closest?.('input, textarea, select, [contenteditable="true"]');
+      if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const search = document.querySelector<HTMLInputElement>('.ed-main input[type="search"]');
+        if (search) {
+          e.preventDefault();
+          search.focus();
+          search.select();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   /** 確認の項目から、その行を開く */
   const jump = (issue: Issue) => {
     if (!opened) return;
@@ -338,8 +380,11 @@ export default function Editor() {
   const { doc } = opened;
   const circleCount = doc.circles.filter((c) => isDataRow(c.values, c.extra)).length;
   const menuCount = doc.menus.filter((m) => isDataRow(m.values, m.extra)).length;
+  const withMenu = new Set(doc.menus.filter((m) => isDataRow(m.values, m.extra)).map((m) => m.values.id.trim()));
+  const todo = doc.circles.filter((c) => c.comment === undefined && isDataRow(c.values, c.extra) && !withMenu.has(circleId(c.values))).length;
   const tabs: [Tab, string][] = [
     ['circles', `サークル（${circleCount}）`],
+    ['hunt', `お品書き探し（未登録 ${todo}）`],
     ['menus', `お品書き（${menuCount}）`],
     ['event', slotError ? 'イベント情報（未反映の入力あり）' : 'イベント情報'],
     ['issues', `確認（${issues.length ? `エラー ${errors}・警告 ${issues.length - errors}` : 'OK'}）`],
@@ -381,8 +426,12 @@ export default function Editor() {
         )}
       </div>
       <main className="ed-main">
-        {tab === 'circles' && <CirclesTab doc={doc} issues={issues} selected={selected} onSelect={setSelected} edit={edit} />}
-        {tab === 'menus' && <MenusTab doc={doc} edit={edit} onOpenCircle={(key) => { setSelected(key); setTab('circles'); }} />}
+        {tab === 'hunt' && (
+          <HuntTab doc={doc} edit={edit} marks={marks} setMark={setMark} marksSaved={marksSaved}
+            selected={huntSelected} onSelect={setHuntSelected} onOpenCircle={(key) => { setSelected(key); setTab('circles'); }} />
+        )}
+        {tab === 'circles' && <CirclesTab doc={doc} issues={issues} selected={selected} onSelect={setSelected} edit={edit} marks={marks} />}
+        {tab === 'menus' && <MenusTab doc={doc} edit={edit} onOpenCircle={(key) => { setSelected(key); setTab('circles'); }} onHunt={() => setTab('hunt')} />}
         {tab === 'event' && <EventTab key={opened.loadId} doc={doc} issues={issues} edit={edit} slotDraft={slotDraft} setSlotDraft={setSlotDraft} />}
         {tab === 'issues' && (
           <section className="ed-issues">
