@@ -59,7 +59,7 @@ class NormalizeTest(unittest.TestCase):
 class MergeTest(unittest.TestCase):
     def test_manual_columns_kept_and_imported_columns_overwritten(self):
         existing = [{**{c: "" for c in ic.CIRCLE_COLS}, "id": "a-01", "space": "A-01", "name": "旧名", "tags": "既存タグ", "notes": "メモ"}]
-        imported = [({"id": "a-01", "space": "A-01", "name": "新名", "source": "s"}, [], {"id", "space", "name", "source"})]
+        imported = [ic.ImportedCircle({"id": "a-01", "space": "A-01", "name": "新名", "source": "s"}, [], {"id", "space", "name", "source"})]
         circles, _, report = ic.merge(imported, existing, [], "2030-01-01")
         self.assertEqual(circles[0]["name"], "新名")
         self.assertEqual(circles[0]["tags"], "既存タグ")
@@ -69,7 +69,7 @@ class MergeTest(unittest.TestCase):
 
     def test_menus_added_once_and_manual_menus_kept(self):
         manual = [{"id": "a-01", "url": "https://example.com/manual", "note": "", "checkedAt": "2030-01-01"}]
-        imported = [({"id": "a-01", "space": "A-01"}, [("https://example.com/m", "")], {"id", "space"})]
+        imported = [ic.ImportedCircle({"id": "a-01", "space": "A-01"}, [("https://example.com/m", "")], {"id", "space"})]
         _, menus, report = ic.merge(imported, [], manual, "2030-01-02")
         self.assertEqual([m["url"] for m in menus], ["https://example.com/manual", "https://example.com/m"])
         self.assertEqual(report.added_menus, 1)
@@ -80,15 +80,15 @@ class MergeTest(unittest.TestCase):
     def test_removed_and_orphan_menus_reported(self):
         existing = [{**{c: "" for c in ic.CIRCLE_COLS}, "id": "b-01"}]
         menus = [{"id": "b-01", "url": "https://example.com/m", "note": "", "checkedAt": ""}]
-        imported = [({"id": "a-01"}, [], {"id"})]
+        imported = [ic.ImportedCircle({"id": "a-01"}, [], {"id"})]
         _, _, report = ic.merge(imported, existing, menus, "2030-01-01")
         self.assertEqual(report.removed, ["b-01"])
         self.assertEqual(report.orphan_menus, ["b-01"])
 
     def test_later_source_fills_values(self):
         imported = [
-            ({"id": "a-01", "name": "名前", "kana": ""}, [], {"id", "name", "kana"}),
-            ({"id": "a-01", "kana": "なまえ", "name": ""}, [], {"id", "kana", "name"}),
+            ic.ImportedCircle({"id": "a-01", "name": "名前", "kana": ""}, [], {"id", "name", "kana"}),
+            ic.ImportedCircle({"id": "a-01", "kana": "なまえ", "name": ""}, [], {"id", "kana", "name"}),
         ]
         circles, _, _ = ic.merge(imported, [], [], "2030-01-01")
         self.assertEqual((circles[0]["name"], circles[0]["kana"]), ("名前", "なまえ"))

@@ -112,22 +112,21 @@ def normalize(raw, source, warnings, where):
 
 
 def _combine_sources(imported):
-    """id ごとにまとめる。複数の source に同じサークルがあれば、後の source の空でない値で上書きする。
+    """id ごとに1つの ImportedCircle にまとめる（取り込んだ順）。
 
-    (id の順のリスト, id → (行, お品書き), 取り込んだ列) を返す。
+    複数の source に同じサークルがあれば、後の source の空でない値で上書きし、お品書きと取り込んだ列は足し合わせる。
     """
-    combined, order, provided_cols = {}, [], set()
-    for row, menus, cols in imported:
-        provided_cols |= cols
-        row_id = row["id"]
-        if row_id in combined:
-            current_row, current_menus = combined[row_id]
-            current_row.update({key: value for key, value in row.items() if value})
-            current_menus.extend(menu for menu in menus if menu not in current_menus)
-        else:
-            combined[row_id] = (dict(row), list(menus))
-            order.append(row_id)
-    return order, combined, provided_cols
+    combined = {}
+    for circle in imported:
+        circle_ref = circle.row["id"]
+        if circle_ref not in combined:
+            combined[circle_ref] = ImportedCircle(dict(circle.row), list(circle.menus), set(circle.provided_cols))
+            continue
+        current = combined[circle_ref]
+        current.row.update({key: value for key, value in circle.row.items() if value})
+        current.menus.extend(menu for menu in circle.menus if menu not in current.menus)
+        current.provided_cols.update(circle.provided_cols)
+    return combined
 
 
 def merge(imported, existing_circles, existing_menus, today):
@@ -135,33 +134,32 @@ def merge(imported, existing_circles, existing_menus, today):
 
     返り値: (circles, menus, MergeReport)。menus は既存の行のあとに追加した行を並べる。
     """
-    order, combined, provided_cols = _combine_sources(imported)
+    combined = _combine_sources(imported)
+    provided_cols = set().union(*(circle.provided_cols for circle in combined.values()))
     existing = {circle_id(row): row for row in existing_circles}
     manual_cols = [col for col in CIRCLE_COLS if col not in provided_cols]
     circles = []
-    for row_id in order:
-        row, _ = combined[row_id]
-        old = existing.get(row_id, {})
-        circles.append({col: old.get(col, "") if col in manual_cols else row.get(col, "") for col in CIRCLE_COLS})
+    for circle_ref, imported_circle in combined.items():
+        old = existing.get(circle_ref, {})
+        circles.append({col: old.get(col, "") if col in manual_cols else imported_circle.row.get(col, "") for col in CIRCLE_COLS})
 
     menus = [dict(menu) for menu in existing_menus]
     known_menus = {(stripped(menu, "id"), stripped(menu, "url")) for menu in menus}
     added_menus = 0
-    for row_id in order:
-        for url, note in combined[row_id][1]:
-            if (row_id, url) not in known_menus:
-                menus.append({"id": row_id, "url": url, "note": note, "checkedAt": today})
-                known_menus.add((row_id, url))
+    for circle_ref, imported_circle in combined.items():
+        for url, note in imported_circle.menus:
+            if (circle_ref, url) not in known_menus:
+                menus.append({"id": circle_ref, "url": url, "note": note, "checkedAt": today})
+                known_menus.add((circle_ref, url))
                 added_menus += 1
 
-    imported_ids = set(order)
-    changed = [row_id for row_id, circle in zip(order, circles) if row_id in existing
-               and any(stripped(existing[row_id], col) != (circle[col] or "").strip() for col in CIRCLE_COLS)]
+    changed = [circle_ref for circle_ref, circle in zip(combined, circles) if circle_ref in existing
+               and any(stripped(existing[circle_ref], col) != (circle[col] or "").strip() for col in CIRCLE_COLS)]
     report = MergeReport(
-        added=[row_id for row_id in order if row_id not in existing],
+        added=[circle_ref for circle_ref in combined if circle_ref not in existing],
         changed=changed,
-        removed=sorted(set(existing) - imported_ids),
-        orphan_menus=sorted({menu["id"] for menu in menus if menu["id"] not in imported_ids}),
+        removed=sorted(set(existing) - set(combined)),
+        orphan_menus=sorted({menu["id"] for menu in menus if menu["id"] not in combined}),
         added_menus=added_menus,
         manual_cols=manual_cols,
     )
