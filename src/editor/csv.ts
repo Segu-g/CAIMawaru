@@ -1,7 +1,7 @@
 // イベントデータの CSV（data/circles.csv・data/menus.csv）の読み書き。CLI（tools/caimawaru/）と同じ形で書く:
 // - UTF-8（BOM なし）、行末 CRLF。「,」「"」CR・LF を含む値だけ「"」で囲み、中の「"」は「""」にする（Python の csv の QUOTE_MINIMAL）
 // - 列名の行は、決まった列（CIRCLE_COLS・MENU_COLS）をこの順に、そのあとにファイルにあったほかの列を元の順に（値も残す）
-// - 行はファイルの順（足した行は最後）。足りない値は空欄。空の行は捨てる
+// - 行はファイルの順（足した行は最後）。足りない値は空欄。空の行と、どの値も空か空白だけの行は捨てる
 // - コメントの行（最初の値が「#」で始まる）はその位置に残し、最初の値だけを1つの値として書く
 // - 読み込みは Python の csv.reader と同じ（囲みの中の改行・「,」は値に入る。囲みの外の CRLF・LF・CR はどれも行の終わり。BOM は除く）
 
@@ -120,11 +120,12 @@ export type CsvTable = {
 };
 
 /**
- * CSV を列名つきの行にする。空の行は捨て、コメントの行はその位置に残す。値が足りない行は空欄で埋める。
+ * CSV を列名つきの行にする。空の行（どの値も空か空白だけの行を含む）は捨て、コメントの行はその位置に残す。値が足りない行は空欄で埋める。
  * 列名に空のもの・重複があるとき、列名より値が多い行があるときは、保存すると内容が失われるので CsvError にする。
  */
 export function parseCsv(text: string): CsvTable {
-  const records = scan(text).filter((r) => r.fields.length > 0);
+  // 空の行と、どの値も空か空白だけの行（「,,,」）は捨てる（Python の read_csv も読まない）
+  const records = scan(text).filter((r) => r.fields.some((f) => f.trim()));
   const first = records.shift();
   if (!first) return { header: [], rows: [] };
   const header = first.fields;

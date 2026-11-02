@@ -105,14 +105,14 @@ describe('読み込みと書き戻し', () => {
     expect(dir.read('data/menus.csv')).toBe('id,url,note,checkedAt\r\nx-1,https://example.com/m,,2030-05-05\r\n');
   });
 
-  it('コメントの行は一覧に出さず、その位置に1つの値として書き戻す。空の値だけの行も残す', async () => {
+  it('コメントの行は一覧に出さず、その位置に1つの値として書き戻す。空の値だけの行は捨てる', async () => {
     const text = 'id,url,note,checkedAt\r\n# 確認中,,,\r\na-01,https://example.com/m,,\r\n,,,\r\n';
     const { doc } = await open(exampleFolder().put('data/menus.csv', text));
     expect(doc.menus[0]).toMatchObject({ comment: '# 確認中', values: {} });
     expect(checkMenus(doc.menus, doc.circles)).toEqual([]);
     const next = addMenu(doc, 'a-02', 'https://example.com/n', '', new Date(2030, 0, 1)).doc;
     expect(serializeMenus(next)).toBe(
-      'id,url,note,checkedAt\r\n# 確認中\r\na-01,https://example.com/m,,\r\n,,,\r\na-02,https://example.com/n,,2030-01-01\r\n',
+      'id,url,note,checkedAt\r\n# 確認中\r\na-01,https://example.com/m,,\r\na-02,https://example.com/n,,2030-01-01\r\n',
     );
   });
 

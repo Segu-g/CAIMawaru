@@ -31,13 +31,11 @@ export function circleId(values: Record<string, string>): string {
 }
 
 /**
- * Python の read_csv が読む行か。空の行と「#」で始まる行（コメント）は検証・生成で無視されるので、
- * エディタでも一覧に出さず、そのまま書き戻す。
+ * サークル・お品書きとして扱う行か。コメントの行（最初の値が「#」で始まる行。csv.ts で見分け、values は空）は除く。
+ * 空の値だけの行は読み込むときに捨てるが、画面で足して何も入れていない行もここで除く。
  */
 export function isDataRow(values: Record<string, string>): boolean {
-  // コメントの行は values が空なので、ここで除かれる
-  if (!Object.values(values).some((v) => v.trim())) return false;
-  return !((values.id || values.space || '').startsWith('#'));
+  return Object.values(values).some((v) => v.trim());
 }
 
 /** http(s) の URL か（project.py の is_http_url と同じく、スキームとホストがあるか）。 */

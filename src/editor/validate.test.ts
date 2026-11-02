@@ -13,10 +13,10 @@ describe('id とデータ行（Python と同じ規則）', () => {
     expect(makeId('壁-01')).toBe('01');
     expect(circleId({ id: ' ', space: ' B-05 ' })).toBe('b-05');
   });
-  it('空の行と「#」で始まる行はデータではない', () => {
+  it('空の値だけの行（コメントの行も values は空）はデータではない。id が空で space が「#」で始まる行はデータ', () => {
     expect(isDataRow({ id: '', space: '', name: ' ' })).toBe(false);
-    expect(isDataRow({ id: '# メモ', name: 'x' })).toBe(false);
-    expect(isDataRow({ id: '', space: '#A', name: 'x' })).toBe(false);
+    expect(isDataRow({})).toBe(false);
+    expect(isDataRow({ id: '', space: '#A', name: 'x' })).toBe(true);
     expect(isDataRow({ id: 'a', space: '', name: 'x' })).toBe(true);
   });
 });
@@ -30,7 +30,7 @@ describe('サークルの確認', () => {
       circle({ space: 'A-01', name: '' }),
       circle({ id: 'a-01', name: '同じid', x: 'example.com/x', adult: 'yes' }),
       circle({ name: 'idなし' }),
-      circle({ id: '#コメント', name: '' }),
+      newRow({}, '#コメント'), // コメントの行（csv.ts が見分ける）は確かめない
     ]);
     expect(messages(issues)).toEqual([
       'A-01: サークル名（name）が空です',
@@ -53,7 +53,7 @@ describe('お品書きの確認', () => {
         menu({ id: 'a-01', url: 'not a url' }),
         menu({ id: 'a-01', url: 'https://x.com/example_user', checkedAt: '1/2' }),
         menu({ id: 'a-01', url: 'https://example.com/m?ref=1' }),
-        menu({ id: '#あとで', url: '' }),
+        newRow({}, '#あとで'),
       ],
       circles,
     );

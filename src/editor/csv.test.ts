@@ -66,6 +66,18 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
     );
   });
 
+  it('どの値も空か空白だけの行（「,,,」「, ,」）は空の行と同じく捨てる', () => {
+    expect(roundTrip(',,,\r\nid,url,note,checkedAt\r\n,,,\r\na-01,https://example.com/m,,\r\n, ,\t,\r\n"",""\r\na-02,,,\r\n')).toBe(
+      'id,url,note,checkedAt\r\na-01,https://example.com/m,,\r\na-02,,,\r\n',
+    );
+  });
+
+  it('id が空で space が「#」で始まる行はコメントではない（最初の値だけで見分ける）', () => {
+    const text = 'id,space,name\r\n,#A-01,サンプル\r\n';
+    expect(parseCsv(text).rows).toEqual([values({ id: '', space: '#A-01', name: 'サンプル' })]);
+    expect(roundTrip(text, ['id', 'space', 'name'])).toBe(text);
+  });
+
   it('LF・CR の行末は CRLF にする', () => {
     expect(roundTrip('id,url,note,checkedAt\na-01,https://example.com/m,新刊,\ra-02,,,\n')).toBe(
       'id,url,note,checkedAt\r\na-01,https://example.com/m,新刊,\r\na-02,,,\r\n',
@@ -116,7 +128,7 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
 
 describe('Python の csv.reader と同じ読み方', () => {
   it('行末は CRLF・LF・CR のどれでもよく、空の行は飛ばす', () => {
-    expect(parseCsv('id,v\n\n1,x\r\n,\r2,y').rows).toEqual([values({ id: '1', v: 'x' }), values({ id: '', v: '' }), values({ id: '2', v: 'y' })]);
+    expect(parseCsv('id,v\n\n1,x\r\n2,y\r3,z').rows).toEqual([values({ id: '1', v: 'x' }), values({ id: '2', v: 'y' }), values({ id: '3', v: 'z' })]);
   });
 
   it('BOM を除く', () => {
