@@ -18,6 +18,7 @@ events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/eve
   コマンドは変更前 → 変更後を表示し（`--dry-run` は表示だけ）、変更で検証エラーが増えるなら書き込まない。
   エラーが増えたかは行番号を除いたメッセージで比べるので、同じ内容のエラーが別の行で出たり消えたりすると見分けられない。
   CSV は下の「CSV の書き方」の形で書き戻す
+- ブラウザのエディタ（`pnpm editor`。README の「GUI で編集する」）でも編集でき、CSV は下の「CSV の書き方」の形で書き戻す
 - `public/data/circles.json` は生成物で、直接編集しない
 - 検証は `uv run caimawaru data <eventId> --check`（`tools/caimawaru/build.py`）。エラーがあると `circles.json` は更新されない
 

@@ -1,0 +1,347 @@
+// 1つのサークルの編集（circles.csv の1行）と、そのサークルのお品書き（menus.csv の行）。
+import { useEffect, useMemo, useRef, useState, type InputHTMLAttributes, type Ref } from 'react';
+import type { Doc } from './doc';
+import { addMenu, applyDefaults, changeCircleId, idUsers, menusOf, moveAside, moveKeepingId, removeCircle, sameIdCircles, spaceUsers, updateCircle, type Dirty } from './edit';
+import { keyAction } from './keys';
+import { checkMenuUrl } from './menuMatch';
+import MenuRow from './MenuRow';
+import { circleId, isDataRow, type Row } from './model';
+import type { Issue } from './validate';
+
+type Props = {
+  doc: Doc;
+  circle: Row;
+  issues: Issue[];
+  edit: (fn: (doc: Doc) => Doc, ...which: (keyof Dirty)[]) => void;
+  onRemoved: () => void;
+  /** 足したばかりの行に、最初の入力と一緒に入れる値（参加イベント・出典） */
+  defaults?: Record<string, string>;
+  /** 「続けて追加」 */
+  onAddNext: () => void;
+  onSelect: (key: number) => void;
+};
+
+// 1行の入力欄（docs/event-data.md の circles.csv の列）
+// 登録でよく入れる欄を先に（スペース → 名前 → イベント → 作家名 → X → 出典）、そのあとにほかの欄
+const MAIN_FIELDS: { col: string; label: string; hint?: string; type?: string }[] = [
+  { col: 'penNames', label: '作家名（penNames）', hint: '複数は「;」区切り' },
+  { col: 'x', label: 'X（x）', type: 'url', hint: 'https://x.com/<ID>（お品書き探しで X の投稿と照らし合わせる）' },
+];
+const MORE_FIELDS: { col: string; label: string; hint?: string; type?: string }[] = [
+  { col: 'kana', label: '読み（kana）', hint: '検索と並べ替えに使う' },
+  { col: 'tags', label: 'タグ（tags）', hint: '掲載側で付けるタグ。「;」区切り' },
+  { col: 'pixiv', label: 'pixiv（pixiv）', type: 'url' },
+  { col: 'booth', label: 'BOOTH（booth）', type: 'url' },
+  { col: 'web', label: 'Web サイト（web）', type: 'url' },
+];
+
+/** 入力中は手元に持ち、確定（フォーカスを外す・Enter）したときに反映する入力欄（id・スペース番号） */
+function DraftInput({ value, onCommit, ref, ...rest }: { value: string; onCommit: (v: string) => boolean; ref?: Ref<HTMLInputElement> } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  const [draft, setDraft] = useState(value);
+  const busy = useRef(false); // 確認のダイアログでフォーカスが外れても、2回確定しない
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (busy.current || draft === value) return;
+    busy.current = true;
+    try {
+      if (!onCommit(draft)) setDraft(value);
+    } finally {
+      busy.current = false;
+    }
+  };
+  return (
+    <input
+      {...rest}
+      ref={ref}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        const k = keyAction(e);
+        if (k === 'enter') e.currentTarget.blur();
+        if (k === 'escape') setDraft(value);
+      }}
+    />
+  );
+}
+
+type Pending =
+  /** スペース番号を変えると id（スペース番号から作ったもの）も変わるので、どうするかを選ぶ */
+  | { kind: 'move'; space: string; after: string }
+  /** 変えたスペースをほかのサークルも使っている（入れ替えを出す） */
+  | { kind: 'clash'; before: string; others: Row[] };
+
+export default function CircleForm({ doc, circle, issues, edit: editDoc, onRemoved, defaults, onAddNext, onSelect }: Props) {
+  // 足したばかりの行には、最初の入力と一緒に既定値を入れる（何も入れずにやめたら書かない、を保つ）
+  const edit: Props['edit'] = (fn, ...which) => editDoc((d) => fn(defaults ? applyDefaults(d, circle.key, defaults) : d), ...which);
+  const blankRow = !isDataRow(circle.values, circle.extra);
+  const spaceInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (blankRow) spaceInput.current?.focus();
+    // 開いたときだけ（足したばかりの行なら、スペース番号の欄へ）
+  }, []);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const v = circle.values;
+  const id = circleId(v);
+  const menus = menusOf(doc, circle);
+  const mine = issues.filter((i) => i.where === 'circle' && i.key === circle.key);
+  const menuKeys = new Set(menus.map((m) => m.key));
+  const menuIssues = issues.filter((i) => i.where === 'menu' && i.key !== undefined && menuKeys.has(i.key));
+  const events = useMemo(() => [...new Set(doc.circles.filter((c) => isDataRow(c.values, c.extra)).map((c) => c.values.event.trim()).filter(Boolean))].sort(), [doc.circles]);
+  const [newUrl, setNewUrl] = useState('');
+  const [newNote, setNewNote] = useState('');
+  const newCheck = newUrl.trim() ? checkMenuUrl(doc, circle.key, newUrl) : null;
+
+  const set = (col: string, value: string) => edit((d) => updateCircle(d, circle.key, col, value), 'circles');
+
+  const shared = sameIdCircles(doc, circle);
+  const sharedNames = shared.map((c) => `${c.values.space} ${c.values.name}`.trim()).join('・');
+
+  /** id かスペース番号を変える。id が変わってお品書きがあるときは、付け替えることを利用者に確かめる */
+  const commitIdField = (col: 'id' | 'space', value: string): boolean => {
+    const after = circleId({ ...v, [col]: value });
+    if (col === 'space') {
+      // id 列が空のサークルを動かすと id が変わる。公開後は id を変えたくないので、どうするかを選んでもらう
+      if (!blankRow && !v.id.trim() && id && after !== id && !shared.length) {
+        setPending({ kind: 'move', space: value, after });
+        return false;
+      }
+      const others = spaceUsers(doc, circle.key, value);
+      if (others.length && value.trim()) setPending({ kind: 'clash', before: v.space, others });
+      else setPending(null);
+    }
+    const plan = changeCircleId(doc, circle.key, col, value);
+    if (after !== id && menus.length > 0) {
+      if (!after) {
+        alert('id もスペース番号もないと、お品書きを付けられません。どちらかを入れてください');
+        return false;
+      }
+      const taken = doc.circles.some((c) => c.key !== circle.key && isDataRow(c.values, c.extra) && circleId(c.values) === after);
+      const message = shared.length
+        ? `このサークルの id が「${id}」から「${after}」に変わります。\n` +
+          `「${id}」はほかのサークル（${sharedNames}）も使っているので、お品書き ${menus.length} 件は付け替えず、id「${id}」のまま残します。`
+        : `このサークルの id が「${id}」から「${after}」に変わります。\n` +
+          `お品書き ${plan.moved} 件の id も「${after}」に付け替えます（付け替えないとお品書きが宙に浮くため）。` +
+          (taken ? `\n注意: 「${after}」はほかのサークルも使っている id です。重複を直すまで、お品書きがどちらのものか決まりません。` : '');
+      if (!confirm(message + '\n\nキャンセルすると入力を元に戻します。')) return false;
+    }
+    edit((d) => changeCircleId(d, circle.key, col, value).doc, ...plan.dirty);
+    return true;
+  };
+
+  const remove = () => {
+    const name = v.name || v.space || id || 'このサークル';
+    if (shared.length) {
+      alert(`id「${id}」はほかのサークル（${sharedNames}）も使っているので、お品書きがどちらのものか決まりません。\n先に id かスペース番号を直して重複をなくしてから削除してください。`);
+      return;
+    }
+    const message = menus.length
+      ? `「${name}」を削除します。\nこのサークルのお品書き ${menus.length} 件も menus.csv から削除します（残すと宙に浮くため）。\n\nお品書きを別のサークルに移したいときは、キャンセルして「お品書き」タブで付け替えてから削除してください。`
+      : `「${name}」を削除しますか？`;
+    if (!confirm(message)) return;
+    const res = removeCircle(doc, circle.key);
+    edit((d) => removeCircle(d, circle.key).doc, ...(res.removedMenus ? (['circles', 'menus'] as const) : (['circles'] as const)));
+    onRemoved();
+  };
+
+  /** スペースを変える（id はそのまま。id 列が空なら今の id を書く） */
+  const moveKeep = (space: string) => {
+    edit((d) => moveKeepingId(d, circle.key, space), 'circles');
+    const others = spaceUsers(doc, circle.key, space);
+    setPending(others.length && space.trim() ? { kind: 'clash', before: v.space, others } : null);
+  };
+  /** スペースを変え、id も変える（お品書きも付け替える） */
+  const moveWithId = (space: string) => {
+    // 変えた後の id をほかのサークルが使っているなら変えない（2つのサークルが同じ id になり、お品書きが混ざる）
+    if (idUsers(doc, circle.key, circleId({ ...v, space })).length) return;
+    const plan = changeCircleId(doc, circle.key, 'space', space);
+    edit((d) => changeCircleId(d, circle.key, 'space', space).doc, ...plan.dirty);
+    const others = spaceUsers(doc, circle.key, space);
+    setPending(others.length && space.trim() ? { kind: 'clash', before: v.space, others } : null);
+  };
+  /** 同じスペースのサークルを、このサークルの元のスペースへ（入れ替え。相手の id も変えない） */
+  const swapWith = (other: Row, space: string) => {
+    if (!moveAside(doc, other.key, space).ok) return;
+    edit((d) => moveAside(d, other.key, space).doc, 'circles');
+    setPending(null);
+  };
+
+  const add = () => {
+    if (!newCheck || newCheck.error) return;
+    const url = newCheck.url;
+    const res = addMenu(doc, id, url, newNote.trim());
+    const row = res.doc.menus[res.doc.menus.length - 1];
+    edit((d) => ({ ...d, menus: [...d.menus, row] }), 'menus');
+    setNewUrl('');
+    setNewNote('');
+  };
+
+  return (
+    <div
+      className="ed-form"
+      onKeyDown={(e) => {
+        if (keyAction(e) === 'mod-enter') {
+          e.preventDefault();
+          (document.activeElement as HTMLElement | null)?.blur?.();
+          setTimeout(onAddNext, 0);
+        }
+      }}
+    >
+      <div className="ed-form-head">
+        <h2>{v.name || '（名前なし）'}</h2>
+        <button type="button" className="danger" onClick={remove}>削除</button>
+      </div>
+      {shared.length > 0 && (
+        <div className="ed-box danger" role="alert">
+          <p>
+            <strong>id「{id}」が重複しています。</strong>ほかのサークル（{sharedNames}）も同じ id です。
+            お品書きと閲覧者の ★ は id で決まるので、どちらのものか決まりません。id かスペース番号を直して重複をなくしてください。
+          </p>
+          <p>重複している間は、このサークルを削除できません。id を変えても、お品書きは付け替えずに元の id のまま残します。</p>
+        </div>
+      )}
+      {mine.length > 0 && (
+        <ul className="ed-inline-issues">
+          {mine.map((i, n) => <li key={n} className={i.level}>{i.message}</li>)}
+        </ul>
+      )}
+      <div className="ed-fields">
+        <label>
+          <span>スペース番号（space）</span>
+          <DraftInput ref={spaceInput} value={v.space} onCommit={(s) => commitIdField('space', s)} placeholder="A-01（複数は A-01,A-02）" />
+        </label>
+        <label>
+          <span>サークル名（name・必須）</span>
+          <input value={v.name} onChange={(e) => set('name', e.target.value)} />
+        </label>
+        {pending?.kind === 'move' && (
+          <div className="ed-box warn wide" role="alert">
+            <p>
+              スペース番号を「{v.space}」から「{pending.space}」に変えると、id が「{id}」から「{pending.after}」に変わります（id 列が空で、スペース番号から作っているため）。
+              公開後に id が変わると、閲覧者の ★・メモがこのサークルに付かなくなります。
+            </p>
+            <div className="ed-row-buttons">
+              <button type="button" className="ed-primary" onClick={() => moveKeep(pending.space)}>id を「{id}」のまま移動（公開後はこちら）</button>
+              <button type="button" onClick={() => moveWithId(pending.space)} disabled={idUsers(doc, circle.key, pending.after).length > 0}>
+                id も「{pending.after}」に変える{menus.length ? `（お品書き ${menus.length} 件も付け替え）` : ''}
+              </button>
+              <button type="button" onClick={() => setPending(null)}>やめる</button>
+            </div>
+            {idUsers(doc, circle.key, pending.after).length > 0 && (
+              <p className="meta">
+                id「{pending.after}」はすでに {idUsers(doc, circle.key, pending.after).map((o) => `${o.values.space} ${o.values.name}`.trim()).join('・')} が使っているので、
+                id を変えて移動することはできません（同じ id になり、お品書きが混ざるため）。
+              </p>
+            )}
+          </div>
+        )}
+        {pending?.kind === 'clash' && (
+          <div className="ed-box warn wide" role="status">
+            <p>
+              「{v.space}」はほかのサークルも使っています: {pending.others.map((o) => `${o.values.space} ${o.values.name}`.trim()).join('・')}
+            </p>
+            <div className="ed-row-buttons">
+              {pending.others.length === 1 && pending.before.trim() && (() => {
+                const aside = moveAside(doc, pending.others[0].key, pending.before);
+                return (
+                  <>
+                    <button type="button" onClick={() => swapWith(pending.others[0], pending.before)} disabled={!aside.ok}>
+                      入れ替える（{pending.others[0].values.name || pending.others[0].values.space} を {pending.before} へ。id は変えない）
+                    </button>
+                    {!aside.ok && <p className="meta wide">{aside.reason}</p>}
+                  </>
+                );
+              })()}
+              {pending.others.map((o) => (
+                <button type="button" key={o.key} onClick={() => onSelect(o.key)}>{o.values.name || o.values.space} を開く</button>
+              ))}
+              <button type="button" onClick={() => setPending(null)}>このままにする</button>
+            </div>
+          </div>
+        )}
+        <label>
+          <span>参加イベント（event）</span>
+          <input value={v.event} onChange={(e) => set('event', e.target.value)} list="ed-events" placeholder={defaults?.event || undefined} />
+          <datalist id="ed-events">
+            {events.map((ev) => <option key={ev} value={ev} />)}
+          </datalist>
+          {defaults?.event && !v.event && <small>空欄なら、ほかの欄を入れたときに直前のサークルと同じ「{defaults.event}」が入ります</small>}
+        </label>
+        {MAIN_FIELDS.map((f) => (
+          <label key={f.col}>
+            <span>{f.label}</span>
+            <input type={f.type ?? 'text'} value={v[f.col]} onChange={(e) => set(f.col, e.target.value)} />
+            {f.hint && <small>{f.hint}</small>}
+          </label>
+        ))}
+        <label>
+          <span>出典（source）</span>
+          <input value={v.source} onChange={(e) => set('source', e.target.value)} placeholder={defaults?.source || undefined} />
+          <small>
+            {defaults?.source && !v.source ? `空欄なら、ほかの欄を入れたときに直前のサークルと同じ「${defaults.source}」が入ります` : '主催の公式リストの名前や URL'}
+          </small>
+        </label>
+        {MORE_FIELDS.map((f) => (
+          <label key={f.col}>
+            <span>{f.label}</span>
+            <input type={f.type ?? 'text'} value={v[f.col]} onChange={(e) => set(f.col, e.target.value)} />
+            {f.hint && <small>{f.hint}</small>}
+          </label>
+        ))}
+        <label>
+          <span>id</span>
+          <DraftInput value={v.id} onCommit={(s) => commitIdField('id', s)} placeholder={id ? `空欄なら ${id}` : '空欄ならスペース番号から作る'} className="ed-mono" />
+          <small>英数字とハイフン。menus.csv と閲覧者の ★ が参照するので、公開後は変えない</small>
+        </label>
+        <label>
+          <span>成人向け（adult）</span>
+          <select value={v.adult} onChange={(e) => set('adult', e.target.value)}>
+            <option value="">空欄（なし）</option>
+            <option value="0">0（なし）</option>
+            <option value="1">1（成人向け頒布物あり）</option>
+            {!['', '0', '1'].includes(v.adult) && <option value={v.adult}>{v.adult}（不正な値）</option>}
+          </select>
+        </label>
+        <label className="wide">
+          <span>補足（notes）</span>
+          <textarea value={v.notes} onChange={(e) => set('notes', e.target.value)} rows={3} />
+          <small>欠席などの事情（健康・家族など）は書かない</small>
+        </label>
+      </div>
+      <div className="ed-row-buttons">
+        <button type="button" onClick={onAddNext} title="Ctrl+Enter">続けてサークルを追加</button>
+        <span className="meta"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
+      </div>
+
+      <h3>お品書き（{menus.length}）</h3>
+      {!id && <p className="meta">お品書きを付けるには、先に id かスペース番号を入れてください</p>}
+      {menuIssues.length > 0 && (
+        <ul className="ed-inline-issues">
+          {menuIssues.map((i, n) => <li key={n} className={i.level}>{i.message}</li>)}
+        </ul>
+      )}
+      <div className="ed-menus">
+        {menus.map((m) => <MenuRow key={m.key} menu={m} edit={edit} />)}
+      </div>
+      {id && (
+        <div className="ed-menu-add">
+          <input type="url" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="お品書きの URL（X の投稿・BOOTH など）" aria-label="追加するお品書きの URL"
+            onKeyDown={(e) => keyAction(e) === 'enter' && add()} />
+          <input value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="説明（例: 新刊）" aria-label="追加するお品書きの説明"
+            onKeyDown={(e) => keyAction(e) === 'enter' && add()} />
+          <button type="button" onClick={add} disabled={!newCheck || !!newCheck.error}>追加</button>
+        </div>
+      )}
+      {newCheck && (
+        <div className="ed-hunt-check" aria-live="polite">
+          {newCheck.url !== newUrl.trim() && !newCheck.error && <p className="meta">登録する形: {newCheck.url}</p>}
+          {newCheck.error && <p className="ed-inline-error">{newCheck.error}</p>}
+          {newCheck.warnings.map((w, i) => <p key={i} className="ed-inline-warn">⚠ {w}</p>)}
+        </div>
+      )}
+      <p className="meta">
+        URL は自分でページを見て貼り付けます（このエディタは X などのページを読み込みません）。追加・URL を変えると、確認した日（checkedAt）が今日になります。
+      </p>
+    </div>
+  );
+}
