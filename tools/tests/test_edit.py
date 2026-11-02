@@ -153,8 +153,8 @@ class EditTest(unittest.TestCase):
         self.assertEqual(self.menus.read_bytes(), before_menus)
         code, out, err = self.cli("circle", "remove", "example", "A-01", "--with-menus")
         self.assertEqual(code, 0, err)
-        _, circles = read_table(self.circles)
-        _, menus = read_table(self.menus)
+        _, circles = read_table(self.circles, CIRCLE_COLS)
+        _, menus = read_table(self.menus, MENU_COLS)
         self.assertNotIn("a-01", [c["id"] for c in circles])
         self.assertEqual([m["id"] for m in menus], ["c-01"])
         # お品書きのないサークルはそのまま消せる
@@ -167,7 +167,7 @@ class EditTest(unittest.TestCase):
         self.assertIn("--force", err)
         code, _, err = self.cli("circle", "set", "example", "C-01", "id=c-99", "--force")
         self.assertEqual(code, 0, err)
-        _, menus = read_table(self.menus)
+        _, menus = read_table(self.menus, MENU_COLS)
         self.assertEqual([m["id"] for m in menus], ["a-01", "c-99"])
 
     def test_menus_set_and_remove(self):
@@ -208,7 +208,7 @@ class EditTest(unittest.TestCase):
 
     def test_csv_rewrite_is_byte_stable(self):
         for path, cols in ((self.circles, CIRCLE_COLS), (self.menus, MENU_COLS)):
-            _, rows = read_table(path)
+            _, rows = read_table(path, cols)
             self.assertEqual(format_csv(cols, rows).encode("utf-8"), path.read_bytes())
 
     def write_circles_with_extras(self):
@@ -255,7 +255,7 @@ class EditTest(unittest.TestCase):
         ]
         for text, expected in cases:
             self.menus.write_bytes(text.encode("utf-8"))
-            header, rows = read_table(self.menus)
+            header, rows = read_table(self.menus, MENU_COLS)
             cols = MENU_COLS + [c for c in header if c not in MENU_COLS]
             self.assertEqual(format_csv(cols, rows), expected, text)
         # read_csv（検証・生成が読む）も同じ規則でコメント行と空行を見分ける
@@ -271,8 +271,48 @@ class EditTest(unittest.TestCase):
         self.assertEqual(self.menus.read_bytes(),
                          "id,url,note,checkedAt\r\na-01,https://example.com/m,既刊,2030-01-01\r\n".encode("utf-8"))
 
+    def test_unnamed_and_repeated_extra_columns_are_kept_by_position(self):
+        # 見出しの最後が「,」（列名が空の列）・列名が空の列が2つ・同じ列名の列が2つ
+        circles = self.circles.read_bytes().decode("utf-8").split("\r\n")
+        circles[0] += ",,memo,,memo"
+        circles[1] += ",空1,メモ1,空2,メモ2"
+        self.circles.write_bytes("\r\n".join(circles).encode("utf-8"))
+        menus = self.menus.read_bytes().decode("utf-8").split("\r\n")
+        menus[0] += ","
+        menus[1] += ",名前のない列"
+        self.menus.write_bytes("\r\n".join(menus).encode("utf-8"))
+
+        def check():
+            c = self.circles.read_bytes().decode("utf-8").split("\r\n")
+            self.assertTrue(c[0].endswith(",source,,memo,,memo"), c[0])
+            self.assertTrue(c[1].endswith(",空1,メモ1,空2,メモ2"), c[1])
+            m = self.menus.read_bytes().decode("utf-8").split("\r\n")
+            self.assertEqual(m[0], "id,url,note,checkedAt,")
+            self.assertTrue(m[1].endswith(",名前のない列"), m[1])
+
+        code, _, err = self.cli("circle", "set", "example", "A-01", "notes=x", "--no-build")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.circle_json("A-01")["notes"], "x")
+        check()
+        code, _, err = self.cli("menus", "set", "example", "A-01", "note=既刊", "--no-build")
+        self.assertEqual(code, 0, err)
+        check()
+        code, _, err = self.cli("import", "example", "--no-build")
+        self.assertEqual(code, 0, err)
+        check()
+        code, _, err = self.cli("menu", "example", "--circle", "A-02", "https://example.com/circle2/menu")
+        self.assertEqual(code, 0, err)
+        check()
+        self.assertTrue(self.menus.read_bytes().decode("utf-8").split("\r\n")[-2].startswith("a-02,https://example.com/circle2/menu,,"))
+        # 列名が空・重複している列は名前で指定できない
+        code, _, err = self.cli("circle", "set", "example", "A-01", "memo=y")
+        self.assertEqual(code, 1)
+        self.assertIn("列 'memo' はありません", err)
+        # 検証・生成（read_csv）もこの列を気にしない
+        self.assertEqual(self.cli("check", "example")[0], 0)
+
     def test_bad_headers_are_refused(self):
-        for header in ("id,url,,checkedAt", "id,url,note,note"):
+        for header in ("id,url,note,note", "id,id,url,note,checkedAt,extra"):
             self.menus.write_bytes(f"{header}\r\na-01,https://example.com/m,a,b\r\n".encode("utf-8"))
             before = self.snapshot()
             for args in (("menus", "list", "example"), ("circle", "set", "example", "A-02", "notes=x"),

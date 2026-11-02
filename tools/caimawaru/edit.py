@@ -54,7 +54,7 @@ def _views(table, derive_id):
     for i, row in enumerate(table.rows):
         if not _is_data_row(row):
             continue
-        v = {c: (row.get(c) or "").strip() for c in table.cols}
+        v = {name: (row.get(key) or "").strip() for name, key in table.names.items()}
         if derive_id and not v["id"]:
             v["id"] = make_id(v.get("space", ""))
         v["_row"] = i
@@ -80,7 +80,7 @@ def _pick_circle(circles, query):
 
 
 def _parse_fields(items, cols):
-    """「列名=値」のリストを dict にする。"""
+    """「列名=値」のリストを dict（列名 → 値）にする。cols は指定できる列名。"""
     out = {}
     for item in items:
         key, sep, value = item.partition("=")
@@ -88,7 +88,7 @@ def _parse_fields(items, cols):
         if not sep or not key:
             raise CliError(f"「列名=値」の形で指定してください: {item}")
         if key not in cols:
-            raise CliError(f"列 '{key}' はありません（{', '.join(cols)}）")
+            raise CliError(f"列 '{key}' はありません（{', '.join(cols)}。列名が空・重複している列は指定できません）")
         if key in out:
             raise CliError(f"列 '{key}' を2回指定しています")
         out[key] = value.strip()
@@ -226,7 +226,7 @@ def circle_list(event, query=None, event_name=None, as_json=False):
     if event_name:
         found = [c for c in found if c["event"] == event_name]
     if as_json:
-        _print_json([{**_public(c, circles.cols), "menus": _menus_of(menu_views, c["id"], menus.cols)} for c in found])
+        _print_json([{**_public(c, circles.names), "menus": _menus_of(menu_views, c["id"], menus.names)} for c in found])
         return 0
     for c in found:
         n = sum(1 for m in menu_views if m["id"] == c["id"])
@@ -238,11 +238,11 @@ def circle_list(event, query=None, event_name=None, as_json=False):
 def circle_show(event, query, as_json=False):
     circles, views, menus, menu_views = _load(event)
     c = _pick_circle(views, query)
-    menu_list = _menus_of(menu_views, c["id"], menus.cols)
+    menu_list = _menus_of(menu_views, c["id"], menus.names)
     if as_json:
-        _print_json({**_public(c, circles.cols), "menus": menu_list})
+        _print_json({**_public(c, circles.names), "menus": menu_list})
         return 0
-    for col in circles.cols:
+    for col in circles.names:
         print(f"{col}: {c[col]}")
     print(f"お品書き: {len(menu_list)} 件")
     for m in menu_list:
@@ -252,9 +252,9 @@ def circle_show(event, query, as_json=False):
 
 def circle_add(event, fields, dry_run=False, no_build=False):
     circles, views, _, _ = _load(event)
-    values = _parse_fields(fields, circles.cols)
+    values = _parse_fields(fields, circles.names)
     row = {c: "" for c in circles.cols}
-    row.update(values)
+    row.update({circles.names[k]: v for k, v in values.items()})
     if not row["id"]:
         row["id"] = make_id(row["space"])
     if not row["id"]:
@@ -269,12 +269,13 @@ def circle_add(event, fields, dry_run=False, no_build=False):
 def circle_set(event, query, fields, force=False, dry_run=False, no_build=False):
     circles, views, menus, menu_views = _load(event)
     c = _pick_circle(views, query)
-    values = _parse_fields(fields, circles.cols)
+    values = _parse_fields(fields, circles.names)
     row = circles.rows[c["_row"]]
     print(f"変更: {c['id']}  {describe(c)}")
-    for key, value in values.items():
+    for name, value in values.items():
+        key = circles.names[name]
         if (row.get(key) or "").strip() != value:
-            print(f"  {key}: {_q((row.get(key) or '').strip())} → {_q(value)}")
+            print(f"  {name}: {_q((row.get(key) or '').strip())} → {_q(value)}")
         row[key] = value
     files = {event.circles_csv: circles.text()}
 
@@ -331,10 +332,10 @@ def menus_list(event, query=None, as_json=False):
         ids = {c["id"] for c in _menu_ids(views, menu_views, query)}
         rows = [m for m in menu_views if m["id"] in ids]
     if as_json:
-        _print_json([_public(m, menus.cols) for m in rows])
+        _print_json([_public(m, menus.names) for m in rows])
         return 0
     for m in rows:
-        print("\t".join(m[c] for c in menus.cols))
+        print("\t".join(m[c] for c in menus.names))
     print(f"{len(rows)} 件", file=sys.stderr)
     return 0
 
@@ -359,16 +360,17 @@ def _pick_menus(event, query, url, all_):
 
 def menus_set(event, query, fields, url=None, all_=False, dry_run=False, no_build=False):
     c, menus, entries = _pick_menus(event, query, url, all_)
-    values = _parse_fields(fields, menus.cols)
+    values = _parse_fields(fields, menus.names)
     if values.get("url"):
         values["url"] = normalize_url(values["url"])[0]
     print(f"変更: {c['id']}  {describe(c)} のお品書き {len(entries)} 件")
     for m in entries:
         row = menus.rows[m["_row"]]
         print(f"  {m['url']}")
-        for key, value in values.items():
+        for name, value in values.items():
+            key = menus.names[name]
             if (row.get(key) or "").strip() != value:
-                print(f"    {key}: {_q((row.get(key) or '').strip())} → {_q(value)}")
+                print(f"    {name}: {_q((row.get(key) or '').strip())} → {_q(value)}")
             row[key] = value
     return commit(event, {event.menus_csv: menus.text()}, dry_run, no_build)
 

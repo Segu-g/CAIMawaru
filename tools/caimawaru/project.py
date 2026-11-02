@@ -106,72 +106,95 @@ MENU_COLS = ["id", "url", "note", "checkedAt"]
 
 
 def read_csv(path):
-    """イベントデータの CSV を読む。空行（値がすべて空白の行も）と「#」の行（最初の値が「#」で始まる）は無視し、値の前後の空白を除く。"""
+    """イベントデータの CSV を読む。空行（値がすべて空白の行も）と「#」の行（最初の値が「#」で始まる）は無視し、値の前後の空白を除く。
+
+    返す dict のキーは見出しの列名。空の列名の列は落とす（同じ列名が2回あれば後の値。read_table が書き戻す前に止める）。
+    """
     if not path.exists():
         return []
     with path.open(encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        first = (reader.fieldnames or [None])[0]
-        return [
-            {k: (v or "").strip() for k, v in row.items() if k}
-            for row in reader
-            if any((v or "").strip() for v in row.values() if isinstance(v, str))
-            and not (row.get(first) or "").startswith("#")
-        ]
+        header, rows = None, []
+        for values in csv.reader(f):
+            if not any(v.strip() for v in values):
+                continue
+            if header is None:
+                header = values
+            elif not values[0].startswith("#"):
+                rows.append({k: v.strip() for k, v in zip(header, values + [""] * (len(header) - len(values))) if k})
+        return rows
 
 
 # 書き戻すときの CSV の形（docs/event-data.md の「CSV の書き方」。ページ側の編集画面も同じ形で書く）:
 #   UTF-8（BOM なし）・改行 CRLF・必要なときだけ「"」で囲む（「"」は2つ重ねる）。見出しはイベントデータの列の順、
-#   そのあとにファイルにだけある列を元の順で。行は元の順で、足りない値は空。空行と、値がすべて空（空白だけ）の行は落とす。
+#   そのあとにファイルにだけある列を元の順で（位置で扱うので、列名は空・重複でもよい）。行は元の順で、足りない値は空。
+#   空行と、値がすべて空（空白だけ）の行は落とす。
 #   「#」の行（最初の値が「#」で始まる行）はその位置に、読んだときの値のまま（値の数も変えず、埋めない）書く
 COMMENT = object()  # コメント行の dict のキー（列名と重ならない）
+
+
+class Extra:
+    """ファイルにだけある列。名前ではなく位置で扱う（列名は空でも重複していてもよい）。行の dict のキーにする。"""
+
+    __slots__ = ("label",)
+
+    def __init__(self, label):
+        self.label = label
+
+    def __repr__(self):
+        return f"Extra({self.label!r})"
 
 
 def is_comment(row):
     return COMMENT in row
 
 
-def read_table(path):
+def read_table(path, base_cols):
     """CSV を見出しと行で読む（書き戻す前提。値は空白も含めてそのまま、コメント行・ファイルにだけある列も残す）。
 
-    コメント行は {COMMENT: 値のリスト}（値の数は見出しと違ってもよい）。見出しに空の列名・重複した列名があるとき、値が見出しより多い行があるときは
-    読み落とさないようにエラーにする。
+    返り値は (keys, rows)。keys は見出しの各位置のキーで、base_cols の列は列名、それ以外は Extra。
+    rows はそのキーの dict か、コメント行 {COMMENT: 値のリスト}（値の数は見出しと違ってもよい）。
+    base_cols の列名が見出しに2回あるとき、値が見出しより多い行があるときは、読み落とさないようにエラーにする。
     """
     if not path.exists():
         return [], []
     with path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.reader(f)
-        header, rows = None, []
+        keys, rows = None, []
         for values in reader:
             where = f"{path.name}:{reader.line_num}"
             if not any(v.strip() for v in values):
                 continue  # 空行・値がすべて空の行（「,,,」）
             if values[0].startswith("#"):
-                if header is None:
+                if keys is None:
                     raise CliError(f"{where}: 見出しの行より前に「#」の行があります。見出し（列名）を1行目にしてください")
                 rows.append({COMMENT: values})
                 continue
-            if header is None:
-                header = values
-                if any(not c.strip() for c in header):
-                    raise CliError(f"{where}: 見出しに空の列名があります。列名を付けるか、その列を消してから実行してください")
-                dup = sorted({c for c in header if header.count(c) > 1})
+            if keys is None:
+                dup = sorted({c for c in values if c in base_cols and values.count(c) > 1})
                 if dup:
                     raise CliError(f"{where}: 見出しの列名が重複しています: {', '.join(dup)}。直してから実行してください")
+                keys = [c if c in base_cols else Extra(c) for c in values]
                 continue
-            if len(values) > len(header):
+            if len(values) > len(keys):
                 raise CliError(f"{where}: 列の数が見出しより多い行があります。直してから実行してください")
-            rows.append(dict(zip(header, values + [""] * (len(header) - len(values)))))
-        return header or [], rows
+            rows.append(dict(zip(keys, values + [""] * (len(keys) - len(values)))))
+        return keys or [], rows
 
 
 class Table:
-    """書き戻す前提の CSV。cols はイベントデータの列（決まった順）＋ファイルにだけある列（元の順）。"""
+    """書き戻す前提の CSV。cols はイベントデータの列（決まった順）＋ファイルにだけある列（Extra、元の順）。"""
 
     def __init__(self, path, base_cols):
         self.path = path
-        header, self.rows = read_table(path)
-        self.cols = list(base_cols) + [c for c in header if c not in base_cols]
+        keys, self.rows = read_table(path, base_cols)
+        self.cols = list(base_cols) + [k for k in keys if isinstance(k, Extra)]
+
+    @property
+    def names(self):
+        """列名 → キー。ファイルにだけある列は、列名が空でなく1つだけのものを名前で指定できる。"""
+        labels = [c.label for c in self.cols if isinstance(c, Extra)]
+        return {c.label if isinstance(c, Extra) else c: c for c in self.cols
+                if not isinstance(c, Extra) or (c.label.strip() and labels.count(c.label) == 1)}
 
     def data_rows(self):
         return [r for r in self.rows if not is_comment(r)]
@@ -186,10 +209,10 @@ class Table:
 
 
 def format_csv(cols, rows):
-    """上の形の CSV を文字列で返す（write_csv が書く内容）。rows は dict（cols にないキーは無視）かコメント行。"""
+    """上の形の CSV を文字列で返す（write_csv が書く内容）。cols は列名か Extra、rows は dict（cols にないキーは無視）かコメント行。"""
     buf = io.StringIO(newline="")
     w = csv.writer(buf)  # 既定: QUOTE_MINIMAL・改行 CRLF
-    w.writerow(cols)
+    w.writerow([c.label if isinstance(c, Extra) else c for c in cols])
     for row in rows:
         if is_comment(row):
             w.writerow(row[COMMENT])
