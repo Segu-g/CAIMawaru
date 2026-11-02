@@ -72,6 +72,8 @@ def check_config(event, r):
         r.errors.append(f"{where}: info.contact.url が不正です: {contact}")
 
     sources = config.get("sources", [])
+    if "outDir" in config:
+        r.errors.append(f"{where}: outDir は廃止しました。出力先は dist/<eventId>/ で、公開先での置き場所はデプロイの手順で決めてください")
     if "sockbase" in config:
         r.errors.append(f'{where}: sockbase キーは sources に変わりました: "sources": [{{"type": "sockbase", "url": "..."}}]')
     if not isinstance(sources, list):
@@ -163,11 +165,13 @@ def check_layout(event, r):
     where = event.rel(event.layout_json)
     try:
         spec = json.loads(event.layout_json.read_text(encoding="utf-8"))
+        if not isinstance(spec, dict):
+            raise layout_mod.LayoutError("配置図はオブジェクト（{ ... }）にしてください")
         r.layout = layout_mod.expand(spec)
     except json.JSONDecodeError as e:
         r.errors.append(f"{where}: JSON として読めません: {e}")
         return
-    except (layout_mod.LayoutError, KeyError, TypeError) as e:
+    except (layout_mod.LayoutError, KeyError, TypeError, AttributeError) as e:
         r.errors.append(f"{where}: {e}")
         return
     spaces = {c["space"] for c in r.layout["cells"]}

@@ -37,6 +37,29 @@ class IslandOrderTest(unittest.TestCase):
         self.assertEqual(c["Z008"]["y"] - c["Z007"]["y"], 5)
         self.assertEqual(c["Z009"]["x"], c["Z007"]["x"])
 
+    def test_two_columns_left_right(self):
+        """横向きの島（left-right）: 上の行を右から、下の行を左から"""
+        c = cells_of({"islands": [{"name": "A", "x": 0, "y": 0, "rows": 3, "columns": 2, "order": "left-right"}]})
+        self.assertGreater(c["A-01"]["x"], c["A-03"]["x"])
+        self.assertEqual(c["A-04"]["x"], c["A-03"]["x"])
+        self.assertGreater(c["A-04"]["y"], c["A-03"]["y"])
+        self.assertEqual(c["A-06"]["x"], c["A-01"]["x"])
+
+    def test_one_column_orders(self):
+        def first_last(order):
+            c = cells_of({"islands": [{"name": "B", "x": 0, "y": 0, "rows": 3, "columns": 1, "order": order}]})
+            return c["B-01"], c["B-03"]
+        a, b = first_last("down")
+        self.assertLess(a["y"], b["y"])
+        a, b = first_last("up")
+        self.assertGreater(a["y"], b["y"])
+        self.assertEqual(a["x"], b["x"])
+        a, b = first_last("right")
+        self.assertLess(a["x"], b["x"])
+        self.assertEqual(a["y"], b["y"])
+        a, b = first_last("left")
+        self.assertGreater(a["x"], b["x"])
+
     def test_unknown_order(self):
         with self.assertRaises(LayoutError):
             expand({"hall": HALL, "islands": [{"name": "A", "x": 0, "y": 0, "rows": 3, "columns": 2, "order": "zigzag"}]})

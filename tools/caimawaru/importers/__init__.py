@@ -1,6 +1,6 @@
 """主催が配る任意の形式のサークル情報を、CAIMawaru のイベントデータ（docs/event-data.md）の行に変換するインポーター。
 
-インポーターは tools/importers/<type>.py に置き、次を定義する:
+インポーターは tools/caimawaru/importers/<type>.py に置き、次を定義する:
 
     DESCRIPTION = "一行の説明"
     DEFAULT_FILE = "sources/xxx"              # 任意。source に file がないときの元データの置き場所

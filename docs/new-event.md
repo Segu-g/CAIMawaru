@@ -15,8 +15,8 @@ uv run caimawaru new-event 2030-05-05-mycon --name "5/5 マイコン" --date 203
 
 - eventId（フォルダ名）は英数字・ハイフン。日付で始めると並びが分かりやすい
 - `--map` で配置図の雛形 `layout.json` も作る
-- 同じサイトに複数ページを置くとき（ホールが分かれている等）は、`--out-dir site` と `--out-dir site/hall2` のように入れ子にし、
-  両方の `info.halls` に相互のリンク（相対パス）を書く
+- 同じサイトに複数ページを置くとき（ホールが分かれている等）は、イベントを分けて作り、両方の `info.halls` に相互のリンクを書く。
+  出力は `dist/<eventId>/` ごとに分かれるので、公開先での置き場所（例: `site/` と `site/hall2/`）はデプロイの手順で決める
 
 ## 3. event.json を埋める
 
@@ -56,5 +56,5 @@ pnpm build <eventId>
 
 ## 7. 公開・当日の更新
 
-- `dist/<outDir>/` を公開先に置く（README の「公開」）
+- `dist/<eventId>/` を公開先に置く（README の「公開」）
 - お品書きは `uv run caimawaru menu <eventId> <URL>` で追加し、`pnpm build <eventId>` か `data/circles.json` の差し替えで反映

@@ -69,7 +69,7 @@ events/<eventId>/
 | コマンド | 内容 |
 |---|---|
 | `pnpm dev <eventId>` | 開発サーバ |
-| `pnpm build <eventId>` | 型チェックのうえ、そのイベントのページを `dist/<outDir>/` にビルド |
+| `pnpm build <eventId>` | 型チェックのうえ、そのイベントのページを `dist/<eventId>/` にビルド |
 | `pnpm preview <eventId>` | ビルド結果の確認（先に `pnpm build <eventId>`） |
 | `pnpm test` | テスト（検索・保存形式・配置図の操作など、生成済みの `circles.json` の形） |
 
@@ -102,7 +102,7 @@ uv run caimawaru menu <eventId> -                                            # 1
 
 ## 公開
 
-`uv run caimawaru data <eventId>` でデータを作ってから `pnpm build <eventId>` すると `dist/<outDir>/` ができるので、それを公開先に置きます（相対パス出力なのでサブパスでも可）。
+`uv run caimawaru data <eventId>` でデータを作ってから `pnpm build <eventId>` すると `dist/<eventId>/` ができるので、それを公開先に置きます（相対パス出力なのでサブパスでも可。複数のページを同じサイトの下に並べるときも、置き場所はアップロード先で決めます）。
 データだけの更新なら、公開先の `data/circles.json` を差し替えるだけでも反映されます（ページは `no-cache` で読み込む）。
 
 - CDN を挟む場合、公開前に **まだ置いていないファイルの公開 URL を開かない** でください。404 がキャッシュされてページが壊れることがあります

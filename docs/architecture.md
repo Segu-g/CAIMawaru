@@ -13,7 +13,7 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 ## ファイルを介した依存
 
 ```
-人・エージェント ──直接編集──▶ events/<eventId>/event.json ─┬──────────────▶ ページ（vite.config.ts: storeId・title・outDir）
+人・エージェント ──直接編集──▶ events/<eventId>/event.json ─┬──────────────▶ ページ（vite.config.ts: storeId・title）
                                events/<eventId>/layout.json  │
                                events/<eventId>/data/*.csv   │
                                         ▲                    │
@@ -24,7 +24,7 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 
 | ファイル | 書く | 読む |
 |---|---|---|
-| `event.json` | 人・エージェント（`caimawaru new-event` が雛形） | CLI（全コマンド）、ページ（`vite.config.ts`: `storeId`・`title`・`outDir` だけ） |
+| `event.json` | 人・エージェント（`caimawaru new-event` が雛形） | CLI（全コマンド）、ページ（`vite.config.ts`: `storeId`・`title` だけ） |
 | `layout.json` | 人・エージェント | CLI だけ（展開して `circles.json` に入れる） |
 | `data/circles.csv`・`data/menus.csv` | 人・エージェント、CLI（`import`・`menu`） | CLI だけ |
 | `sources/` | 人・エージェント、CLI（`import --fetch`） | CLI だけ（インポーター） |
@@ -62,8 +62,8 @@ pnpm test ───────────────▶ vitest（vite.config.
   Vite は eventId をプロジェクトのフォルダと解釈する）。引数は Node 標準の `util.parseArgs` で読み、eventId の後ろに Vite のオプションを書くと Vite に届かないのでエラーにする
 - 1回のビルドは1イベント。複数のイベントはコマンドを並べて実行する
 - `circles.json` がなければ、Python を呼ばずに「先に `uv run caimawaru data <eventId>`」と知らせて止まる
-- 出力先（`dist/<outDir>/`）は、ビルドのたびに空にする。ただし別のイベントの出力先がその中にある（入れ子の）ときは、
-  そのページを消さないよう、自分の出力（`index.html`・`assets/`・`public/` にあるもの）だけを消す
+- 出力先は `dist/<eventId>/` で、ビルドのたびに Vite（`emptyOutDir`）が空にする。`vite.config.ts` 自身はファイルやフォルダを消したり書いたりしない
+- 公開先での置き場所（同じサイトの下に複数ページを並べるなど）はデプロイの手順で決め、ビルドには持ち込まない
 
 ## 同じ規則を2か所に持っているもの
 

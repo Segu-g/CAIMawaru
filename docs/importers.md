@@ -17,7 +17,7 @@ CAIMawaru は、それを **取得 → 変換 → イベントデータ** の3�
 uv run caimawaru import <eventId> --dry-run   # 何が変わるかだけ表示
 uv run caimawaru import <eventId>             # sources/ の元データから取り込む → uv run caimawaru data まで実行
 uv run caimawaru import <eventId> --fetch     # 元データを取得してから取り込む（fetch に対応したインポーターのみ）
-uv run caimawaru import <eventId> --list      # 使えるインポーター
+uv run caimawaru importers                    # 使えるインポーター
 ```
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きします。返さなかった列（多くは `tags`・`notes` など）は直接編集した値が残ります

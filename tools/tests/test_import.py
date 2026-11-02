@@ -1,4 +1,4 @@
-"""取り込み（tools/import_circles.py と tools/importers/）のテスト。データはすべて架空。
+"""取り込み（tools/caimawaru/importing.py と tools/caimawaru/importers/）のテスト。データはすべて架空。
 
     uv run python -m unittest discover -s tools/tests
 """

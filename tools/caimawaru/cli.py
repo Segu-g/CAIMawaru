@@ -50,7 +50,6 @@ def _parser():
     s.add_argument("--date", default="")
     s.add_argument("--venue", default="")
     s.add_argument("--sockbase", default="", help="Sockbase の公式サークルリストの URL")
-    s.add_argument("--out-dir", default="", help="dist/ の下の出力先（既定は eventId）")
     s.add_argument("--map", action="store_true", help="配置図の雛形 layout.json を作る")
     return p
 
@@ -85,7 +84,8 @@ def _run(a):
 
 def main(argv=None):
     # 日本語の出力を Windows の既定の文字コード（cp1252 など）に左右されないようにする
-    for stream in (sys.stdout, sys.stderr):
+    # （menu の「-」で貼り付ける標準入力も同じ）
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     args = _parser().parse_args(argv)

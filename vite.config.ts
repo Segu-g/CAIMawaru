@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { relative, resolve, sep } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -10,14 +10,12 @@ import react from '@vitejs/plugin-react';
 //   pnpm preview <eventId>  → vite preview -- <eventId>
 // Vite は「--」より後ろの引数を使わないので、その最初の値を eventId として読む（「--」がないと Vite は
 // eventId をプロジェクトのフォルダ（root）と解釈してしまうため、package.json の scripts に「--」を入れてある）。
-// 読むのは events/<eventId>/event.json（storeId・title・outDir）と、Python の caimawaru data が書いた
+// 読むのは events/<eventId>/event.json（storeId・title）と、Python の caimawaru data が書いた
 // public/data/circles.json だけ（Python は呼ばない。依存関係は docs/architecture.md）。
+// 出力先は dist/<eventId>/ で、ビルドのたびに Vite が空にする（この設定ではファイルやフォルダを消したり書いたりしない）。
 const root = import.meta.dirname;
 const eventsDir = resolve(root, 'events');
 
-type EventConfig = { storeId: string; title: string; outDir?: string };
-const readConfig = (eventId: string) =>
-  JSON.parse(readFileSync(resolve(eventsDir, eventId, 'event.json'), 'utf-8')) as EventConfig;
 const known = existsSync(eventsDir)
   ? readdirSync(eventsDir, { withFileTypes: true })
       .filter((d) => d.isDirectory() && existsSync(resolve(eventsDir, d.name, 'event.json')))
@@ -32,7 +30,7 @@ function fail(message: string): never {
 }
 
 /** コマンドの引数（「--」より後ろ）から eventId を取り出す（Node 標準の util.parseArgs）。 */
-function eventIdFromArgs(usage: string): string {
+function eventIdFromArgs(vite: string, usage: string): string {
   const at = process.argv.indexOf('--');
   const args = at < 0 ? [] : process.argv.slice(at + 1);
   const list = known.join(', ') || 'events/ にイベントがありません';
@@ -44,7 +42,7 @@ function eventIdFromArgs(usage: string): string {
     const i = args.findIndex((a) => !a.startsWith('-'));
     const id = i < 0 ? (known[0] ?? '<eventId>') : args[i];
     const opts = args.filter((_, j) => j !== i);
-    fail(`${opts.join(' ')} は Vite に渡りません。Vite のオプションは「--」の前に書いてください。例: pnpm exec vite ${opts.join(' ')} -- ${id}`);
+    fail(`${opts.join(' ')} は Vite に渡りません。Vite のオプションは「--」の前に書いてください。例: pnpm exec ${vite} ${opts.join(' ')} -- ${id}`);
   }
   const [eventId, ...extra] = positionals;
   if (!eventId) fail(`イベント（eventId）を指定してください（${list}）。例: ${usage.replace('<eventId>', known[0] ?? '<eventId>')}`);
@@ -53,25 +51,23 @@ function eventIdFromArgs(usage: string): string {
   return eventId;
 }
 
-const isInside = (child: string, parent: string) => child.startsWith(parent + sep);
-
-/**
- * このイベントの出力（index.html・assets/・public/ にあるもの）だけを消す。
- * 別のイベントの outDir がこの中にある（入れ子の）ときは、出力先を丸ごと空にするとそのページまで消えるため。
- */
-function cleanOwnOutput(outDir: string, publicDir: string) {
-  const own = ['index.html', 'assets', ...(existsSync(publicDir) ? readdirSync(publicDir) : [])];
-  for (const name of own) rmSync(resolve(outDir, name), { recursive: true, force: true });
+/** JSON ファイルを読む。読めなければ理由だけを出して止まる。 */
+function readJson<T>(path: string, label: string): T {
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8')) as T;
+  } catch (e) {
+    fail(`${label} を読めません: ${(e as Error).message}`);
+  }
 }
 
 export default defineConfig(({ command, isPreview }) => {
   // テスト（vitest）はイベントに依存しない
   if (process.env.VITEST) return { plugins: [react()] };
 
-  const usage = isPreview ? 'pnpm preview <eventId>' : command === 'build' ? 'pnpm build <eventId>' : 'pnpm dev <eventId>';
-  const eventId = eventIdFromArgs(usage);
+  const [vite, pnpm] = isPreview ? ['vite preview', 'preview'] : command === 'build' ? ['vite build', 'build'] : ['vite', 'dev'];
+  const eventId = eventIdFromArgs(vite, `pnpm ${pnpm} <eventId>`);
   const dir = resolve(eventsDir, eventId);
-  const config = readConfig(eventId);
+  const config = readJson<{ storeId?: string; title?: string }>(resolve(dir, 'event.json'), `events/${eventId}/event.json`);
   if (!config.storeId || !config.title) fail(`events/${eventId}/event.json に storeId と title が必要です`);
 
   // ページが読むデータ。なければ先に Python 側で作る
@@ -80,18 +76,11 @@ export default defineConfig(({ command, isPreview }) => {
   if (!existsSync(dataJson)) {
     fail(`events/${eventId}/public/data/circles.json がありません。先に uv run caimawaru data ${eventId} で作ってください`);
   }
-  const hasMap = !!(JSON.parse(readFileSync(dataJson, 'utf-8')) as { layout?: unknown }).layout;
+  const hasMap = !!readJson<{ layout?: unknown }>(dataJson, `events/${eventId}/public/data/circles.json`).layout;
 
-  // 既定は dist/<eventId>/。同じサイトに複数ページを置くときは event.json の outDir で揃える（入れ子も可）
-  const outDirOf = (id: string) => resolve(root, 'dist', readConfig(id).outDir ?? id);
-  const outDir = outDirOf(eventId);
+  const outDir = resolve(root, 'dist', eventId);
   if (isPreview && !existsSync(resolve(outDir, 'index.html'))) {
-    fail(`${relative(root, outDir)}/ にビルド結果がありません。先に pnpm build ${eventId} を実行してください`);
-  }
-  const nested = known.filter((id) => id !== eventId && isInside(outDirOf(id), outDir));
-  if (command === 'build' && !isPreview && nested.length) {
-    console.log(`dist/${relative(resolve(root, 'dist'), outDir)}/ には ${nested.join(', ')} のページもあるため、${eventId} の出力だけを消します`);
-    cleanOwnOutput(outDir, publicDir);
+    fail(`dist/${eventId}/ にビルド結果がありません。先に pnpm build ${eventId} を実行してください`);
   }
 
   // index.html の %VITE_TITLE% とアプリの import.meta.env に渡す
@@ -104,9 +93,6 @@ export default defineConfig(({ command, isPreview }) => {
     // サブパスに置いても動くよう相対パスで出力
     base: './',
     publicDir,
-    build: {
-      outDir,
-      emptyOutDir: nested.length === 0,
-    },
+    build: { outDir, emptyOutDir: true },
   };
 });

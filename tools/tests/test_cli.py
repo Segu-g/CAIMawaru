@@ -47,6 +47,38 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Z-99", err)
 
+    def test_updated_at_changes_only_with_circles(self):
+        from caimawaru import build
+        from caimawaru.project import load_event
+        event = load_event(self.root, "example")
+        r = build.validate(event)
+        self.assertEqual(build.write_output(event, r, today="2030-01-01")["event"]["updatedAt"], "2030-01-01")
+        # サークル情報が同じなら、イベント情報だけ変わっても日付はそのまま
+        r.info = {**r.info, "venue": "別の会場"}
+        self.assertEqual(build.write_output(event, r, today="2030-01-02")["event"]["updatedAt"], "2030-01-01")
+        r.circles[0] = {**r.circles[0], "name": "変更後"}
+        self.assertEqual(build.write_output(event, r, today="2030-01-03")["event"]["updatedAt"], "2030-01-03")
+
+    def test_out_dir_is_rejected(self):
+        path = self.root / "events/example/event.json"
+        config = json.loads(path.read_text(encoding="utf-8"))
+        path.write_text(json.dumps({**config, "outDir": "site"}), encoding="utf-8")
+        code, _, err = self.cli("check", "example")
+        self.assertEqual(code, 1)
+        self.assertIn("outDir", err)
+
+    def test_broken_files_are_errors_not_tracebacks(self):
+        (self.root / "events/example/layout.json").write_text('{"hall": {"x": 0, "y": 0, "w": 1, "h": 1}, "islands": {}}', encoding="utf-8")
+        code, _, err = self.cli("check", "example")
+        self.assertEqual(code, 1)
+        self.assertIn("layout.json", err)
+        (self.root / "events/example/layout.json").write_text("[]", encoding="utf-8")
+        self.assertEqual(self.cli("check", "example")[0], 1)
+        (self.root / "events/example/event.json").write_text("{", encoding="utf-8")
+        code, _, err = self.cli("import", "example", "--dry-run")
+        self.assertEqual(code, 1)
+        self.assertIn("event.json", err)
+
     def test_unknown_event(self):
         code, _, err = self.cli("data", "nosuch")
         self.assertEqual(code, 1)

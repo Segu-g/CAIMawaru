@@ -1,6 +1,6 @@
 import type { Layout } from './layout';
 
-// public/data/circles.json の形（tools/build.py が生成）
+// public/data/circles.json の形（Python の caimawaru data が生成。tools/caimawaru/build.py）
 
 export type EventInfo = {
   name: string;

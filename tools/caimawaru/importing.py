@@ -9,6 +9,7 @@ data/circles.csv と data/menus.csv に取り込む（caimawaru import）。
 - 書き込んだあと検証・生成する（--no-build で省略）
 """
 import importlib
+import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -132,7 +133,10 @@ def list_importers():
 
 def run(event, fetch=False, input=None, dry_run=False, no_build=False):
     """取り込む。終了コードを返す。"""
-    sources = event.config().get("sources") or []
+    try:
+        sources = event.config().get("sources") or []
+    except json.JSONDecodeError as e:
+        raise CliError(f"{event.rel(event.config_json)}: JSON として読めません: {e}")
     if not sources:
         raise CliError("event.json に sources（取り込み元）がありません。docs/importers.md を参照してください")
     if input and len(sources) != 1:

@@ -1,7 +1,7 @@
 """新しいイベントのフォルダ events/<eventId>/ を作る（caimawaru new-event）。
 
     caimawaru new-event <eventId> [--name 表示名] [--date YYYY-MM-DD] [--venue 会場]
-                                  [--sockbase URL] [--out-dir 公開先] [--map]
+                                  [--sockbase URL] [--map]
 
     <eventId> は英数字・ハイフン・アンダースコア（例: 2027-03-21-mycon）。★・タグの保存先（storeId）の既定値にもなる。
     --sockbase を付けると、取り込み元（sources）に Sockbase の公式リストを入れる。
@@ -17,7 +17,7 @@ from caimawaru.project import CIRCLE_COLS, EVENT_ID, MENU_COLS, CliError, write_
 
 
 def run(root, a):
-    """a は argparse の結果（event_id, name, date, venue, sockbase, out_dir, map）。終了コードを返す。"""
+    """a は argparse の結果（event_id, name, date, venue, sockbase, map）。終了コードを返す。"""
     if not EVENT_ID.fullmatch(a.event_id):
         raise CliError("eventId は英数字・ハイフン・アンダースコアにしてください")
     if a.date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", a.date):
@@ -33,7 +33,6 @@ def run(root, a):
     config = {
         "storeId": a.event_id,
         "title": f"{name} サークルリスト",
-        **({"outDir": a.out_dir} if a.out_dir else {}),
         "sources": [{"type": "sockbase", "url": a.sockbase}] if a.sockbase else [],
         "info": {
             "name": name,
