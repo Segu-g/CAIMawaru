@@ -13,8 +13,6 @@
     # 1行ずつ貼り付ける（終わったら Ctrl+D、Windows は Ctrl+Z → Enter）。行は「URL」または「サークル指定 URL」
     caimawaru menu <eventId> -
 
-URL は " で囲む（? や & を含むとシェルが別の意味に取る）。貼り付け（-）はシェルを通らないので囲まなくてよい。
-
     --dry-run を付けると、判定結果を表示するだけで書き込まない。
 """
 import re
