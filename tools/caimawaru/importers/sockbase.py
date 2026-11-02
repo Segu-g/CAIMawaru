@@ -19,14 +19,11 @@ DESCRIPTION = "Sockbase の公式サークルリスト（ページの HTML）"
 DEFAULT_FILE = "sources/sockbase.html"
 
 
-ASTRO_ARRAY = 1  # Astro の props の [型, 値] で、値が配列であることを表す型
-
-
 def _astro(value):
     # Astro の props シリアライズ形式 [型, 値]（0=値, 1=配列）を素の値に戻す
     if isinstance(value, list) and len(value) == 2 and isinstance(value[0], int):
         kind, inner = value
-        return [_astro(item) for item in inner] if kind == ASTRO_ARRAY else _astro(inner)
+        return [_astro(item) for item in inner] if kind == 1 else _astro(inner)
     if isinstance(value, dict):
         return {key: _astro(item) for key, item in value.items()}
     if isinstance(value, list):

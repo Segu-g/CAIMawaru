@@ -23,9 +23,6 @@ from caimawaru.console import DRY_RUN_NOTICE
 from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, circle_id, circle_spaces, is_http_url, read_csv, stripped
 from caimawaru.xurl import normalize_url, x_handle
 
-STDIN = "-"  # URL の代わりに書くと、標準入力から1行ずつ読む
-
-
 def find_circles(circles, query):
     """検索語に一致するサークルを返す。完全一致（id・スペース・XのID）を優先し、なければサークル名の部分一致。"""
     text = query.strip()
@@ -119,7 +116,7 @@ def run(event, urls, circle=None, note="", dry_run=False):
 
     entries = []  # (サークル指定, URL)
     for url in urls:
-        if url == STDIN:
+        if url == "-":  # 標準入力から1行ずつ読む
             entries += _read_pasted_lines(circle)
         else:
             entries.append((circle, url))
