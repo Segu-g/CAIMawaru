@@ -1,41 +1,23 @@
-#!/usr/bin/env python3
 """主催が配る任意の形式のサークル情報（event.json の sources）を、イベントデータの
-data/circles.csv と data/menus.csv に取り込む。
+data/circles.csv と data/menus.csv に取り込む（caimawaru import）。
 
-    取得（sources/ に元データを置く） → 変換（インポーター） → イベントデータ（data/*.csv） → pnpm data
-
-使い方（EVENT にイベントのフォルダ名を指定）:
-    EVENT=<slug> pnpm import-circles              # sources/ の元データから取り込む
-    EVENT=<slug> pnpm import-circles --fetch      # 元データを取得してから取り込む（インポーターが fetch に対応している場合）
-    EVENT=<slug> pnpm import-circles --dry-run    # 変化を表示するだけで書き込まない
-    EVENT=<slug> pnpm import-circles --input <ファイル>   # source が1つのとき、元データのファイルを直接指定する
-    EVENT=<slug> pnpm import-circles --list       # 使えるインポーターの一覧
+    取得（sources/ に元データを置く） → 変換（インポーター） → イベントデータ（data/*.csv） → caimawaru data
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きする。返さなかった列（tags / notes など）は直接編集した値を残す
 - menus.csv は取り込んだお品書き URL を追加し、直接追加した行は残す
-- 公式リストから消えたサークルは知らせる（配置変更・参加取り消しの可能性。menus.csv に残った行は build.py がエラーにする）
-- 書き込んだあと build.py で検証・生成する（--no-build で省略）
+- 公式リストから消えたサークルは知らせる（配置変更・参加取り消しの可能性。menus.csv に残った行は検証でエラーになる）
+- 書き込んだあと検証・生成する（--no-build で省略）
 """
-import argparse
-import csv
-import re
-import subprocess
+import json
 import sys
 from datetime import date
 from pathlib import Path
 
-# -I（隔離モード）で実行しても同じフォルダのモジュールを読めるようにする
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+from caimawaru import build, importers
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, make_id, read_rows, write_csv
 
-CIRCLE_COLS = ["id", "space", "event", "name", "kana", "penNames", "tags", "adult",
-               "x", "pixiv", "booth", "web", "notes", "source"]
-MENU_COLS = ["id", "url", "note", "checkedAt"]
 TRUE_WORDS = {"1", "true", "yes", "y", "有", "あり", "○", "◯", "r18", "成人向け"}
 FALSE_WORDS = {"0", "false", "no", "n", "無", "なし", "×", "-", "全年齢"}
-
-
-def make_id(space):
-    return re.sub(r"[^0-9A-Za-z]+", "-", space).strip("-").lower()
 
 
 def as_list(value):
@@ -86,11 +68,6 @@ def normalize(raw, source, warnings, where):
     return row, menus
 
 
-def read_rows(path):
-    if not path.exists():
-        return []
-    with path.open(encoding="utf-8-sig", newline="") as f:
-        return list(csv.DictReader(f))
 
 
 def merge(imported, existing_circles, existing_menus, today):
@@ -146,43 +123,50 @@ def merge(imported, existing_circles, existing_menus, today):
     return circles, menus, report
 
 
-def run(args):
-    import events  # EVENT が必要なので、--list のときは読まない
-    import importers
+def list_importers():
+    for kind in importers.available():
+        mod = importers.load({"type": kind})
+        print(f"{kind:9} {getattr(mod, 'DESCRIPTION', '')}{'（取得に対応）' if hasattr(mod, 'fetch') else ''}")
 
-    sources = events.CONFIG.get("sources") or []
+
+def run(event, fetch=False, input=None, dry_run=False, no_build=False):
+    """取り込む。終了コードを返す。"""
+    try:
+        sources = event.config().get("sources") or []
+    except json.JSONDecodeError as e:
+        raise CliError(f"{event.rel(event.config_json)}: JSON として読めません: {e}")
     if not sources:
-        sys.exit("event.json に sources（取り込み元）がありません。docs/importers.md を参照してください")
-    if args.input and len(sources) != 1:
-        sys.exit("--input は sources が1つのときだけ使えます")
+        raise CliError("event.json に sources（取り込み元）がありません。docs/importers.md を参照してください")
+    if input and len(sources) != 1:
+        raise CliError("--input は sources が1つのときだけ使えます")
 
     warnings, imported = [], []
     for i, source in enumerate(sources):
         label = source.get("name") or source.get("type") or f"sources[{i}]"
         try:
-            mod = importers.load(source, events.DIR)
+            mod = importers.load(source)
         except ValueError as e:
-            sys.exit(f"{label}: {e}")
+            raise CliError(f"{label}: {e}") from e
         default = getattr(mod, "DEFAULT_FILE", "")
-        if args.input:
-            path = Path(args.input).resolve()
+        if input:
+            path = Path(input).resolve()
         elif source.get("file") or default:
-            path = events.DIR / (source.get("file") or default)
+            path = event.dir / (source.get("file") or default)
         else:
-            sys.exit(f"{label}: 元データの file を指定してください")
+            raise CliError(f"{label}: 元データの file を指定してください")
 
-        if args.fetch:
+        if fetch:
             if not callable(getattr(mod, "fetch", None)):
-                sys.exit(f"{label}: このインポーターは取得（fetch）に対応していません。元データを {path} に置いてください")
-            print(f"{label}: 取得しています → {path.relative_to(events.ROOT) if path.is_relative_to(events.ROOT) else path}")
+                raise CliError(f"{label}: このインポーターは取得（fetch）に対応していません。元データを {event.rel(path)} に置いてください")
+            print(f"{label}: 取得しています → {event.rel(path)}")
             mod.fetch(source, path)
         if not path.exists():
-            sys.exit(f"{label}: 元データ {path} がありません（--fetch で取得するか、ここに置いてください）")
+            raise CliError(f"{label}: 元データ {event.rel(path)} がありません（--fetch で取得するか、ここに置いてください）")
 
         try:
             raws = mod.read(source, path)
         except (ValueError, KeyError) as e:
-            sys.exit(f"{label}: 読み取れませんでした: {e}")
+            raise CliError(f"{label}: 読み取れませんでした: {e}") from e
         for n, raw in enumerate(raws, 1):
             where = f"{label} {n}件目"
             if not (raw.get("id") or raw.get("space")):
@@ -193,7 +177,7 @@ def run(args):
             imported.append((row, menus, cols))
         print(f"{label}: {len(raws)} 件")
 
-    circles, menus, report = merge(imported, read_rows(events.CIRCLES_CSV), read_rows(events.MENUS_CSV), date.today().isoformat())
+    circles, menus, report = merge(imported, read_rows(event.circles_csv), read_rows(event.menus_csv), date.today().isoformat())
 
     for w in warnings:
         print(f"警告: {w}", file=sys.stderr)
@@ -202,44 +186,12 @@ def run(args):
     if report["removed"]:
         print(f"取り込み元から消えた id: {', '.join(report['removed'])}", file=sys.stderr)
     if report["orphan_menus"]:
-        print(f"menus.csv に残る、サークルのない id（build.py がエラーにします）: {', '.join(report['orphan_menus'])}", file=sys.stderr)
-    if args.dry_run:
+        print(f"menus.csv に残る、サークルのない id（検証でエラーになります）: {', '.join(report['orphan_menus'])}", file=sys.stderr)
+    if dry_run:
         print("（--dry-run のため書き込みません）")
-        return
+        return 0
 
-    events.DATA.mkdir(parents=True, exist_ok=True)
-    with events.CIRCLES_CSV.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=CIRCLE_COLS)
-        w.writeheader()
-        w.writerows(circles)
-    with events.MENUS_CSV.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=MENU_COLS, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(menus)
-    print(f"{events.CIRCLES_CSV.relative_to(events.ROOT)} と {events.MENUS_CSV.name} を更新しました")
-    if not args.no_build:
-        sys.stdout.flush()
-        sys.exit(subprocess.call([sys.executable, str(Path(__file__).resolve().parent / "build.py")]))
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--fetch", action="store_true", help="元データを取得してから取り込む")
-    parser.add_argument("--input", help="元データのファイル（sources が1つのとき）")
-    parser.add_argument("--dry-run", action="store_true", help="変化を表示するだけで書き込まない")
-    parser.add_argument("--no-build", action="store_true", help="取り込み後に build.py を実行しない")
-    parser.add_argument("--list", action="store_true", help="使えるインポーターの一覧")
-    args = parser.parse_args()
-    if args.list:
-        import importlib
-        import importers
-        for kind in importers.BUILTIN:
-            mod = importlib.import_module(f"importers.{kind}")
-            print(f"{kind:9} {mod.DESCRIPTION}{'（取得に対応）' if hasattr(mod, 'fetch') else ''}")
-        print(f"{'python':9} イベントごとの Python ファイル（events/<slug>/ に置き、module で指定）")
-        return
-    run(args)
-
-
-if __name__ == "__main__":
-    main()
+    write_csv(event.circles_csv, CIRCLE_COLS, circles)
+    write_csv(event.menus_csv, MENU_COLS, menus)
+    print(f"{event.rel(event.circles_csv)} と {event.menus_csv.name} を更新しました")
+    return 0 if no_build else build.run(event)

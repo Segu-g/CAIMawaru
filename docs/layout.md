@@ -1,12 +1,12 @@
 # 配置図（layout.json）の書き方
 
-`events/<slug>/layout.json` があるイベントだけ配置図を表示します。公式配置図を見ながら座標を描き起こします（公式画像は転載しない）。
+`events/<eventId>/layout.json` があるイベントだけ配置図を表示します。公式配置図を見ながら座標を描き起こします（公式画像は転載しない）。
 座標はホール左上を原点とした任意の単位で、セル（1スペース）の既定の大きさは 45×26 です。
 
 ```jsonc
 {
   "$comment": "出典の公式配置図の URL など（ページには出ない）",
-  "expectedSpaces": 43,                        // 任意。スペース数がこれと違えば pnpm data がエラーにする
+  "expectedSpaces": 43,                        // 任意。スペース数がこれと違えば uv run caimawaru data がエラーにする
   "cell": { "w": 45, "h": 26 },                // 任意。セルの大きさ
   "hall": { "x": 0, "y": 0, "w": 1000, "h": 600 },     // ホールの外枠
   "bounds": { "x": -40, "y": -20, "w": 1080, "h": 640 }, // 任意。拡大・移動できる範囲（既定はホール＋出入口の周り）
@@ -64,6 +64,6 @@
 
 ## 確かめる
 
-- `EVENT=<slug> pnpm data` — スペースの重複、`expectedSpaces`、circles.csv のスペースが配置図にあるか
-- `pnpm test` — 生成済みの全イベントの配置図
-- `EVENT=<slug> pnpm dev` で、公式配置図と並べて目で確かめる
+- `uv run caimawaru data <eventId>` — スペースの重複、`expectedSpaces`、circles.csv のスペースが配置図にあるか
+- `uv run python -m unittest discover -s tools/tests` — 番号の振り方などの展開の規則（`tools/caimawaru/layout.py`）
+- `pnpm dev <eventId>` で、公式配置図と並べて目で確かめる

@@ -1,0 +1,19 @@
+[project]
+name = "caimawaru"
+version = "0.1.0"
+description = "CAIMawaru のイベントデータ（サークル情報・お品書き・配置図）を検証・生成・取り込みする CLI"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+caimawaru = "caimawaru.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "tools"
+module-name = "caimawaru"

@@ -7,3 +7,4 @@ CLAUDE.local.md
 # 実在のイベントのデータはリポジトリに入れない（手元にだけ置く）。サンプルだけ公開する
 /events/*
 !/events/example/
+.venv/

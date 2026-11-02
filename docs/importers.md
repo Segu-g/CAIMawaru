@@ -5,19 +5,19 @@ CAIMawaru は、それを **取得 → 変換 → イベントデータ** の3�
 
 | 段階 | 置き場所 | 誰が・何で |
 |---|---|---|
-| 取得 | `events/<slug>/sources/` | 人が保存する／インポーターの `fetch`（`pnpm import-circles --fetch`）／エージェントが取得する |
-| 変換 | `tools/importers/`・イベントごとの Python | `pnpm import-circles`（インポーターの `read`） |
-| イベントデータ | `events/<slug>/data/*.csv` | 取り込み結果。人・エージェントが直接編集してもよい |
+| 取得 | `events/<eventId>/sources/` | 人が保存する／インポーターの `fetch`（`uv run caimawaru import --fetch`）／エージェントが取得する |
+| 変換 | `tools/caimawaru/importers/`・イベントごとの Python | `uv run caimawaru import`（インポーターの `read`） |
+| イベントデータ | `events/<eventId>/data/*.csv` | 取り込み結果。人・エージェントが直接編集してもよい |
 
 ## 使い方
 
 `event.json` の `sources` に取り込み元を書き、取り込みます。
 
 ```sh
-EVENT=<slug> pnpm import-circles --dry-run   # 何が変わるかだけ表示
-EVENT=<slug> pnpm import-circles             # sources/ の元データから取り込む → pnpm data まで実行
-EVENT=<slug> pnpm import-circles --fetch     # 元データを取得してから取り込む（fetch に対応したインポーターのみ）
-EVENT=<slug> pnpm import-circles --list      # 使えるインポーター
+uv run caimawaru import <eventId> --dry-run   # 何が変わるかだけ表示
+uv run caimawaru import <eventId>             # sources/ の元データから取り込む → uv run caimawaru data まで実行
+uv run caimawaru import <eventId> --fetch     # 元データを取得してから取り込む（fetch に対応したインポーターのみ）
+uv run caimawaru importers                    # 使えるインポーター
 ```
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きします。返さなかった列（多くは `tags`・`notes` など）は直接編集した値が残ります
@@ -34,8 +34,9 @@ EVENT=<slug> pnpm import-circles --list      # 使えるインポーター
 { "type": "sockbase", "url": "https://list.sockbase.net/circle-lists/<id>" }
 ```
 
-- 元データは描画済みの HTML（既定 `sources/sockbase.html`）。`--fetch` で headless Chrome により取得できる
+- 元データは公式リストのページの HTML（既定 `sources/sockbase.html`）。`--fetch` で取得できる（`list.sockbase.net` だけ。ブラウザは使わない）
 - 取り込む列: id, space, event, name, kana, penNames, adult, x, pixiv, web とお品書き URL。サークルカット画像は取り込まない
+- 配置図のあるリストもないリストも読める（ページ内のサークル一覧を読む）
 
 ### csv — CSV / TSV
 
@@ -67,16 +68,18 @@ EVENT=<slug> pnpm import-circles --list      # 使えるインポーター
 
 - `records` はサークルの配列までのパス、`columns` の値は各サークル内のパス（`.` 区切り、配列は番号）
 
-## 独自の形式（type: python）
+## 新しい形式
 
-組み込みで読めない形式は、イベントのフォルダに Python ファイルを置いて読みます。
+組み込みで読めない形式は、`tools/caimawaru/importers/<type>.py` にインポーターを足し、その名前を `type` に書きます。
 
 ```json
-{ "type": "python", "module": "importer.py", "file": "sources/list.xlsx" }
+{ "type": "myformat", "file": "sources/list.xlsx" }
 ```
 
 ```python
-# events/<slug>/importer.py
+# tools/caimawaru/importers/myformat.py
+DESCRIPTION = "○○の配布形式"
+
 def read(source, path):
     """path の元データを読み、イベントデータの列名をキーにした行のリストを返す。"""
     return [{"space": "A-01", "name": "サークル名", "penNames": ["作家"], "x": "example_user",
@@ -87,7 +90,9 @@ def fetch(source, path):  # 任意。--fetch で呼ばれる
 ```
 
 - 返す行のキーは circles.csv の列名と `menus`。`id` か `space` は必須。値の正規化は共通処理が行う
-- 何度も使う形式になったら、`tools/importers/<type>.py` に組み込みとして移し、テスト（`tools/tests/`）を足す
+- 形式の読み方だけを書き、実在のイベントの値（サークル名・URL など）は書かない。テスト（`tools/tests/`）は架空のデータで書く
+- `type` に書けるのはこのフォルダのモジュール名だけ。イベントのフォルダなど、ほかの場所の Python ファイルは読み込まない
+  （受け取ったイベントのデータで任意のコードが実行されないように）
 
 ## エージェントによる取得
 

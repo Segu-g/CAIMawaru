@@ -1,6 +1,6 @@
-import type { LayoutSpec } from './layout';
+import type { Layout } from './layout';
 
-// public/data/circles.json の形（tools/build.py が生成）
+// public/data/circles.json の形（Python の caimawaru data が生成。tools/caimawaru/build.py）
 
 export type EventInfo = {
   name: string;
@@ -48,7 +48,7 @@ export type Circle = {
 export type CircleData = {
   event: EventInfo;
   circles: Circle[];
-  layout?: LayoutSpec; // 配置図（events/<slug>/layout.json）
+  layout?: Layout; // 配置図（events/<eventId>/layout.json を caimawaru data が展開したもの）
 };
 
 // 閲覧者個人の ★・タグ・メモ（localStorage にのみ保存）

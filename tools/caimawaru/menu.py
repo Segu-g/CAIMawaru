@@ -1,36 +1,30 @@
-#!/usr/bin/env python3
-"""お品書きのURLを data/menus.csv に登録し、public/data/circles.json を再生成する。
+"""お品書きのURLを data/menus.csv に登録し、circles.json を再生成する（caimawaru menu）。
 
-使い方:
     # Xの投稿URLなら、投稿したアカウントからサークルを自動で判定する
-    pnpm menu https://x.com/example_user/status/1234567890123456789
+    caimawaru menu <eventId> "https://x.com/example_user/status/1234567890123456789"
 
     # まとめて登録（スペース区切り）
-    pnpm menu URL1 URL2 URL3
+    caimawaru menu <eventId> "URL1" "URL2" "URL3"
 
     # サークルを指定する（スペース番号・id・サークル名の一部・@XのID）
-    pnpm menu --circle A-05 https://booth.pm/...
-    pnpm menu --circle 星屑 --note 新刊 https://x.com/...
+    caimawaru menu <eventId> --circle A-05 "https://booth.pm/..."
+    caimawaru menu <eventId> --circle 星屑 --note "新刊" "https://x.com/..."
 
-    # 1行ずつ貼り付ける（終わったら Ctrl+D）。行は「URL」または「サークル指定 URL」
-    pnpm menu -
+    # 1行ずつ貼り付ける（終わったら Ctrl+D、Windows は Ctrl+Z → Enter）。行は「URL」または「サークル指定 URL」
+    caimawaru menu <eventId> -
 
     --dry-run を付けると、判定結果を表示するだけで書き込まない。
 """
-import argparse
-import csv
 import re
-import subprocess
 import sys
 from datetime import date
-from pathlib import Path
 
-import build
+from caimawaru import build
+from caimawaru.project import MENU_COLS, is_http_url, read_csv, write_csv
 
 X_POST = re.compile(
     r"^https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/status/(\d+)", re.IGNORECASE
 )
-MENU_COLS = ["id", "url", "note", "checkedAt"]
 
 
 def normalize_url(url):
@@ -92,7 +86,7 @@ def choose(candidates, label):
 def resolve(circles, url, query):
     """登録するURLとサークルを決める。失敗したら None。"""
     url, handle = normalize_url(url.strip())
-    if not build.is_http_url(url):
+    if not is_http_url(url):
         print(f"  ✗ URLではありません: {url}", file=sys.stderr)
         return None
     if query:
@@ -115,29 +109,23 @@ def parse_stdin_line(line):
     return query, url
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("urls", nargs="+", help="お品書きのURL。「-」で標準入力から1行ずつ読む")
-    parser.add_argument("--circle", help="サークルの指定（スペース番号・id・サークル名の一部・@XのID）")
-    parser.add_argument("--note", default="", help="リンク名に添える説明（例: 新刊）")
-    parser.add_argument("--dry-run", action="store_true", help="判定結果を表示するだけで書き込まない")
-    args = parser.parse_args()
-
-    circles = build.read_csv(build.CIRCLES_CSV)
-    menus = build.read_csv(build.MENUS_CSV)
+def run(event, urls, circle=None, note="", dry_run=False):
+    """登録する。終了コードを返す。"""
+    circles = read_csv(event.circles_csv)
+    menus = read_csv(event.menus_csv)
     known = {(m["id"], m["url"]) for m in menus}
 
     entries = []
-    for u in args.urls:
+    for u in urls:
         if u == "-":
             if sys.stdin.isatty():
-                print("URLを1行ずつ貼り付けてください（「サークル指定 URL」も可）。終わったら Ctrl+D")
+                print("URLを1行ずつ貼り付けてください（「サークル指定 URL」も可）。終わったら Ctrl+D（Windows は Ctrl+Z → Enter）")
             for line in sys.stdin.read().splitlines():
                 parsed = parse_stdin_line(line)
                 if parsed:
-                    entries.append((parsed[0] or args.circle, parsed[1]))
+                    entries.append((parsed[0] or circle, parsed[1]))
         else:
-            entries.append((args.circle, u))
+            entries.append((circle, u))
 
     today = date.today().isoformat()
     added = failed = 0
@@ -146,32 +134,23 @@ def main():
         if not result:
             failed += 1
             continue
-        circle, url = result
-        if (circle["id"], url) in known:
-            print(f"  - 登録済み: {describe(circle)}  {url}")
+        c, url = result
+        if (c["id"], url) in known:
+            print(f"  - 登録済み: {describe(c)}  {url}")
             continue
-        known.add((circle["id"], url))
-        menus.append({"id": circle["id"], "url": url, "note": args.note, "checkedAt": today})
+        known.add((c["id"], url))
+        menus.append({"id": c["id"], "url": url, "note": note, "checkedAt": today})
         added += 1
-        print(f"  ✓ {describe(circle)}  {url}")
+        print(f"  ✓ {describe(c)}  {url}")
 
-    if args.dry_run:
+    if dry_run:
         print(f"（--dry-run のため書き込みません）{added} 件を登録できます")
-        return
+        return 0
     if not added:
         print("登録したお品書きはありません")
-        sys.exit(1 if failed else 0)
+        return 1 if failed else 0
 
-    with build.MENUS_CSV.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=MENU_COLS, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(menus)
-    print(f"{added} 件を {build.MENUS_CSV.relative_to(build.ROOT)} に登録しました" + (f"（{failed} 件は登録できませんでした）" if failed else ""))
-
-    # 表示用データを作り直す（検証エラーがあれば build.py が知らせる）
-    sys.stdout.flush()
-    sys.exit(subprocess.call([sys.executable, str(Path(build.__file__))]))
-
-
-if __name__ == "__main__":
-    main()
+    write_csv(event.menus_csv, MENU_COLS, menus)
+    print(f"{added} 件を {event.rel(event.menus_csv)} に登録しました" + (f"（{failed} 件は登録できませんでした）" if failed else ""))
+    # 表示用データを作り直す（検証エラーがあれば知らせる）
+    return build.run(event)

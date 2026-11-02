@@ -1,6 +1,6 @@
-"""取り込み（tools/import_circles.py と tools/importers/）のテスト。データはすべて架空。
+"""取り込み（tools/caimawaru/importing.py と tools/caimawaru/importers/）のテスト。データはすべて架空。
 
-    python3 -m unittest discover -s tools/tests -t tools   （pnpm test に含まれる）
+    uv run python -m unittest discover -s tools/tests
 """
 import html
 import json
@@ -8,11 +8,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import importers
-import import_circles as ic
-from importers import csv as csv_importer
-from importers import json as json_importer
-from importers import sockbase
+from caimawaru import importers
+from caimawaru import importing as ic
+from caimawaru.importers import csv as csv_importer
+from caimawaru.importers import json as json_importer
+from caimawaru.importers import sockbase
 
 
 def tmpfile(name, text):
@@ -145,24 +145,47 @@ class SockbaseImporterTest(unittest.TestCase):
         self.assertEqual(norm["x"], "https://x.com/example_user")
         self.assertEqual(norm["adult"], "0")
 
+    def test_circle_list_without_map(self):
+        """配置図のないリストはサークル一覧（SearchableCircleCardRack）だけ。項目が欠けていても読む"""
+        circle = {"spaceName": [0, "B-03"], "circleName": [0, "架空工房"], "hasAdult": [0, True],
+                  "links": [0, {"twitterScreenName": [0, None]}]}
+        props = html.escape(json.dumps({"circles": [1, [[0, circle]]]}), quote=True)
+        p = tmpfile("list.html", f'<astro-island component-url="/x/SearchableCircleCardRack.abc.js" props="{props}"></astro-island>')
+        [row] = sockbase.read({}, p)
+        self.assertEqual((row["space"], row["name"], row["kana"], row["x"], row["menus"], row["adult"]),
+                         ("B-03", "架空工房", "", "", [], True))
+
+    def test_prefers_circle_list_over_map(self):
+        def island(comp, key, name):
+            rec = {"spaceName": [0, "A-01"], "circleName": [0, name]}
+            props = html.escape(json.dumps({key: [1, [[0, rec]]]}), quote=True)
+            return f'<astro-island component-url="/x/{comp}.js" props="{props}"></astro-island>'
+        p = tmpfile("list.html", island("SpaceMapViewer", "spaces", "配置図") + island("SearchableCircleCardRack", "circles", "一覧"))
+        self.assertEqual([r["name"] for r in sockbase.read({}, p)], ["一覧"])
+
     def test_not_rendered_html(self):
         with self.assertRaises(ValueError):
             sockbase.read({}, tmpfile("list.html", "<html></html>"))
 
     def test_fetch_only_official_list(self):
-        with self.assertRaises(ValueError):
-            sockbase.fetch({"url": "https://example.com/"}, Path("/nonexistent"))
+        # ネットワークに出る前に止まること
+        for url in ("https://example.com/", "http://list.sockbase.net/circle-lists/x",
+                    "https://list.sockbase.net.example.com/circle-lists/x", "https://evil.example/?https://list.sockbase.net/"):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                sockbase.fetch({"url": url}, Path("/nonexistent"))
 
 
 class LoaderTest(unittest.TestCase):
-    def test_python_importer_from_event_dir(self):
-        p = tmpfile("my_importer.py", "def read(source, path):\n    return [{'space': 'A-01', 'name': source['x']}]\n")
-        mod = importers.load({"type": "python", "module": "my_importer.py"}, p.parent)
-        self.assertEqual(mod.read({"x": "名前"}, None), [{"space": "A-01", "name": "名前"}])
+    def test_builtin_types(self):
+        self.assertEqual(importers.available(), ["csv", "json", "sockbase"])
+        self.assertTrue(callable(importers.load({"type": "csv"}).read))
 
-    def test_unknown_type(self):
-        with self.assertRaises(ValueError):
-            importers.load({"type": "excel"}, Path("."))
+    def test_only_modules_in_the_package(self):
+        # ファイルのパス・親パッケージのモジュール・廃止した python は読み込まない
+        p = tmpfile("my_importer.py", "raise SystemExit('実行されてはいけない')\n")
+        for kind in ("excel", "python", str(p), "../cli", "caimawaru.cli", "cli", "__init__", "", None):
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                importers.load({"type": kind, "module": str(p)})
 
 
 if __name__ == "__main__":
