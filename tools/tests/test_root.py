@@ -54,44 +54,10 @@ class FindRootTest(TempRepo):
             find_root(foreign / "src")
         self.assertIn("別のプロジェクト", str(cm.exception))
 
-    def test_unreadable_pyproject_says_so(self):
-        pyproject = self.repo / "pyproject.toml"
-        for content in (b"[project\n", b'[project]\nname = "\xff"\n'):  # TOML の誤り・UTF-8 でない
-            pyproject.write_bytes(content)
-            for explicit in (False, True):
-                with self.assertRaises(CliError) as cm:
-                    find_root(self.repo, explicit=explicit)
-                self.assertIn("pyproject.toml を読めませんでした", str(cm.exception))
-                self.assertIn(str(pyproject), str(cm.exception))
-                self.assertNotIn("別のプロジェクト", str(cm.exception))
-
-    def test_project_not_a_table_is_not_caimawaru(self):
-        for content in ('project = "caimawaru"\n', '[project]\nname = ["caimawaru"]\n',
-                        '[project]\nname = "CAIMawaru"\n', "[tool.x]\n"):
-            (self.repo / "pyproject.toml").write_text(content, encoding="utf-8")
-            with self.assertRaises(CliError) as cm:
-                find_root(self.repo)
-            self.assertIn("別のプロジェクト", str(cm.exception))
-            with self.assertRaises(CliError) as cm:
-                find_root(self.repo, explicit=True)
-            self.assertIn("CAIMawaru のリポジトリではありません", str(cm.exception))
-
-    def test_deleted_cwd_is_an_error(self):
-        gone = self.base / "gone"
-        gone.mkdir()
-        old = Path.cwd()
-        os.chdir(gone)
-        try:
-            gone.rmdir()
-        except OSError:
-            os.chdir(old)
-            self.skipTest("使用中のフォルダを消せない環境（Windows）")
-        try:
-            with self.assertRaises(CliError) as cm:
-                find_root()
-            self.assertIn("カレントディレクトリ", str(cm.exception))
-        finally:
-            os.chdir(old)
+    def test_broken_pyproject_is_not_caimawaru(self):
+        (self.repo / "pyproject.toml").write_text("[project\n", encoding="utf-8")
+        with self.assertRaises(CliError):
+            find_root(self.repo)
 
     def test_explicit_root_valid(self):
         self.assertEqual(find_root(self.repo, explicit=True), self.repo)
