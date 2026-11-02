@@ -23,9 +23,9 @@ INFO_STRINGS = ("name", "date", "venue", "hours")
 INFO_ARRAYS = ("links", "hashtags")
 # 参加イベントの色の枠（info.eventSlots の値・info.slotColors のキー）
 SLOTS = range(1, 6)
+SLOTS_TEXT = f"{SLOTS[0]}〜{SLOTS[-1]}"
 # 元データのファイル（file）が必須の取り込み元の type
 FILE_SOURCE_TYPES = ("csv", "json")
-CSV_FIRST_DATA_LINE = 2  # 1行目は見出し
 
 
 @dataclass
@@ -124,11 +124,11 @@ def _check_info(info, result, where):
     check_array("halls", _is_hall, "形が不正です（{ \"label\", \"url\", \"current\" } にしてください）")
     for event_name, slot in object_or_empty("eventSlots").items():
         if not _is_slot(slot):
-            result.errors.append(f"{where}: info.eventSlots の {event_name} は 1〜5 にしてください: {slot}")
+            result.errors.append(f"{where}: info.eventSlots の {event_name} は {SLOTS_TEXT} にしてください: {slot}")
     slot_keys = [str(slot) for slot in SLOTS]
     for slot, colors in object_or_empty("slotColors").items():
         if slot not in slot_keys:
-            result.errors.append(f"{where}: info.slotColors の枠 {slot} は 1〜5 にしてください")
+            result.errors.append(f"{where}: info.slotColors の枠 {slot} は {SLOTS_TEXT} にしてください")
         elif not (isinstance(colors, dict) and all(isinstance(color, str) for color in colors.values())):
             result.errors.append(f"{where}: info.slotColors の枠 {slot} は {{ \"light\", \"dark\", \"ink\", \"darkInk\" }}（文字列）にしてください: {colors!r}")
     if "contact" in info:
@@ -222,7 +222,7 @@ def _check_circle_row(row, row_id, result, where):
 
 def _read_circles(event, result):
     circles, first_line_of = [], {}
-    for line_number, row in enumerate(read_csv(event.circles_csv, CIRCLE_COLS, result.warnings), start=CSV_FIRST_DATA_LINE):
+    for line_number, row in enumerate(read_csv(event.circles_csv, CIRCLE_COLS, result.warnings), start=2):  # 1行目は見出し
         where = f"circles.csv:{line_number}"
         row_id = circle_id(row)
         if not row_id:
@@ -239,7 +239,7 @@ def _read_circles(event, result):
 def _attach_menus(event, circles, result):
     """menus.csv の行を、id が同じサークルの menus に足す。"""
     circle_by_id = {circle["id"]: circle for circle in circles}
-    for line_number, row in enumerate(read_csv(event.menus_csv, MENU_COLS, result.warnings), start=CSV_FIRST_DATA_LINE):
+    for line_number, row in enumerate(read_csv(event.menus_csv, MENU_COLS, result.warnings), start=2):
         where = f"menus.csv:{line_number}"
         menu_id, url = row.get("id", ""), row.get("url", "")
         if menu_id not in circle_by_id:
