@@ -11,8 +11,8 @@ const parse = (text: string, standard: readonly string[] = MENU_COLS) => parseCs
 
 /** 読んで、決まった列（+ ほかの列）で書き戻す（エディタが保存するのと同じ） */
 function roundTrip(text: string, standard: readonly string[] = MENU_COLS): string {
-  const { extraHeader, rows } = parse(text, standard);
-  return formatCsv(standard, extraHeader, rows);
+  const { extraHeader, rows, lead } = parse(text, standard);
+  return formatCsv(standard, extraHeader, rows, lead);
 }
 
 describe('events/example の CSV を読んで書き戻すと同じバイト列になる', () => {
@@ -73,11 +73,29 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
     );
   });
 
-  it('列名の行の前では空白だけの行を飛ばさない（次の行を列名にしない）', () => {
-    expect(() => parse(',,,\r\nid,url\r\na-01,u\r\n')).toThrow('1 行目（列名）に決まった列');
-    expect(() => parse('\r\n, ,\r\nid,url\r\n')).toThrow('2 行目（列名）');
-    expect(() => parse(' \r\nid,url\r\n')).toThrow(CsvError);
-    expect(() => parse('a-01,A-01\r\n')).toThrow(CsvError); // 列名の行がない（データの行が先頭）
+  it('見出しの前の、空の行・どの値も空か空白だけの行は飛ばす', () => {
+    expect(roundTrip(',,,\r\n\r\n, ,\t\r\n \r\nid,url,note,checkedAt\r\na-01,u,,\r\n')).toBe('id,url,note,checkedAt\r\na-01,u,,\r\n');
+  });
+
+  it('見出しの前の「#」の行は、コメントの行として見出しの前にそのまま書く', () => {
+    const text = '# メモ,"a,b"\r\n\r\n#2\r\nid,url,note,checkedAt\r\na-01,u,,\r\n';
+    const t = parse(text);
+    expect(t.lead).toEqual([['# メモ', 'a,b'], ['#2']]);
+    expect(t.header).toEqual(['id', 'url', 'note', 'checkedAt']);
+    expect(roundTrip(text)).toBe('# メモ,"a,b"\r\n#2\r\nid,url,note,checkedAt\r\na-01,u,,\r\n');
+    expect(roundTrip('#だけ\r\n')).toBe('#だけ\r\nid,url,note,checkedAt\r\n');
+  });
+
+  it('id 列のない見出し・決まった列が1つもない見出しも読む（決まった列がなければ、すべてほかの列）', () => {
+    const noId = 'space,name\r\nA-01,サンプル\r\n';
+    expect(parse(noId, CIRCLE_COLS).rows[0]).toMatchObject({ values: { id: '', space: 'A-01', name: 'サンプル' } });
+    expect(parse(noId, CIRCLE_COLS).noStandard).toBe(false);
+    const none = 'a-01,A-01\r\na-02,A-02\r\n';
+    const t = parse(none);
+    expect(t.noStandard).toBe(true);
+    expect(t.extraHeader).toEqual(['a-01', 'A-01']);
+    expect(t.rows).toEqual([values({ id: '', url: '', note: '', checkedAt: '' }, ['a-02', 'A-02'])]);
+    expect(roundTrip(none)).toBe('id,url,note,checkedAt,a-01,A-01\r\n,,,,a-02,A-02\r\n');
   });
 
   it('id が空で space が「#」で始まる行はコメントではない（最初の値だけで見分ける）', () => {
@@ -166,12 +184,30 @@ describe('CLI と同じ形（列の順・空の行・コメントの行・ほか
     expect(roundTrip(text)).toBe('id,url,note,checkedAt,,memo,,memo\r\na-01,https://example.com/m,,,x,m1,y,m2\r\n');
   });
 
-  it('決まった列の名前が2回ある・列名より値が多い行・決まった列が1つもない列名の行は読まない（内容が失われるため）', () => {
-    expect(() => parse('id,url,id\r\n')).toThrow('「id」が重複');
-    expect(() => parse('id,url,note,url\r\na-01,a,b,c\r\n')).toThrow('「url」が重複');
-    expect(() => parse('id,url\r\na-01,u\r\na-02,"複数\n行",余分\r\n')).toThrow('3 行目の値が列名より多く');
-    expect(() => parse(', ,\r\n')).toThrow('1 行目（列名）に決まった列');
-    expect(() => parse('memo,x\r\n')).toThrow(CsvError);
+  it('決まった列の名前が2回あれば、最初の列を使い、後の列はほかの列として値ごと残す', () => {
+    const text = 'id,url,note,url\r\na-01,a,b,c\r\n';
+    const t = parse(text);
+    expect(t.notes).toEqual(['1 行目（見出し）に url 列が 2 つあります。最初の列を使い、ほかはそのまま残します']);
+    expect(t.rows).toEqual([values({ id: 'a-01', url: 'a', note: 'b', checkedAt: '' }, ['c'])]);
+    expect(roundTrip(text)).toBe('id,url,note,checkedAt,url\r\na-01,a,b,,c\r\n');
+  });
+
+  it('見出しより値が多い行は、最初の値に「#」を付けたコメントの行にする（値はすべて残し、見出しは変えない）', () => {
+    const text = 'id,url\r\na-01,u\r\na-02,"複数\n行",余分\r\n,x,y,z\r\n';
+    const t = parse(text, ['id', 'url']);
+    expect(t.header).toEqual(['id', 'url']);
+    expect(t.extraHeader).toEqual([]);
+    expect(t.rows).toEqual([values({ id: 'a-01', url: 'u' }), { comment: ['#a-02', '複数\n行', '余分'] }, { comment: ['#', 'x', 'y', 'z'] }]);
+    expect(t.notes).toEqual([
+      '3 行目は見出しより列が多いため、コメント行にしました（保存すると最初の値の前に「#」が付きます）',
+      '5 行目は見出しより列が多いため、コメント行にしました（保存すると最初の値の前に「#」が付きます）',
+    ]);
+    expect(roundTrip(text, ['id', 'url'])).toBe('id,url\r\na-01,u\r\n#a-02,"複数\n行",余分\r\n#,x,y,z\r\n');
+  });
+
+  it('CSV として読めないのは、「"」が閉じないままファイルが終わるときだけ', () => {
+    expect(() => parse('id,url\r\na-01,"https://example.com/m\r\n')).toThrow(CsvError);
+    expect(() => parse('id,url\r\na-01,"https://example.com/m\r\n')).toThrow('2 行目からの行で');
   });
 });
 
@@ -194,7 +230,7 @@ describe('Python の csv.reader と同じ読み方', () => {
 
   it('最後の値が空・閉じていない「"」', () => {
     expect(parseRecords('a,')).toEqual([['a', '']]);
-    expect(parseRecords('a,"b')).toEqual([['a', 'b']]);
+    expect(() => parseRecords('a,"b')).toThrow(CsvError);
   });
 
   it('値の前後の空白は残す（書き戻す前提）', () => {
@@ -202,8 +238,9 @@ describe('Python の csv.reader と同じ読み方', () => {
   });
 });
 
-// CLI のテスト（tools/tests/test_edit.py の test_canonical_form・test_bad_headers_are_refused）と同じ例。
-// どちらで保存しても同じバイト列になることを、両側で同じ入力・期待値で確かめる（docs/event-data.md の「CSV の書き方」）
+// CLI のテスト（tools/tests/test_edit.py の test_canonical_form・test_bad_headers_are_refused）と同じ入力。
+// どちらで保存しても同じバイト列になることを、両側で同じ入力・期待値で確かめる（docs/event-data.md の「CSV の書き方」）。
+// 見出しの重複・見出しより長い行は、読まずに止めていた規則から「読んで残す」規則に変えた（CLI 側も同じ規則にそろえる）
 describe('CLI のテストと同じ例（CSV の書き方）', () => {
   it.each([
     ['﻿id,url,note,checkedAt\na-01,https://example.com/m,,2030-01-01\n\n', 'id,url,note,checkedAt\r\na-01,https://example.com/m,,2030-01-01\r\n'],
@@ -218,11 +255,16 @@ describe('CLI のテストと同じ例（CSV の書き方）', () => {
     expect(roundTrip(text)).toBe(expected);
   });
 
-  it.each(['id,url,note,note', 'id,id,url,note,checkedAt,extra'])('見出しの重複は読まない: %s', (header) => {
-    expect(() => parse(`${header}\r\na-01,https://example.com/m,a,b\r\n`)).toThrow('重複');
+  it.each([
+    ['id,url,note,note', 'id,url,note,checkedAt,note\r\na-01,https://example.com/m,a,,b\r\n'],
+    ['id,id,url,note,checkedAt,extra', 'id,url,note,checkedAt,id,extra\r\na-01,a,b,,https://example.com/m,\r\n'],
+  ])('見出しの重複: %s は最初の列を使い、後の列を残す', (header, expected) => {
+    expect(roundTrip(`${header}\r\na-01,https://example.com/m,a,b\r\n`)).toBe(expected);
   });
 
-  it('値が見出しより多い行は読まない', () => {
-    expect(() => parse('id,url,note,checkedAt\r\na-01,https://example.com/m,a,b,extra\r\n')).toThrow('2 行目');
+  it('値が見出しより多い行はコメントの行にする', () => {
+    expect(roundTrip('id,url,note,checkedAt\r\na-01,https://example.com/m,a,b,extra\r\n')).toBe(
+      'id,url,note,checkedAt\r\n#a-01,https://example.com/m,a,b,extra\r\n',
+    );
   });
 });

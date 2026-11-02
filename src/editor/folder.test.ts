@@ -149,12 +149,23 @@ describe('読み込みと書き戻し', () => {
     );
   });
 
-  it('内容が失われる CSV・JSON として読めない event.json は開かない', async () => {
+  it('見出しが変わった CSV も開き、知らせを出して、編集しなければ値を変えずに書き戻す', async () => {
+    const cases: [string, string, string, string][] = [
+      ['data/circles.csv', 'a-01,A-01\r\na-02,A-02\r\n', 'サークルの列', 'id,space,event,name,kana,penNames,tags,adult,x,pixiv,booth,web,notes,source,a-01,A-01\r\n,,,,,,,,,,,,,,a-02,A-02\r\n'],
+      ['data/menus.csv', 'memo\r\nx\r\n', 'お品書きの列', 'id,url,note,checkedAt,memo\r\n,,,,x\r\n'],
+      ['data/menus.csv', 'id,url,url\r\na-01,u,v\r\n', 'url 列が 2 つ', 'id,url,note,checkedAt,url\r\na-01,u,,,v\r\n'],
+      ['data/menus.csv', 'id,url\r\na-01,"https://example.com/m\r\n続き",余分\r\n', '2 行目は見出しより列が多い', 'id,url,note,checkedAt\r\n#a-01,"https://example.com/m\r\n続き",余分\r\n'],
+    ];
+    for (const [path, text, note, expected] of cases) {
+      const { doc, notes } = await open(exampleFolder().put(path, text));
+      expect(notes.some((n) => n.file === path && n.message.includes(note)), `${path}: ${note}`).toBe(true);
+      expect(path === 'data/circles.csv' ? serializeCircles(doc) : serializeMenus(doc)).toBe(expected);
+    }
+  });
+
+  it('CSV として読めないもの（閉じていない「"」）・JSON として読めない event.json は開かない', async () => {
     const opens = (path: string, text: string) => open(exampleFolder().put(path, text));
-    await expect(opens('data/circles.csv', 'a-01,A-01\r\n')).rejects.toThrow('列名');
-    await expect(opens('data/menus.csv', ', ,\r\na-01,u\r\n')).rejects.toThrow('決まった列');
-    await expect(opens('data/menus.csv', 'id,url,url\r\n')).rejects.toThrow('「url」が重複');
-    await expect(opens('data/menus.csv', 'id,url\r\na-01,"https://example.com/m\r\n続き",余分\r\n')).rejects.toThrow('2 行目の値が列名より多く');
+    await expect(opens('data/menus.csv', 'id,url\r\na-01,"https://example.com/m\r\n')).rejects.toThrow('閉じていません');
     await expect(opens('event.json', '{ "storeId": ')).rejects.toThrow('JSON');
   });
 });
