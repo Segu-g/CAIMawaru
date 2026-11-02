@@ -20,7 +20,7 @@ import sys
 from datetime import date
 
 from caimawaru import build
-from caimawaru.project import MENU_COLS, Table, is_http_url, read_csv
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, is_http_url, read_csv
 
 X_POST = re.compile(
     r"^https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/status/(\d+)", re.IGNORECASE
@@ -113,9 +113,9 @@ def parse_stdin_line(line):
 
 def run(event, urls, circle=None, note="", dry_run=False):
     """登録する。終了コードを返す。"""
-    circles = read_csv(event.circles_csv)
+    circles = read_csv(event.circles_csv, CIRCLE_COLS)
     table = Table(event.menus_csv, MENU_COLS)  # 書き戻す（ファイルにだけある列・「#」の行も残す）
-    known = {(m["id"], m["url"]) for m in read_csv(event.menus_csv)}
+    known = {(m["id"], m["url"]) for m in read_csv(event.menus_csv, MENU_COLS)}
 
     entries = []
     for u in urls:

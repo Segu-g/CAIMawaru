@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 from caimawaru.cli import main
-from caimawaru.project import CIRCLE_COLS, COMMENT, MENU_COLS, format_csv, read_csv, read_table
+from caimawaru.project import CIRCLE_COLS, COMMENT, MENU_COLS, Table, format_csv, read_csv, read_table
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -153,8 +153,8 @@ class EditTest(unittest.TestCase):
         self.assertEqual(self.menus.read_bytes(), before_menus)
         code, out, err = self.cli("circle", "remove", "example", "A-01", "--with-menus")
         self.assertEqual(code, 0, err)
-        _, circles = read_table(self.circles, CIRCLE_COLS)
-        _, menus = read_table(self.menus, MENU_COLS)
+        circles = read_table(self.circles, CIRCLE_COLS).rows
+        menus = read_table(self.menus, MENU_COLS).rows
         self.assertNotIn("a-01", [c["id"] for c in circles])
         self.assertEqual([m["id"] for m in menus], ["c-01"])
         # お品書きのないサークルはそのまま消せる
@@ -167,7 +167,7 @@ class EditTest(unittest.TestCase):
         self.assertIn("--force", err)
         code, _, err = self.cli("circle", "set", "example", "C-01", "id=c-99", "--force")
         self.assertEqual(code, 0, err)
-        _, menus = read_table(self.menus, MENU_COLS)
+        menus = read_table(self.menus, MENU_COLS).rows
         self.assertEqual([m["id"] for m in menus], ["a-01", "c-99"])
 
     def test_menus_set_and_remove(self):
@@ -208,8 +208,7 @@ class EditTest(unittest.TestCase):
 
     def test_csv_rewrite_is_byte_stable(self):
         for path, cols in ((self.circles, CIRCLE_COLS), (self.menus, MENU_COLS)):
-            _, rows = read_table(path, cols)
-            self.assertEqual(format_csv(cols, rows).encode("utf-8"), path.read_bytes())
+            self.assertEqual(Table(path, cols).text().encode("utf-8"), path.read_bytes())
 
     def write_circles_with_extras(self):
         """「memo」列・コメント行・空行を足した circles.csv にする（直接編集でありうる形）。"""
@@ -234,6 +233,81 @@ class EditTest(unittest.TestCase):
         self.assertEqual(lines[2:5], self.COMMENT_ROWS)  # 位置も値もそのまま（空行は落とす）
         self.assertTrue(lines[5].endswith(",x,架空の公式サークル一覧,追記"))
 
+    def canonical(self, text):
+        """menus.csv に text を書いて読み直したときの (保存する内容, 警告)。保存した内容は読み直しても変わらないこと。"""
+        self.menus.write_bytes(text.encode("utf-8"))
+        t = Table(self.menus, MENU_COLS)
+        out = t.text()
+        self.menus.write_bytes(out.encode("utf-8"))
+        self.assertEqual(Table(self.menus, MENU_COLS).text(), out, "読み直すと変わる")
+        return out, t.warnings
+
+    def test_lenient_input_is_kept(self):
+        H = "id,url,note,checkedAt\r\n"
+        cases = [
+            # 見出しより前: 空行・空白だけの行は落とし、「#」の行は見出しの前にそのまま残す
+            ('\r\n , \r\n# 前書き,"a,b"\r\n#2\r\nid,url,note,checkedAt\r\na-01,https://example.com/m,,\r\n',
+             '# 前書き,"a,b"\r\n#2\r\n' + H + "a-01,https://example.com/m,,\r\n", []),
+            # id 列がない（id はスペース番号から作る。menus.csv では空のまま）
+            ("url,note\r\nhttps://example.com/m,x\r\n", H + ",https://example.com/m,x,\r\n", []),
+            # イベントデータの列が1つもない: すべてファイルにだけある列
+            ("a,b\r\n1,2\r\n", "id,url,note,checkedAt,a,b\r\n,,,,1,2\r\n",
+             ["menus.csv: お品書きの列が見つかりません（見出しに id, url, note, checkedAt のどれもありません）"]),
+            # イベントデータの列名が2つ: 最初の列を使い、後の列はファイルにだけある列
+            ("id,url,note,note\r\na-01,https://example.com/m,x,y\r\n",
+             "id,url,note,checkedAt,note\r\na-01,https://example.com/m,x,,y\r\n",
+             ["menus.csv: note 列が2つあります。最初の列を使います"]),
+            # 見出しより値が多い行: 最初の値の頭に「#」を付けてコメント行にする（見出しは広げない）
+            ('id,url\r\na-01,https://example.com/m\r\na-02,https://example.com/n,"x,y"\r\n,u,e\r\n',
+             H + 'a-01,https://example.com/m,,\r\n#a-02,https://example.com/n,"x,y"\r\n#,u,e\r\n',
+             ["menus.csv: 3行目は見出しより列が多いため、コメント行にしました",
+              "menus.csv: 4行目は見出しより列が多いため、コメント行にしました"]),
+            # ページ側の編集画面と同じ出力になること
+            ("id,url,note,note\r\na-01,https://example.com/m,a,b\r\n",
+             "id,url,note,checkedAt,note\r\na-01,https://example.com/m,a,,b\r\n",
+             ["menus.csv: note 列が2つあります。最初の列を使います"]),
+            ("id,id,url,note,checkedAt,extra\r\na-01,https://example.com/m,a,b\r\n",
+             "id,url,note,checkedAt,id,extra\r\na-01,a,b,,https://example.com/m,\r\n",
+             ["menus.csv: id 列が2つあります。最初の列を使います"]),
+            (H + "a-01,https://example.com/m,a,b,extra\r\n", H + "#a-01,https://example.com/m,a,b,extra\r\n",
+             ["menus.csv: 2行目は見出しより列が多いため、コメント行にしました"]),
+            # 「#」の行だけで見出しがない
+            ("# だけ\r\n", "# だけ\r\n" + H, []),
+        ]
+        for text, expected, warnings in cases:
+            self.assertEqual(self.canonical(text), (expected, warnings), text)
+        # 検証（read_csv）も同じ読み方: 重複した列は最初の列、列の多い行はデータにしない
+        self.menus.write_bytes("id,url,note,note\r\na-01,https://example.com/m,x,y\r\na-01,https://example.com/z,,,\r\n".encode("utf-8"))
+        warnings = []
+        self.assertEqual(read_csv(self.menus, MENU_COLS, warnings),
+                         [{"id": "a-01", "url": "https://example.com/m", "note": "x", "checkedAt": ""}])
+        self.assertEqual(len(warnings), 2)
+        code, _, err = self.cli("check", "example")
+        self.assertEqual(code, 0, err)
+        self.assertIn("note 列が2つあります", err)
+        self.assertIn("3行目は見出しより列が多い", err)
+        # 編集コマンドも警告を出し、同じ形で書く
+        code, _, err = self.cli("menus", "set", "example", "A-01", "note=既刊", "--no-build")
+        self.assertEqual(code, 0, err)
+        self.assertIn("警告: menus.csv: note 列が2つあります", err)
+        self.assertEqual(self.menus.read_bytes().decode("utf-8"),
+                         "id,url,note,checkedAt,note\r\na-01,https://example.com/m,既刊,,y\r\n#a-01,https://example.com/z,,,\r\n")
+
+    def test_unparsable_csv_is_a_clean_error(self):
+        before = self.snapshot()
+        self.menus.write_bytes(b'id,url,note,checkedAt\r\n\r\na-01,"https://example.com/m,,\r\nb,c\r\n')
+        for args in (("check", "example"), ("menus", "list", "example"), ("circle", "set", "example", "A-02", "notes=x"),
+                     ("menu", "example", "--circle", "A-02", "https://example.com/m2"), ("import", "example")):
+            code, _, err = self.cli(*args)
+            self.assertEqual(code, 1, args)
+            self.assertIn("menus.csv: 3行目から始まる行を CSV として読めません", err)
+            self.assertNotIn("Traceback", err)
+        self.menus.write_bytes("id,url\r\n".encode("cp932") + "お品書き".encode("cp932") + b"\r\n")
+        code, _, err = self.cli("menus", "list", "example")
+        self.assertEqual(code, 1)
+        self.assertIn("UTF-8", err)
+        self.assertEqual(self.snapshot()[self.circles], before[self.circles])
+
     def test_canonical_form(self):
         cases = [
             ("﻿id,url,note,checkedAt\na-01,https://example.com/m,,2030-01-01\n\n",  # BOM・LF・空行
@@ -254,14 +328,11 @@ class EditTest(unittest.TestCase):
              "id,url,note,checkedAt,by\r\na-01,https://example.com/m,,2030-01-01,人\r\n"),
         ]
         for text, expected in cases:
-            self.menus.write_bytes(text.encode("utf-8"))
-            header, rows = read_table(self.menus, MENU_COLS)
-            cols = MENU_COLS + [c for c in header if c not in MENU_COLS]
-            self.assertEqual(format_csv(cols, rows), expected, text)
+            self.assertEqual(self.canonical(text), (expected, []), text)
         # read_csv（検証・生成が読む）も同じ規則でコメント行と空行を見分ける
         other = self.root / "other.csv"
         other.write_bytes(("id,space,event,name\r\n# メモ,A-01,,\r\n,,,\r\n,#A-10,,番号が「#」で始まる\r\n").encode("utf-8"))
-        self.assertEqual([(c["id"], c["space"]) for c in read_csv(other)], [("", "#A-10")])
+        self.assertEqual([(c["id"], c["space"]) for c in read_csv(other, CIRCLE_COLS)], [("", "#A-10")])
         self.assertEqual(format_csv(MENU_COLS, [{COMMENT: ["# a,b", "c"]}]), 'id,url,note,checkedAt\r\n"# a,b",c\r\n')
         # 編集コマンドも同じ形で書く
         self.menus.write_bytes(cases[0][0].encode("utf-8"))
@@ -310,22 +381,6 @@ class EditTest(unittest.TestCase):
         self.assertIn("列 'memo' はありません", err)
         # 検証・生成（read_csv）もこの列を気にしない
         self.assertEqual(self.cli("check", "example")[0], 0)
-
-    def test_bad_headers_are_refused(self):
-        for header in ("id,url,note,note", "id,id,url,note,checkedAt,extra"):
-            self.menus.write_bytes(f"{header}\r\na-01,https://example.com/m,a,b\r\n".encode("utf-8"))
-            before = self.snapshot()
-            for args in (("menus", "list", "example"), ("circle", "set", "example", "A-02", "notes=x"),
-                         ("menu", "example", "--circle", "A-02", "https://example.com/m2"), ("import", "example")):
-                code, _, err = self.cli(*args)
-                self.assertEqual(code, 1, (header, args))
-                self.assertIn("見出し", err)
-                self.assertNotIn("Traceback", err)
-            self.assertEqual(self.snapshot(), before)
-        self.menus.write_bytes(b"id,url,note,checkedAt\r\na-01,https://example.com/m,a,b,extra\r\n")
-        code, _, err = self.cli("menus", "list", "example")
-        self.assertEqual(code, 1)
-        self.assertIn("menus.csv:2", err)
 
     def test_partial_write_failure_changes_nothing(self):
         self.menus.chmod(stat.S_IREAD)
