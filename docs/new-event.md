@@ -40,6 +40,7 @@ uv run caimawaru import <eventId> --fetch
 - 組み込みで読めない形式は、`tools/caimawaru/importers/` にインポーターを足す（[importers.md](importers.md)）
 - 元データがなければ、`data/circles.csv` に直接書いてもよい（[event-data.md](event-data.md)）
 - 取り込み後も `tags`・`notes` など取り込まない列は直接編集できる。次の取り込みでも残る
+  （`uv run caimawaru circle set <eventId> A-01 notes="…" --dry-run` で確かめてから書き込める。README の「イベントデータを確かめる・編集する」）
 
 ## 5. 配置図を描き起こす（任意）
 
@@ -57,4 +58,4 @@ pnpm build <eventId>
 ## 7. 公開・当日の更新
 
 - `dist/<eventId>/` を公開先に置く（README の「公開」）
-- お品書きは `uv run caimawaru menu <eventId> <URL>` で追加し、`pnpm build <eventId>` か `data/circles.json` の差し替えで反映
+- お品書きは `uv run caimawaru menu <eventId> <URL>` で追加し（直し・削除は `uv run caimawaru menus set` / `menus remove`）、`pnpm build <eventId>` か `data/circles.json` の差し替えで反映

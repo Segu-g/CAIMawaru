@@ -201,3 +201,28 @@ describe('Python の csv.reader と同じ読み方', () => {
     expect(parseRecords(' a , b ')).toEqual([[' a ', ' b ']]);
   });
 });
+
+// CLI のテスト（tools/tests/test_edit.py の test_canonical_form・test_bad_headers_are_refused）と同じ例。
+// どちらで保存しても同じバイト列になることを、両側で同じ入力・期待値で確かめる（docs/event-data.md の「CSV の書き方」）
+describe('CLI のテストと同じ例（CSV の書き方）', () => {
+  it.each([
+    ['﻿id,url,note,checkedAt\na-01,https://example.com/m,,2030-01-01\n\n', 'id,url,note,checkedAt\r\na-01,https://example.com/m,,2030-01-01\r\n'],
+    ['id,url,note,checkedAt\r\n# メモ, 続き\r\na-01,https://example.com/m\r\n', 'id,url,note,checkedAt\r\n# メモ, 続き\r\na-01,https://example.com/m,,\r\n'],
+    ['id,url,note,checkedAt\r\n#a-01,https://example.com/m,"a,b",,"""x""",\r\n', 'id,url,note,checkedAt\r\n#a-01,https://example.com/m,"a,b",,"""x""",\r\n'],
+    ['id,url,note,checkedAt\r\n"# a\nb",c\r\n', 'id,url,note,checkedAt\r\n"# a\nb",c\r\n'],
+    ['id,url,note,checkedAt\r\na-01,https://example.com/m,"""新刊"", 既刊",2030-01-01\r\n', 'id,url,note,checkedAt\r\na-01,https://example.com/m,"""新刊"", 既刊",2030-01-01\r\n'],
+    ['id,url,note,checkedAt\r\n,,,\r\n , ,\t,\r\na-01,https://example.com/m,,\r\n', 'id,url,note,checkedAt\r\na-01,https://example.com/m,,\r\n'],
+    ['id,url,note,checkedAt\r\n,#x,,\r\n', 'id,url,note,checkedAt\r\n,#x,,\r\n'],
+    ['checkedAt,note,url,id,by\r\n2030-01-01,,https://example.com/m,a-01,人\r\n', 'id,url,note,checkedAt,by\r\na-01,https://example.com/m,,2030-01-01,人\r\n'],
+  ])('%j', (text, expected) => {
+    expect(roundTrip(text)).toBe(expected);
+  });
+
+  it.each(['id,url,note,note', 'id,id,url,note,checkedAt,extra'])('見出しの重複は読まない: %s', (header) => {
+    expect(() => parse(`${header}\r\na-01,https://example.com/m,a,b\r\n`)).toThrow('重複');
+  });
+
+  it('値が見出しより多い行は読まない', () => {
+    expect(() => parse('id,url,note,checkedAt\r\na-01,https://example.com/m,a,b,extra\r\n')).toThrow('2 行目');
+  });
+});

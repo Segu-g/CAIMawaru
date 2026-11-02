@@ -20,7 +20,7 @@ import sys
 from datetime import date
 
 from caimawaru import build
-from caimawaru.project import MENU_COLS, is_http_url, read_csv, write_csv
+from caimawaru.project import MENU_COLS, Table, is_http_url, read_csv
 
 X_POST = re.compile(
     r"^https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/status/(\d+)", re.IGNORECASE
@@ -44,6 +44,8 @@ def find_circles(circles, query):
     """検索語に一致するサークルを返す。完全一致（id・スペース・XのID）を優先し、なければサークル名の部分一致。"""
     q = query.strip()
     ql = q.lower().lstrip("@")
+    if not ql:
+        return []  # 空・「@」だけの指定は、スペースや X が空欄のサークルに当たらないようにする
     exact = [
         c for c in circles
         if c["id"] == ql
@@ -112,8 +114,8 @@ def parse_stdin_line(line):
 def run(event, urls, circle=None, note="", dry_run=False):
     """登録する。終了コードを返す。"""
     circles = read_csv(event.circles_csv)
-    menus = read_csv(event.menus_csv)
-    known = {(m["id"], m["url"]) for m in menus}
+    table = Table(event.menus_csv, MENU_COLS)  # 書き戻す（ファイルにだけある列・「#」の行も残す）
+    known = {(m["id"], m["url"]) for m in read_csv(event.menus_csv)}
 
     entries = []
     for u in urls:
@@ -139,7 +141,7 @@ def run(event, urls, circle=None, note="", dry_run=False):
             print(f"  - 登録済み: {describe(c)}  {url}")
             continue
         known.add((c["id"], url))
-        menus.append({"id": c["id"], "url": url, "note": note, "checkedAt": today})
+        table.rows.append({"id": c["id"], "url": url, "note": note, "checkedAt": today})
         added += 1
         print(f"  ✓ {describe(c)}  {url}")
 
@@ -150,7 +152,7 @@ def run(event, urls, circle=None, note="", dry_run=False):
         print("登録したお品書きはありません")
         return 1 if failed else 0
 
-    write_csv(event.menus_csv, MENU_COLS, menus)
+    table.write()
     print(f"{added} 件を {event.rel(event.menus_csv)} に登録しました" + (f"（{failed} 件は登録できませんでした）" if failed else ""))
     # 表示用データを作り直す（検証エラーがあれば知らせる）
     return build.run(event)

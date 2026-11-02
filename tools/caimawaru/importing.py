@@ -5,16 +5,16 @@ data/circles.csv と data/menus.csv に取り込む（caimawaru import）。
 
 - 取り込んだ列（インポーターが返した列）は毎回上書きする。返さなかった列（tags / notes など）は直接編集した値を残す
 - menus.csv は取り込んだお品書き URL を追加し、直接追加した行は残す
+- イベントデータにない列（直接足した列）と「#」の行は残す（「#」の行は、元のファイルで次にあったサークルの前に置く）
 - 公式リストから消えたサークルは知らせる（配置変更・参加取り消しの可能性。menus.csv に残った行は検証でエラーになる）
 - 書き込んだあと検証・生成する（--no-build で省略）
 """
-import json
 import sys
 from datetime import date
 from pathlib import Path
 
 from caimawaru import build, importers
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, make_id, read_rows, write_csv
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, Table, is_comment, make_id
 
 TRUE_WORDS = {"1", "true", "yes", "y", "有", "あり", "○", "◯", "r18", "成人向け"}
 FALSE_WORDS = {"0", "false", "no", "n", "無", "なし", "×", "-", "全年齢"}
@@ -70,6 +70,11 @@ def normalize(raw, source, warnings, where):
 
 
 
+def row_id(row):
+    """既存の circles.csv の行の id（build.py と同じく、空ならスペース番号から作る。前後の空白は除く）。"""
+    return (row.get("id") or "").strip() or make_id((row.get("space") or "").strip())
+
+
 def merge(imported, existing_circles, existing_menus, today):
     """取り込んだ行 [(row, menus, provided_cols)] を既存の CSV の内容と合わせる。
 
@@ -88,7 +93,7 @@ def merge(imported, existing_circles, existing_menus, today):
             by_id[cid] = (dict(row), list(menus))
             order.append(cid)
 
-    existing = {r["id"]: r for r in existing_circles}
+    existing = {row_id(r): r for r in existing_circles}
     manual = [c for c in CIRCLE_COLS if c not in provided]
     circles = []
     for cid in order:
@@ -100,7 +105,7 @@ def merge(imported, existing_circles, existing_menus, today):
         circles.append(out)
 
     menus = [dict(m) for m in existing_menus]
-    known = {(m["id"], m["url"]) for m in menus}
+    known = {((m.get("id") or "").strip(), (m.get("url") or "").strip()) for m in menus}
     added_menus = 0
     for cid in order:
         for url, note in by_id[cid][1]:
@@ -111,7 +116,7 @@ def merge(imported, existing_circles, existing_menus, today):
 
     new_ids = set(order)
     changed = [cid for cid in order if cid in existing
-               and any((existing[cid].get(c) or "") != circles[order.index(cid)][c] for c in CIRCLE_COLS)]
+               and any((existing[cid].get(c) or "").strip() != (circles[order.index(cid)][c] or "").strip() for c in CIRCLE_COLS)]
     report = {
         "added": [cid for cid in order if cid not in existing],
         "changed": changed,
@@ -121,6 +126,25 @@ def merge(imported, existing_circles, existing_menus, today):
         "manual_cols": manual,
     }
     return circles, menus, report
+
+
+def keep_extras_and_comments(table, circles):
+    """取り込み結果の circles に、table（今の circles.csv）にだけある列の値と「#」の行を戻した行のリストを返す。"""
+    extras = [c for c in table.cols if c not in CIRCLE_COLS]
+    old = {row_id(r): r for r in table.data_rows()}
+    new_ids = {c["id"] for c in circles}
+    before, pending = {}, []  # id → その前に置くコメント行
+    for r in table.rows:
+        if is_comment(r):
+            pending.append(r)
+        elif pending and row_id(r) in new_ids:
+            before.setdefault(row_id(r), []).extend(pending)
+            pending = []
+    rows = []
+    for c in circles:
+        rows.extend(before.get(c["id"], []))
+        rows.append({**c, **{e: old.get(c["id"], {}).get(e, "") for e in extras}})
+    return rows + pending
 
 
 def list_importers():
@@ -133,7 +157,7 @@ def run(event, fetch=False, input=None, dry_run=False, no_build=False):
     """取り込む。終了コードを返す。"""
     try:
         sources = event.config().get("sources") or []
-    except json.JSONDecodeError as e:
+    except ValueError as e:  # 書き方の誤り・キーの重複
         raise CliError(f"{event.rel(event.config_json)}: JSON として読めません: {e}")
     if not sources:
         raise CliError("event.json に sources（取り込み元）がありません。docs/importers.md を参照してください")
@@ -177,7 +201,9 @@ def run(event, fetch=False, input=None, dry_run=False, no_build=False):
             imported.append((row, menus, cols))
         print(f"{label}: {len(raws)} 件")
 
-    circles, menus, report = merge(imported, read_rows(event.circles_csv), read_rows(event.menus_csv), date.today().isoformat())
+    circle_table, menu_table = Table(event.circles_csv, CIRCLE_COLS), Table(event.menus_csv, MENU_COLS)
+    existing_menus = menu_table.data_rows()
+    circles, menus, report = merge(imported, circle_table.data_rows(), existing_menus, date.today().isoformat())
 
     for w in warnings:
         print(f"警告: {w}", file=sys.stderr)
@@ -191,7 +217,9 @@ def run(event, fetch=False, input=None, dry_run=False, no_build=False):
         print("（--dry-run のため書き込みません）")
         return 0
 
-    write_csv(event.circles_csv, CIRCLE_COLS, circles)
-    write_csv(event.menus_csv, MENU_COLS, menus)
+    circle_table.rows = keep_extras_and_comments(circle_table, circles)
+    menu_table.rows += menus[len(existing_menus):]  # merge は既存の行のあとに追加した行を返す
+    circle_table.write()
+    menu_table.write()
     print(f"{event.rel(event.circles_csv)} と {event.menus_csv.name} を更新しました")
     return 0 if no_build else build.run(event)

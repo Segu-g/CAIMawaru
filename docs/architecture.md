@@ -24,24 +24,23 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 人 ──エディタ（ブラウザ。pnpm editor）──読み書き──▶ events/<eventId>/event.json・data/circles.csv・data/menus.csv
 ```
 
+イベントデータの直接編集は、ファイルを書き換えても、CLI の編集コマンド（`caimawaru circle`・`menus`・`config`）やブラウザのエディタ（`pnpm editor`）を使ってもよい。
+コマンドは書き込む前に検証し、変更後に `circles.json` を作り直す。
+
 | ファイル | 書く | 読む |
 |---|---|---|
-| `event.json` | 人・エージェント（`caimawaru new-event` が雛形）、エディタ（ブラウザ） | CLI（全コマンド）、ページ（`vite.config.ts`: `storeId`・`title` だけ）、エディタ |
+| `event.json` | 人・エージェント、CLI（`config set`・`config unset`。`new-event` が雛形）、エディタ（ブラウザ） | CLI（全コマンド）、ページ（`vite.config.ts`: `storeId`・`title` だけ）、エディタ |
 | `layout.json` | 人・エージェント | CLI だけ（展開して `circles.json` に入れる） |
-| `data/circles.csv`・`data/menus.csv` | 人・エージェント、CLI（`import`・`menu`）、エディタ（ブラウザ） | CLI、エディタ |
+| `data/circles.csv`・`data/menus.csv` | 人・エージェント、CLI（`import`・`menu`・`circle add/set/remove`・`menus set/remove`）、エディタ（ブラウザ） | CLI、エディタ |
 | `sources/` | 人・エージェント、CLI（`import --fetch`） | CLI だけ（インポーター） |
 | `public/data/circles.json` | CLI だけ（`caimawaru data`） | ページだけ（実行時に読み込む。`vite.config.ts` は配置図の有無を見る。テストは形を確かめる） |
 
 エディタは、ページの中で唯一イベントデータを書くもので、書くのは利用者がブラウザで選んだフォルダの event.json・data/circles.csv・data/menus.csv だけです
 （File System Access API。サーバや Node のスクリプトはファイルを書かない）。書式は CLI と同じで、同じ内容なら同じバイト列になります:
 
-- CSV: UTF-8（BOM なし）、行末 CRLF。「,」「"」CR・LF を含む値だけ「"」で囲み、中の「"」は「""」にする（Python の csv の QUOTE_MINIMAL）。
-  列名の行は決まった列（circles.csv: `id,space,event,name,kana,penNames,tags,adult,x,pixiv,booth,web,notes,source`、menus.csv: `id,url,note,checkedAt`）をこの順に、
-  そのあとにファイルにあったほかの列を元の順に（列名の文字も値もそのまま）。ほかの列は名前ではなく位置で扱うので、列名が空でも同じ名前が2回あってもよい。行はファイルの順（足した行は最後）で、足りない値は空欄。空の行と、どの値も空か空白だけの行（`,,,`）は捨てる。
-  コメントの行（最初の値が `#` で始まる）はその位置に残し、読んだ値をすべてそのまま書く（値の数を変えず、空欄で埋めない。列名より多くてもよい）
-- 決まった列の名前が2回ある CSV、列名より値が多い行（コメントの行を除く）がある CSV、列名の行に決まった列が1つもない CSV（`, ,` のような空白だけの行など）は、保存すると内容が失われるので開かない。
-  列名の行より前では空白だけの行を飛ばさない（次の行を列名と取り違えないため）
-- 値がすべて空の行は書かない（画面で足したまま何も入れていない行も）
+- CSV: [docs/event-data.md の「CSV の書き方（保存時の形）」](event-data.md#csv-の書き方保存時の形)の形（`src/editor/csv.ts`。CLI は `project.py` の `format_csv`）。
+  エディタではさらに、見出しの行に決まった列が1つもないファイル・`id` 列のないファイル・見出しの行より前に空白だけの行があるファイルも開かない
+  （見出しを取り違えないため）。画面で足したまま何も入れていない行は書かない
 - event.json: 字下げ2・非 ASCII のまま・キーの順を保つ・末尾の改行。読み込んだファイルが CRLF なら CRLF のまま。
   ただし JavaScript では元どおりに書けないもの（数字だけのキーの並び、`1.0`・2^53 を超える整数・`-0` などの数値の書き方、指数表記の数値（`1.5e-7`。Python は `1.5e-07` と書く）、同じキーの重複、`__proto__` というキー）が
   あるファイルは、値を黙って変えないよう、イベント情報を読み取り専用で開き、event.json は書かない（`src/editor/jsonCheck.ts`）。
@@ -61,9 +60,11 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 ```
 cli.py ─┬▶ build.py ──▶ layout.py
         │     └──────▶ project.py
-        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json、イベントごとの python）
+        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json）
         │                └▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
         ├▶ menu.py ──────▶ build.py
+        ├▶ edit.py ──────┬▶ build.py（書き込む前に一時フォルダの写しを検証、書き込み後に生成）
+        │                └▶ menu.py（サークル指定の照合 find_circles・X の URL の正規化）
         └▶ new_event.py ─▶ project.py
 importers/sockbase.py ──（--fetch のときだけ）──▶ list.sockbase.net（標準ライブラリの urllib で HTML を取得して保存）
 ```
@@ -100,7 +101,7 @@ pnpm build:editor ───────▶ tsc ─▶ vite build --config vite.e
   どちらも「`events/` の下で `event.json` があるフォルダ」というだけの規則
 - サークルの複数スペース（`A-01,A-02`）の分け方（`tools/caimawaru/build.py` の `circle_spaces` と `src/filter.ts` の `spacesOf`）。
   「`,` で区切る」というだけの規則
-- イベントデータの CSV の読み書き（`tools/caimawaru/project.py` の `CIRCLE_COLS`・`MENU_COLS`・`read_rows`・`write_csv`・`make_id` と、
-  `src/editor/csv.ts`・`src/editor/model.ts`）。上の書式（列の並び・CRLF・囲み方・空の行・コメントの行・ほかの列）。
+- イベントデータの CSV の読み書き（`tools/caimawaru/project.py` の `CIRCLE_COLS`・`MENU_COLS`・`read_table`・`format_csv`・`make_id` と、
+  `src/editor/csv.ts`・`src/editor/model.ts`）。docs/event-data.md の「CSV の書き方」（列の並び・CRLF・囲み方・空の行・`#` の行・ほかの列）。
   `src/editor/csv.test.ts` が events/example の CSV を読み直して同じバイト列になることと、それぞれの規則を確かめる
 - 簡単な検証（`src/editor/validate.ts`）は `build.py` のエラーの一部と同じ規則。正式な検証は `build.py` だけ

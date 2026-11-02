@@ -57,9 +57,12 @@ events/<eventId>/
 | `uv run caimawaru import <eventId> [--fetch] [--dry-run]` | 主催の元データ（sources）をイベントデータに取り込む |
 | `uv run caimawaru importers` | 使えるインポーターの一覧 |
 | `uv run caimawaru menu <eventId> <URL>…` | お品書きを登録（下記） |
+| `uv run caimawaru circle list\|show\|add\|set\|remove <eventId> …` | サークル（circles.csv）を確かめる・編集する（下記） |
+| `uv run caimawaru menus list\|set\|remove <eventId> …` | お品書き（menus.csv）を確かめる・変更・削除する |
+| `uv run caimawaru config get\|set\|unset <eventId> …` | event.json の値を確かめる・変更する |
 | `uv run caimawaru data <eventId> [--check]` | イベントデータを検証し、ページが読む `circles.json` を生成（`--check` は検証のみ） |
 | `uv run caimawaru check [<eventId>…]` | イベントデータを検証（省略すると全イベント） |
-| `uv run python -m unittest discover -s tools/tests` | テスト（配置図の展開・取り込み・CLI） |
+| `uv run python -m unittest discover -s tools/tests` | テスト（配置図の展開・取り込み・編集・CLI） |
 
 `<eventId>` はイベントのフォルダ名（`events/` の下）。プロジェクトのフォルダの中ならどこから実行してもよい（`--root` で指定も可）。
 
@@ -91,6 +94,36 @@ uv run caimawaru menu <eventId> -                                               
 
 サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `uv run caimawaru data` まで自動で実行します。
 
+### イベントデータを確かめる・編集する
+
+CSV や JSON を直接編集する代わりに、コマンドで確かめて変えられます（エージェントはこちらを使う）。
+
+```sh
+uv run caimawaru circle list <eventId> [<サークル指定>] [--event <イベント名>] [--json]   # 一覧
+uv run caimawaru circle show <eventId> A-01 --json                                      # 1件の全列とお品書き
+uv run caimawaru circle set <eventId> A-01 notes="新刊あり" tags="新刊;グッズ" --dry-run   # 変化だけ表示
+uv run caimawaru circle add <eventId> space=A-10 name="サークル名" event="サンプル即売会" source="公式サークル一覧"
+uv run caimawaru circle remove <eventId> A-10 [--with-menus]                            # お品書きがあれば --with-menus が要る
+uv run caimawaru menus list <eventId> [<サークル指定>] [--json]
+uv run caimawaru menus set <eventId> A-01 note="既刊" [--url URL] [--all]
+uv run caimawaru menus remove <eventId> A-01 [--url URL] [--all]
+uv run caimawaru config get <eventId> [info.venue]                                      # 値を JSON で表示
+uv run caimawaru config set <eventId> info.venue "サンプル会館"                           # 文字列
+uv run caimawaru config set <eventId> info.eventSlots.併設オンリー 2 --json               # 数・配列・オブジェクトは --json
+uv run caimawaru config unset <eventId> info.contact
+```
+
+- 列は `列名=値`（値を空にすると空欄）。event.json のキーは `.` 区切り（配列は番号: `info.links.0.url`）。
+  `.` を含むキーは、親のオブジェクトごと `--json` で書く（例: `config set <eventId> info.eventSlots '{"A.B": 1}' --json`）
+- 書き込むコマンドは、変更前 → 変更後の差分を表示し、変更後のイベントデータを検証してから書き込みます。
+  変更で新しいエラーが出るなら書き込みません（行番号を除いたメッセージで比べるので、同じ内容のエラーが別の行に移ると見分けられません）。
+  `--dry-run` は差分と検証だけ。書き込み後は `uv run caimawaru data` まで実行します（`--no-build` で省略）
+- 複数のファイルを書き換えるとき（id の変更・`--with-menus`）は、先にすべてのファイルを開けることを確かめ、1つでも開けなければどれも書き換えません
+- サークル指定が複数のサークルに当たると、候補を表示して止まります（スペース番号か id で指定し直す）
+- サークルの `id` と `storeId` は公開後に変えないので、変えるには `--force` が要ります（id を変えると menus.csv の id も書き換える）
+- CSV は決まった形（[docs/event-data.md の「CSV の書き方」](docs/event-data.md#csv-の書き方保存時の形)。取り込み・`menu` と同じ）で書き戻します。
+  イベントデータにない列と `#` の行は残し、空行は落とし、改行は CRLF にそろえます。その形で保存されたファイルなら、差分は変えた行だけです
+
 ### GUI で編集する
 
 イベントデータ（event.json・data/circles.csv・data/menus.csv）は、ブラウザのエディタでも編集できます。
@@ -101,7 +134,7 @@ pnpm editor        # 表示された URL（http://localhost:5173/ など）を P
 
 1. 「イベントのフォルダを選ぶ」で `events/<eventId>/` を選び、ファイルの編集を許可する（リポジトリや `events/` を選ぶと、中のイベントから選べる）
 2. サークル（検索・絞り込み・追加・編集・削除）、サークルごとのお品書き（URL・説明・確認した日）、イベント情報（event.json の storeId・title・info）を編集する
-3. 「保存」で同じフォルダに書き戻す（編集したファイルだけ。書式は CLI と同じ）
+3. 「保存」で同じフォルダに書き戻す（編集したファイルだけ。CSV は CLI と同じ [docs/event-data.md の「CSV の書き方」](docs/event-data.md#csv-の書き方保存時の形) の形）
 4. ターミナルで `uv run caimawaru data <eventId>` を実行して検証し、`circles.json` を作り直す（エディタからは実行しない）
 
 - ファイルを読み書きするのはブラウザだけで、選んだフォルダの3つのファイルだけ（layout.json・sources/・circles.json は触らない）。ファイルはどこにも送らない
@@ -153,8 +186,9 @@ pnpm editor        # 表示された URL（http://localhost:5173/ など）を P
 | `tools/caimawaru/importing.py` | Python | 取り込みの共通処理（正規化・既存データとの合流） |
 | `tools/caimawaru/importers/` | Python | 元データの形式ごとのインポーター（sockbase・csv・json） |
 | `tools/caimawaru/menu.py` | Python | お品書き URL の登録 |
+| `tools/caimawaru/edit.py` | Python | イベントデータを確かめる・編集する（circle・menus・config） |
 | `tools/caimawaru/new_event.py` | Python | イベントの雛形作成 |
-| `tools/tests/` | Python | CLI・配置図の展開・取り込みのテスト |
+| `tools/tests/` | Python | CLI・配置図の展開・取り込み・編集のテスト |
 
 ## 閲覧者向けの機能
 
