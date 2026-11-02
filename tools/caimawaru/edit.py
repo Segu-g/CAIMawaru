@@ -116,14 +116,17 @@ def _parse_fields(items, names):
     return values
 
 
-def _set_values(table, row, values, indent):
-    """row（table.rows の行）に values（列名 → 値）を入れ、変わる列を表示する。"""
+def _print_changes(table, row, values, indent):
+    """row（table.rows の行）に values（列名 → 値）を入れると変わる列を、変更前 → 変更後で表示する。"""
     for name, value in values.items():
-        key = table.names[name]
-        old = stripped(row, key)
+        old = stripped(row, table.names[name])
         if old != value:
             print(f"{indent}{name}: {_quoted(old)} → {_quoted(value)}")
-        row[key] = value
+
+
+def _set_values(table, row, values):
+    for name, value in values.items():
+        row[table.names[name]] = value
 
 
 def _quoted(value):
@@ -296,30 +299,29 @@ def circle_show(event, query, as_json=False):
 
 def circle_add(event, fields, dry_run=False, no_build=False):
     loaded = _load(event)
-    circles = loaded.circles
-    values = _parse_fields(fields, circles.names)
-    row = {key: "" for key in circles.cols}
-    row.update({circles.names[name]: value for name, value in values.items()})
+    values = _parse_fields(fields, loaded.circles.names)
+    row = {key: "" for key in loaded.circles.cols}
+    row.update({loaded.circles.names[name]: value for name, value in values.items()})
     if not row["id"]:
         row["id"] = make_id(row["space"])
     if not row["id"]:
         raise CliError("id か space を指定してください")
     if any(circle["id"] == row["id"] for circle in loaded.circle_views):
         raise CliError(f"id '{row['id']}' のサークルはすでにあります（変えるなら caimawaru circle set）")
-    circles.rows.append(row)
+    loaded.circles.rows.append(row)
     print(f"追加: {row['id']}  {describe(row)}")
-    return commit(event, {event.circles_csv: circles.text()}, dry_run, no_build)
+    return commit(event, {event.circles_csv: loaded.circles.text()}, dry_run, no_build)
 
 
 def circle_set(event, query, fields, force=False, dry_run=False, no_build=False):
     loaded = _load(event)
-    circles, menus = loaded.circles, loaded.menus
     circle = _pick_circle(loaded.circle_views, query)
-    values = _parse_fields(fields, circles.names)
-    row = circles.rows[circle[ROW_INDEX]]
+    values = _parse_fields(fields, loaded.circles.names)
+    row = loaded.circles.rows[circle[ROW_INDEX]]
     print(f"変更: {circle['id']}  {describe(circle)}")
-    _set_values(circles, row, values, indent="  ")
-    files = {event.circles_csv: circles.text()}
+    _print_changes(loaded.circles, row, values, indent="  ")
+    _set_values(loaded.circles, row, values)
+    files = {event.circles_csv: loaded.circles.text()}
 
     new_id = circle_id(row)
     if new_id == circle["id"]:
@@ -331,10 +333,10 @@ def circle_set(event, query, fields, force=False, dry_run=False, no_build=False)
                        "公開後は変えません。変えるときは --force（menus.csv の id も書き換えます）")
     moved = _menu_views_of(loaded.menu_views, circle["id"])
     for menu in moved:
-        menus.rows[menu[ROW_INDEX]]["id"] = new_id
+        loaded.menus.rows[menu[ROW_INDEX]]["id"] = new_id
     if moved:
         print(f"  menus.csv の {len(moved)} 行の id も {new_id} にします")
-        files[event.menus_csv] = menus.text()
+        files[event.menus_csv] = loaded.menus.text()
     return commit(event, files, dry_run, no_build)
 
 
@@ -346,7 +348,6 @@ def _delete_rows(table, views):
 
 def circle_remove(event, query, with_menus=False, dry_run=False, no_build=False):
     loaded = _load(event)
-    circles, menus = loaded.circles, loaded.menus
     circle = _pick_circle(loaded.circle_views, query)
     own_menus = _menu_views_of(loaded.menu_views, circle["id"])
     if own_menus and not with_menus:
@@ -354,11 +355,11 @@ def circle_remove(event, query, with_menus=False, dry_run=False, no_build=False)
                        + "\n".join(f"  {menu['url']}" for menu in own_menus)
                        + "\nお品書きも消すなら --with-menus、別のサークルに移すなら先に caimawaru menus set … id=<id>")
     print(f"削除: {circle['id']}  {describe(circle)}" + (f"（お品書き {len(own_menus)} 件も削除）" if own_menus else ""))
-    del circles.rows[circle[ROW_INDEX]]
-    files = {event.circles_csv: circles.text()}
+    del loaded.circles.rows[circle[ROW_INDEX]]
+    files = {event.circles_csv: loaded.circles.text()}
     if own_menus:
-        _delete_rows(menus, own_menus)
-        files[event.menus_csv] = menus.text()
+        _delete_rows(loaded.menus, own_menus)
+        files[event.menus_csv] = loaded.menus.text()
     return commit(event, files, dry_run, no_build)
 
 
@@ -381,12 +382,11 @@ def menus_list(event, query=None, as_json=False):
     if query:
         ids = {circle["id"] for circle in _circles_for_menus(loaded, query)}
         menu_views = [menu for menu in menu_views if menu["id"] in ids]
-    names = loaded.menus.names
     if as_json:
-        _print_json([_named_values(menu, names) for menu in menu_views])
+        _print_json([_named_values(menu, loaded.menus.names) for menu in menu_views])
         return 0
     for menu in menu_views:
-        print("\t".join(menu[name] for name in names))
+        print("\t".join(menu[name] for name in loaded.menus.names))
     print(f"{len(menu_views)} 件", file=sys.stderr)
     return 0
 
@@ -418,7 +418,9 @@ def menus_set(event, query, fields, url=None, select_all=False, dry_run=False, n
     print(f"変更: {circle['id']}  {describe(circle)} のお品書き {len(targets)} 件")
     for menu in targets:
         print(f"  {menu['url']}")
-        _set_values(menus, menus.rows[menu[ROW_INDEX]], values, indent="    ")
+        row = menus.rows[menu[ROW_INDEX]]
+        _print_changes(menus, row, values, indent="    ")
+        _set_values(menus, row, values)
     return commit(event, {event.menus_csv: menus.text()}, dry_run, no_build)
 
 
