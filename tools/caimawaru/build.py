@@ -7,19 +7,16 @@
 circles.json はページ（src/）との唯一の境界。形は src/types.ts の CircleData。
 """
 import json
-import re
 import sys
 from dataclasses import dataclass, field
 from datetime import date
 
 from caimawaru import importers
 from caimawaru import layout as layout_mod
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, DuplicateKeyError, is_http_url, make_id, read_csv
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, DuplicateKeyError, circle_id, is_http_url, read_csv
+from caimawaru.xurl import is_x_page, normalize_url, x_handle
 
 LINK_KEYS = ("x", "pixiv", "booth", "web")
-POST_URL = re.compile(r"^https://(x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/\d+")
-# プロフィールや検索結果など、投稿以外のXページを誤って登録していないかの確認用
-X_PAGE = re.compile(r"^https?://(?:www\.|mobile\.)?(x|twitter)\.com/", re.IGNORECASE)
 INFO_REQUIRED = ("name", "date", "venue")
 
 
@@ -143,7 +140,7 @@ def check_circles(event, r):
     circles, seen = [], {}
     for line, row in enumerate(read_csv(event.circles_csv, CIRCLE_COLS, r.warnings), start=2):
         where = f"circles.csv:{line}"
-        cid = row.get("id") or make_id(row.get("space", ""))
+        cid = circle_id(row)
         if not cid:
             r.errors.append(f"{where}: id もスペース番号もありません")
             continue
@@ -162,6 +159,9 @@ def check_circles(event, r):
                 links[key] = url
             elif url:
                 r.errors.append(f"{where}: {key} のURLが不正です: {url}")
+        # x 列はお品書きの照合（caimawaru menu・エディタ）に使う。照合できない URL は知らせる（xurl.x_handle と同じ規則）
+        if links.get("x") and not x_handle(row):
+            r.warnings.append(f"{where}: x が X のアカウントの URL ではありません（https://x.com/<ID> の形にしてください）: {links['x']}")
         if not row.get("source"):
             r.warnings.append(f"{where}: 情報の出典（source）が未入力です")
         adult = row.get("adult", "")
@@ -194,11 +194,11 @@ def check_circles(event, r):
         if not is_http_url(url):
             r.errors.append(f"{where}: URLが不正です: {url}")
             continue
+        # X の投稿は caimawaru menu と同じ形（https://x.com/<ID>/status/<番号>）にそろえ、追跡用パラメータ（?s=20 など）を落とす。
         # X以外（BOOTH・画像など）はそのまま掲載。Xのページなのに投稿でないものだけ警告する
-        if X_PAGE.match(url) and not POST_URL.match(url):
+        clean, handle = normalize_url(url)
+        if not handle and is_x_page(url):
             r.warnings.append(f"{where}: Xの投稿ではないページです（プロフィール等を登録していませんか）: {url}")
-        # 追跡用パラメータ（?s=20 など）を除去
-        clean = url.split("?")[0] if POST_URL.match(url) else url
         if any(m["url"] == clean for m in by_id[cid]["menus"]):
             r.warnings.append(f"{where}: 同じURLが重複しています: {clean}")
             continue

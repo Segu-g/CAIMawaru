@@ -256,3 +256,11 @@ def is_http_url(value):
 
 def make_id(space):
     return re.sub(r"[^0-9A-Za-z]+", "-", space).strip("-").lower()
+
+
+def circle_id(row):
+    """circles.csv の行の id。空欄ならスペース番号から作る（前後の空白は除く）。menus.csv はこの id を参照する。
+
+    build・import・menu・編集コマンドはどれもこの id を使う（エディタの circleId と同じ規則）。
+    """
+    return (row.get("id") or "").strip() or make_id((row.get("space") or "").strip())

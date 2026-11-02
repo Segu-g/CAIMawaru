@@ -69,12 +69,15 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 
 ```
 cli.py ─┬▶ build.py ──▶ layout.py
-        │     └──────▶ project.py
+        │     ├──────▶ project.py
+        │     └──────▶ xurl.py（X の URL の規則。menu・edit も使う）
         ├▶ importing.py ─┬▶ importers/（sockbase・csv・json）
         │                └▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
-        ├▶ menu.py ──────▶ build.py
+        ├▶ menu.py ──────┬▶ build.py
+        │                └▶ xurl.py（X の投稿 URL の正規化・x 列のアカウント）
         ├▶ edit.py ──────┬▶ build.py（書き込む前に一時フォルダの写しを検証、書き込み後に生成）
-        │                └▶ menu.py（サークル指定の照合 find_circles・X の URL の正規化）
+        │                ├▶ menu.py（サークル指定の照合 find_circles）
+        │                └▶ xurl.py（X の URL の正規化）
         └▶ new_event.py ─▶ project.py
 importers/sockbase.py ──（--fetch のときだけ）──▶ list.sockbase.net（標準ライブラリの urllib で HTML を取得して保存）
 ```
@@ -114,4 +117,11 @@ pnpm build:editor ───────▶ tsc ─▶ vite build --config vite.e
 - イベントデータの CSV の読み書き（`tools/caimawaru/project.py` の `CIRCLE_COLS`・`MENU_COLS`・`read_table`・`format_csv`・`make_id` と、
   `src/editor/csv.ts`・`src/editor/model.ts`）。docs/event-data.md の「CSV の書き方」（列の並び・CRLF・囲み方・空の行・`#` の行・ほかの列）。
   `src/editor/csv.test.ts` が events/example の CSV を読み直して同じバイト列になることと、それぞれの規則を確かめる
+- サークルの id（空欄ならスペース番号から作る。`tools/caimawaru/project.py` の `circle_id` と `src/editor/model.ts` の `circleId`）。
+  build・import・menu・編集コマンドはどれも `circle_id` を使う
+- X の URL の規則（`tools/caimawaru/xurl.py` の `normalize_url`・`profile_handle`・`x_handle`・`is_x_page` と `src/editor/menuMatch.ts` の
+  `normalizeUrl`・`profileHandle`・`xHandleOf`・`isXPage`）。URL の前後の空白は、Python の `strip()` と JavaScript の `trim()` で対象が違うので、
+  どちらも同じ文字の並び（`TRIM`）を明示して除く（`trim`・`trimUrl`）。CLI では照合（`menu.py` の `find_circles`）と検証・生成（`build.py`。x 列が照合できるか、
+  お品書きが X の投稿か、投稿の URL の正規化と重複）が同じ関数を使い、エディタでは `findCircles` と `validate.ts` が使う。例は `tools/tests/fixtures/x_urls.json` にまとめ、
+  `tools/tests/test_menu.py` と `src/editor/menuMatch.test.ts` がそれぞれこのファイルを読んで確かめる（互いのコードは呼ばない）
 - 簡単な検証（`src/editor/validate.ts`）は `build.py` のエラーの一部と同じ規則。正式な検証は `build.py` だけ

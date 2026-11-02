@@ -1,25 +1,17 @@
 """イベントデータの編集コマンド（caimawaru circle / menus / config）のテスト。events/example を一時フォルダに写して使う。"""
-import contextlib
-import io
 import json
 import os
 import shutil
 import stat
-import tempfile
 import unittest
-from pathlib import Path
 
-from caimawaru.cli import main
 from caimawaru.project import CIRCLE_COLS, COMMENT, MENU_COLS, Table, format_csv, read_csv, read_table
-
-REPO = Path(__file__).resolve().parents[2]
+from helpers import example_root, run_cli
 
 
 class EditTest(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp())
-        shutil.copytree(REPO / "events" / "example", self.root / "events" / "example",
-                        ignore=shutil.ignore_patterns("public"))
+        self.root = example_root()
         self.dir = self.root / "events" / "example"
         self.circles = self.dir / "data" / "circles.csv"
         self.menus = self.dir / "data" / "menus.csv"
@@ -30,10 +22,7 @@ class EditTest(unittest.TestCase):
         shutil.rmtree(self.root)
 
     def cli(self, *args):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = main(["--events-dir", str(self.root / "events"), *args])
-        return code, out.getvalue(), err.getvalue()
+        return run_cli(self.root, *args)
 
     def snapshot(self):
         return {p: p.read_bytes() for p in (self.circles, self.menus, self.config)}

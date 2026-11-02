@@ -15,29 +15,12 @@
 
     --dry-run を付けると、判定結果を表示するだけで書き込まない。
 """
-import re
 import sys
 from datetime import date
 
 from caimawaru import build
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, is_http_url, read_csv
-
-X_POST = re.compile(
-    r"^https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/status/(\d+)", re.IGNORECASE
-)
-
-
-def normalize_url(url):
-    """Xの投稿URLは https://x.com/<ID>/status/<番号> の形にそろえ、追跡用パラメータを落とす。"""
-    m = X_POST.match(url)
-    if m:
-        return f"https://x.com/{m.group(1)}/status/{m.group(2)}", m.group(1)
-    return url, None
-
-
-def x_handle(circle):
-    m = re.match(r"^https?://(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/?$", circle.get("x", ""), re.IGNORECASE)
-    return m.group(1).lower() if m else None
+from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, circle_id, is_http_url, read_csv
+from caimawaru.xurl import normalize_url, x_handle
 
 
 def find_circles(circles, query):
@@ -87,7 +70,7 @@ def choose(candidates, label):
 
 def resolve(circles, url, query):
     """登録するURLとサークルを決める。失敗したら None。"""
-    url, handle = normalize_url(url.strip())
+    url, handle = normalize_url(url)
     if not is_http_url(url):
         print(f"  ✗ URLではありません: {url}", file=sys.stderr)
         return None
@@ -113,7 +96,8 @@ def parse_stdin_line(line):
 
 def run(event, urls, circle=None, note="", dry_run=False):
     """登録する。終了コードを返す。"""
-    circles = read_csv(event.circles_csv, CIRCLE_COLS)
+    # id が空欄のサークルはスペース番号から作った id で扱う（build と同じ。menus.csv にはこの id を書く）
+    circles = [{**c, "id": circle_id(c)} for c in read_csv(event.circles_csv, CIRCLE_COLS)]
     table = Table(event.menus_csv, MENU_COLS)  # 書き戻す（ファイルにだけある列・「#」の行も残す）
     known = {(m["id"], m["url"]) for m in read_csv(event.menus_csv, MENU_COLS)}
 
@@ -138,12 +122,12 @@ def run(event, urls, circle=None, note="", dry_run=False):
             continue
         c, url = result
         if (c["id"], url) in known:
-            print(f"  - 登録済み: {describe(c)}  {url}")
+            print(f"  - 登録済み: {c['id']}  {describe(c)}  {url}")
             continue
         known.add((c["id"], url))
         table.rows.append({"id": c["id"], "url": url, "note": note, "checkedAt": today})
         added += 1
-        print(f"  ✓ {describe(c)}  {url}")
+        print(f"  ✓ {c['id']}  {describe(c)}  {url}")
 
     if dry_run:
         print(f"（--dry-run のため書き込みません）{added} 件を登録できます")
