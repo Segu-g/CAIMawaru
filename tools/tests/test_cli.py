@@ -24,7 +24,7 @@ class CliTest(unittest.TestCase):
     def cli(self, *args):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = main(["--root", str(self.root), *args])
+            code = main(["--events-dir", str(self.root / "events"), *args])
         return code, out.getvalue(), err.getvalue()
 
     def test_data_writes_circles_json_with_expanded_layout(self):
@@ -50,7 +50,7 @@ class CliTest(unittest.TestCase):
     def test_updated_at_changes_only_with_circles(self):
         from caimawaru import build
         from caimawaru.project import load_event
-        event = load_event(self.root, "example")
+        event = load_event(self.root / "events", "example")
         r = build.validate(event)
         self.assertEqual(build.write_output(event, r, today="2030-01-01")["event"]["updatedAt"], "2030-01-01")
         # サークル情報が同じなら、イベント情報だけ変わっても日付はそのまま

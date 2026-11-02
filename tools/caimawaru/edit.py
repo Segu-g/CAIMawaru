@@ -126,7 +126,7 @@ def _new_messages(before, after):
 def _validate_with(event, files):
     """files（{パス: 新しい内容}）を反映したイベントデータを、一時フォルダに写して検証する。"""
     with tempfile.TemporaryDirectory() as tmp:
-        temp = Event(Path(tmp).resolve(), event.id)
+        temp = Event(Path(tmp).resolve() / "events", event.id)
         for src in (event.config_json, event.layout_json, event.circles_csv, event.menus_csv):
             dst = temp.dir / src.relative_to(event.dir)
             dst.parent.mkdir(parents=True, exist_ok=True)

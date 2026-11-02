@@ -32,7 +32,7 @@ class EditTest(unittest.TestCase):
     def cli(self, *args):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = main(["--root", str(self.root), *args])
+            code = main(["--events-dir", str(self.root / "events"), *args])
         return code, out.getvalue(), err.getvalue()
 
     def snapshot(self):

@@ -64,7 +64,7 @@ events/<eventId>/
 | `uv run caimawaru check [<eventId>…]` | イベントデータを検証（省略すると全イベント） |
 | `uv run python -m unittest discover -s tools/tests` | テスト（配置図の展開・取り込み・編集・CLI） |
 
-`<eventId>` はイベントのフォルダ名（`events/` の下）。プロジェクトのフォルダの中ならどこから実行してもよい（`--root` で指定も可）。
+`<eventId>` はイベントのフォルダ名（`events/` の下）。リポジトリのフォルダで実行する（イベントのフォルダは `events/`。ほかの場所のイベントを扱うときは `--events-dir` で指定する）。
 
 ### ページ（Node: `pnpm <command>`）
 
