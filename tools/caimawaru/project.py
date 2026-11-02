@@ -1,5 +1,6 @@
 """プロジェクトの場所とイベント（events/<eventId>/）の読み込み。"""
 import csv
+import io
 import json
 import re
 from dataclasses import dataclass
@@ -108,12 +109,33 @@ def read_rows(path):
         return list(csv.DictReader(f))
 
 
+def read_table(path):
+    """CSV を見出しと行のまま読む（書き戻す前提。空白・「#」の行・イベントデータにない列も残す）。"""
+    if not path.exists():
+        return [], []
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        rows = []
+        for row in reader:
+            if None in row:
+                raise CliError(f"{path.name}:{reader.line_num}: 列の数が見出しより多い行があります。直してから実行してください")
+            rows.append(row)
+        return list(reader.fieldnames or []), rows
+
+
+def format_csv(cols, rows):
+    """write_csv が書く内容（列は cols の順、改行は CRLF）を文字列で返す。"""
+    buf = io.StringIO(newline="")
+    w = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+    w.writeheader()
+    w.writerows(rows)
+    return buf.getvalue()
+
+
 def write_csv(path, cols, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(rows)
+        f.write(format_csv(cols, rows))
 
 
 def is_http_url(value):
