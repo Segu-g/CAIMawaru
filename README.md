@@ -82,11 +82,15 @@ events/<eventId>/
 ### お品書きを登録する
 
 ```sh
-uv run caimawaru menu <eventId> https://x.com/<ID>/status/<番号>             # 投稿したアカウントからサークルを自動判定
-uv run caimawaru menu <eventId> URL1 URL2 URL3                               # まとめて
-uv run caimawaru menu <eventId> --circle A-05 --note 新刊 https://booth.pm/… # X 以外はサークルを指定
-uv run caimawaru menu <eventId> -                                            # 1行ずつ貼り付け。Ctrl+D（Windows は Ctrl+Z → Enter）で終了
+uv run caimawaru menu <eventId> "https://x.com/<ID>/status/<番号>"                # 投稿したアカウントからサークルを自動判定
+uv run caimawaru menu <eventId> "URL1" "URL2" "URL3"                               # まとめて
+uv run caimawaru menu <eventId> --circle A-05 --note "新刊" "https://booth.pm/…"   # X 以外はサークルを指定
+uv run caimawaru menu <eventId> -                                                  # 1行ずつ貼り付け。Ctrl+D（Windows は Ctrl+Z → Enter）で終了
 ```
+
+URL は `"` で囲んでください。`?`・`&` を含む URL（X の共有リンクの `?s=20&t=…` など）は、囲まないとシェルが別の意味に取ります
+（bash・zsh では `&` でコマンドが切れ、zsh では `?` で止まり、PowerShell では `&` がエラーになる）。
+`--note` も空白を含むなら囲みます。貼り付け（`-`）はシェルを通らないので、囲まずにそのまま貼れます。
 
 サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `uv run caimawaru data` まで自動で実行します。
 

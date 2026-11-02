@@ -1,17 +1,19 @@
 """お品書きのURLを data/menus.csv に登録し、circles.json を再生成する（caimawaru menu）。
 
     # Xの投稿URLなら、投稿したアカウントからサークルを自動で判定する
-    caimawaru menu <eventId> https://x.com/example_user/status/1234567890123456789
+    caimawaru menu <eventId> "https://x.com/example_user/status/1234567890123456789"
 
     # まとめて登録（スペース区切り）
-    caimawaru menu <eventId> URL1 URL2 URL3
+    caimawaru menu <eventId> "URL1" "URL2" "URL3"
 
     # サークルを指定する（スペース番号・id・サークル名の一部・@XのID）
-    caimawaru menu <eventId> --circle A-05 https://booth.pm/...
-    caimawaru menu <eventId> --circle 星屑 --note 新刊 https://x.com/...
+    caimawaru menu <eventId> --circle A-05 "https://booth.pm/..."
+    caimawaru menu <eventId> --circle 星屑 --note "新刊" "https://x.com/..."
 
     # 1行ずつ貼り付ける（終わったら Ctrl+D、Windows は Ctrl+Z → Enter）。行は「URL」または「サークル指定 URL」
     caimawaru menu <eventId> -
+
+URL は " で囲む（? や & を含むとシェルが別の意味に取る）。貼り付け（-）はシェルを通らないので囲まなくてよい。
 
     --dry-run を付けると、判定結果を表示するだけで書き込まない。
 """
