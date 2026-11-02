@@ -9,12 +9,27 @@ const X_PROFILE = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-
 // プロフィールの URL に見えても、アカウントではない X のページ（menu.py の NOT_ACCOUNTS と同じ）
 const NOT_ACCOUNTS = new Set(['home', 'search', 'explore', 'i', 'intent', 'share', 'hashtag', 'messages', 'notifications', 'settings', 'compose', 'login', 'signup', 'tos', 'privacy']);
 
+// URL の前後から除く空白（xurl.py の TRIM と同じ並び）。trim() は U+FEFF を除き、Python の strip() は
+// \x1c〜\x1f・U+0085 を除くので、両方が除く文字をまとめて明示する
+const TRIM = '\t\n\x0b\x0c\r\x1c\x1d\x1e\x1f \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006'
+  + '\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff';
+const TRIM_SET = new Set(TRIM);
+
+/** 前後の空白（TRIM の文字）を除く（xurl.py の trim と同じ） */
+export function trimUrl(s: string): string {
+  let a = 0;
+  let b = s.length;
+  while (a < b && TRIM_SET.has(s[a])) a++;
+  while (b > a && TRIM_SET.has(s[b - 1])) b--;
+  return s.slice(a, b);
+}
+
 /**
  * X の投稿 URL を https://x.com/<ID>/status/<番号> にそろえ、追跡用パラメータ（?s=20 など）を落とす（menu.py の normalize_url と同じ）。
  * handle は投稿したアカウントの ID（X の投稿でなければ null）。
  */
 export function normalizeUrl(raw: string): { url: string; handle: string | null } {
-  const url = raw.trim();
+  const url = trimUrl(raw);
   const m = X_POST.exec(url);
   return m ? { url: `https://x.com/${m[1]}/status/${m[2]}`, handle: m[1] } : { url, handle: null };
 }
@@ -24,7 +39,7 @@ export function normalizeUrl(raw: string): { url: string; handle: string | null 
  * www.・mobile.・twitter.com、末尾の「/」、クエリ（?lang=ja）・「#」以降は受け付ける。x 列に登録するときは profileUrl の形で書く
  */
 export function profileHandle(url: string): string | null {
-  const m = X_PROFILE.exec(url.trim());
+  const m = X_PROFILE.exec(trimUrl(url));
   return m && !NOT_ACCOUNTS.has(m[1].toLowerCase()) ? m[1].toLowerCase() : null;
 }
 
@@ -35,7 +50,7 @@ export function xHandleOf(values: Record<string, string>): string | null {
 
 /** X（x.com・twitter.com）のページの URL か（menu.py の is_x_page と同じ） */
 export function isXPage(url: string): boolean {
-  return /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\//i.test(url.trim());
+  return /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\//i.test(trimUrl(url));
 }
 
 /** アカウントの ID（@ なし）→ プロフィールの URL（x 列に書く形） */

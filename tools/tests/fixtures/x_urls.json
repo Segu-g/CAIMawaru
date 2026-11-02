@@ -1,5 +1,5 @@
 {
-  "_comment": "X の URL の照合の例（架空のアカウント）。tools/caimawaru/menu.py（profile_handle・normalize_url）と src/editor/menuMatch.ts（profileHandle・normalizeUrl）の両方のテストがこのファイルを読み、同じ結果になることを確かめる",
+  "_comment": "X の URL の照合の例（架空のアカウント）。tools/caimawaru/xurl.py（profile_handle・normalize_url・trim）と src/editor/menuMatch.ts（profileHandle・normalizeUrl・trimUrl）の両方のテストがこのファイルを読み、同じ結果になることを確かめる。目に見えない文字は \\uXXXX で書く",
   "profileHandle": [
     ["https://x.com/Hoshikuzu_Ex", "hoshikuzu_ex"],
     [" https://x.com/hoshikuzu_ex ", "hoshikuzu_ex"],
@@ -29,7 +29,7 @@
     ["ftp://x.com/a_b", null],
     ["x.com/a_b", null],
     ["@a_b", null],
-    ["https://x.com/Kelvin", null],
+    ["https://x.com/\u212aelvin", null],
     ["https://x.com/home", null],
     ["https://x.com/Home", null],
     ["https://x.com/search", null],
@@ -48,6 +48,16 @@
     ["https://x.com/tos", null],
     ["https://x.com/privacy", null],
     ["https://x.com/homes", "homes"],
+    ["\ufeffhttps://x.com/a_b\ufeff", "a_b"],
+    ["\u001chttps://x.com/a_b\u001f", "a_b"],
+    ["\u001d\u001ehttps://x.com/a_b", "a_b"],
+    ["\u0085https://x.com/a_b\u0085", "a_b"],
+    ["\u3000https://x.com/a_b\u00a0", "a_b"],
+    ["\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeffhttps://x.com/a_b\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff", "a_b"],
+    ["\u200bhttps://x.com/a_b", null],
+    ["https://x.com/a_b\u200b", null],
+    ["https://x.com/a_b\u0000", null],
+    ["https://x.com/\ufeffa_b", null],
     ["", null]
   ],
   "normalizeUrl": [
@@ -57,9 +67,22 @@
     ["https://www.twitter.com/a_b/status/9#m", "https://x.com/a_b/status/9", "a_b"],
     ["HTTP://X.COM/a_b/STATUS/9", "https://x.com/a_b/status/9", "a_b"],
     ["https://x.com/a_b/status/", "https://x.com/a_b/status/", null],
-    ["https://x.com/a_b/status/١٢", "https://x.com/a_b/status/١٢", null],
+    ["https://x.com/a_b/status/\u0661\u0662", "https://x.com/a_b/status/\u0661\u0662", null],
     ["https://x.com/a_b", "https://x.com/a_b", null],
     ["https://example.booth.pm/items/1?x=1", "https://example.booth.pm/items/1?x=1", null],
+    ["\ufeffhttps://x.com/a_b/status/9?s=20\ufeff", "https://x.com/a_b/status/9", "a_b"],
+    ["\u001c\u0085https://x.com/a_b/status/9\u001f", "https://x.com/a_b/status/9", "a_b"],
+    ["\ufeffhttps://example.com/m\u0085", "https://example.com/m", null],
+    ["\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeffhttps://example.com/m\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff", "https://example.com/m", null],
+    ["\u200bhttps://example.com/m", "\u200bhttps://example.com/m", null],
     ["", "", null]
+  ],
+  "trim": [
+    ["\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeffa b\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff", "a b"],
+    ["\ufeff\u001c\u0085x\u001f\u0085\ufeff", "x"],
+    ["\u200bx\u200b", "\u200bx\u200b"],
+    ["\u0000x", "\u0000x"],
+    ["\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff", ""],
+    ["", ""]
   ]
 }

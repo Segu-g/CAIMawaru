@@ -1,31 +1,20 @@
 """CLI（caimawaru）を通しで動かすテスト。events/example を一時フォルダに写して使う。"""
-import contextlib
-import io
 import json
 import shutil
-import tempfile
 import unittest
-from pathlib import Path
 
-from caimawaru.cli import main
-
-REPO = Path(__file__).resolve().parents[2]
+from helpers import example_root, run_cli
 
 
 class CliTest(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp())
-        shutil.copytree(REPO / "events" / "example", self.root / "events" / "example",
-                        ignore=shutil.ignore_patterns("public"))
+        self.root = example_root()
 
     def tearDown(self):
         shutil.rmtree(self.root)
 
     def cli(self, *args):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = main(["--events-dir", str(self.root / "events"), *args])
-        return code, out.getvalue(), err.getvalue()
+        return run_cli(self.root, *args)
 
     def test_data_writes_circles_json_with_expanded_layout(self):
         code, out, _ = self.cli("data", "example")

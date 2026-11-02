@@ -14,6 +14,12 @@ X_PROFILE = re.compile(
 )
 # X のページ（投稿でないものを menus.csv に登録していないかの確認に使う）
 X_PAGE = re.compile(r"https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/", re.IGNORECASE | re.ASCII)
+# URL の前後から除く空白。Python の str.strip() と JavaScript の trim() は対象が少し違う（U+FEFF・\x1c〜\x1f・U+0085）ので、
+# 両方が除く文字をまとめて明示する（menuMatch.ts の TRIM と同じ並び）
+TRIM = (
+    "\t\n\x0b\x0c\r\x1c\x1d\x1e\x1f \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
 # プロフィールの URL の形でも、アカウントではない X のページ
 NOT_ACCOUNTS = frozenset({
     "home", "search", "explore", "i", "intent", "share", "hashtag", "messages", "notifications", "settings",
@@ -21,12 +27,17 @@ NOT_ACCOUNTS = frozenset({
 })
 
 
+def trim(url):
+    """前後の空白（TRIM の文字）を除く。"""
+    return url.strip(TRIM)
+
+
 def normalize_url(url):
     """Xの投稿URLは https://x.com/<ID>/status/<番号> の形にそろえ、追跡用パラメータを落とす。
 
-    (URL, 投稿したアカウントの ID) を返す。X の投稿でなければ ID は None。前後の空白は除く。
+    (URL, 投稿したアカウントの ID) を返す。X の投稿でなければ ID は None。前後の空白（TRIM）は除く。
     """
-    url = url.strip()
+    url = trim(url)
     m = X_POST.match(url)
     if m:
         return f"https://x.com/{m.group(1)}/status/{m.group(2)}", m.group(1)
@@ -38,7 +49,7 @@ def profile_handle(url):
 
     www.・mobile.・twitter.com、末尾の「/」、クエリ（?lang=ja）・「#」以降は受け付ける。
     """
-    m = X_PROFILE.fullmatch(url.strip())
+    m = X_PROFILE.fullmatch(trim(url))
     return m.group(1).lower() if m and m.group(1).lower() not in NOT_ACCOUNTS else None
 
 
@@ -49,4 +60,4 @@ def x_handle(circle):
 
 def is_x_page(url):
     """X（x.com・twitter.com）のページの URL か。"""
-    return bool(X_PAGE.match(url.strip()))
+    return bool(X_PAGE.match(trim(url)))

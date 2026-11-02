@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadDoc, serializeCircles, serializeMenus } from './doc';
 import { addCircle, addMenu, applyDefaults, changeCircleId, idUsers, moveAside, moveKeepingId, replaceMenu, spaceUsers } from './edit';
 import { isComposing, keyAction } from './keys';
-import { checkMenuUrl, circleHay, findCircles, normalizeUrl, profileHandle, searchCircles, xHandleOf } from './menuMatch';
+import { checkMenuUrl, circleHay, findCircles, normalizeUrl, profileHandle, searchCircles, trimUrl, xHandleOf } from './menuMatch';
 import { loadMarks, parseMarks, saveMarks, setMark } from './workMarks';
 import xUrlsJson from '../../tools/tests/fixtures/x_urls.json?raw';
 
@@ -42,13 +42,32 @@ describe('URL の正規化（menu.py の normalize_url と同じ）', () => {
 
 // tools/tests/test_menu.py も同じ例を確かめる（CLI とエディタの規則がずれないように）
 describe('X の URL の例（tools/tests/fixtures/x_urls.json）', () => {
-  const cases = JSON.parse(xUrlsJson) as { profileHandle: [string, string | null][]; normalizeUrl: [string, string, string | null][] };
+  const cases = JSON.parse(xUrlsJson) as {
+    profileHandle: [string, string | null][];
+    normalizeUrl: [string, string, string | null][];
+    trim: [string, string][];
+  };
   it.each(cases.profileHandle)('profileHandle(%j) → %j', (url, expected) => {
     expect(profileHandle(url)).toBe(expected);
     expect(xHandleOf({ x: url })).toBe(expected);
   });
   it.each(cases.normalizeUrl)('normalizeUrl(%j) → %j', (raw, url, handle) => {
     expect(normalizeUrl(raw)).toEqual({ url, handle });
+  });
+  it.each(cases.trim)('trimUrl(%j) → %j', (raw, expected) => {
+    expect(trimUrl(raw)).toBe(expected);
+  });
+  it('trimUrl は trim() が除く文字をすべて除き、ほかに除くのは Python の strip() だけが除く \\x1c〜\\x1f・U+0085', () => {
+    const trimmed: string[] = [];
+    for (let i = 0; i <= 0xffff; i++) {
+      const c = String.fromCharCode(i);
+      if (i >= 0xd800 && i <= 0xdfff) continue;
+      const byTrim = c.trim() === '';
+      const byTrimUrl = trimUrl(c) === '';
+      if (byTrim) expect(byTrimUrl, `U+${i.toString(16)}`).toBe(true);
+      else if (byTrimUrl) trimmed.push(c);
+    }
+    expect(trimmed).toEqual(['\x1c', '\x1d', '\x1e', '\x1f', '\x85']);
   });
 });
 

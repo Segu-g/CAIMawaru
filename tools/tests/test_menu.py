@@ -1,17 +1,13 @@
 """お品書きの登録（caimawaru menu）とサークルの照合のテスト。X の URL の例は fixtures/x_urls.json（エディタのテストと共通）。"""
-import contextlib
-import io
 import json
 import shutil
-import tempfile
 import unittest
 from pathlib import Path
 
-from caimawaru.cli import main
 from caimawaru.menu import find_circles
-from caimawaru.xurl import normalize_url, profile_handle, x_handle
+from caimawaru.xurl import TRIM, normalize_url, profile_handle, trim, x_handle
+from helpers import example_root, run_cli
 
-REPO = Path(__file__).resolve().parents[2]
 X_URLS = json.loads((Path(__file__).parent / "fixtures" / "x_urls.json").read_text(encoding="utf-8"))
 
 
@@ -29,6 +25,17 @@ class XUrlTest(unittest.TestCase):
             with self.subTest(raw=raw):
                 self.assertEqual(normalize_url(raw), (url, handle))
 
+    def test_trim(self):
+        for raw, expected in X_URLS["trim"]:
+            with self.subTest(raw=raw):
+                self.assertEqual(trim(raw), expected)
+
+    def test_trim_covers_python_strip(self):
+        """TRIM は str.strip() が除く文字をすべて含み、加えて U+FEFF（JavaScript の trim() が除く）だけを足したもの。"""
+        python_ws = {chr(i) for i in range(0x110000) if chr(i).isspace()}
+        self.assertEqual(set(TRIM), python_ws | {"\ufeff"})
+        self.assertEqual(len(TRIM), len(set(TRIM)))
+
     def test_x_handle_without_x_column(self):
         self.assertIsNone(x_handle({}))
         self.assertIsNone(x_handle({"x": None}))
@@ -44,9 +51,7 @@ class BlankIdTest(unittest.TestCase):
     """id 列が空のサークルは、スペース番号から作った id（build と同じ）で扱う。"""
 
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp())
-        shutil.copytree(REPO / "events" / "example", self.root / "events" / "example",
-                        ignore=shutil.ignore_patterns("public"))
+        self.root = example_root()
         data = self.root / "events" / "example" / "data"
         self.circles, self.menus = data / "circles.csv", data / "menus.csv"
         text = self.circles.read_bytes().decode("utf-8")
@@ -58,10 +63,7 @@ class BlankIdTest(unittest.TestCase):
         shutil.rmtree(self.root)
 
     def cli(self, *args):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = main(["--root", str(self.root), *args])
-        return code, out.getvalue(), err.getvalue()
+        return run_cli(self.root, *args)
 
     def last_menu(self):
         return self.menus.read_bytes().decode("utf-8").split("\r\n")[-2]
@@ -115,9 +117,7 @@ class BuildXRuleTest(unittest.TestCase):
     """build（check・data）は caimawaru menu と同じ X の規則（xurl）で x 列とお品書きの URL を見る。"""
 
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp())
-        shutil.copytree(REPO / "events" / "example", self.root / "events" / "example",
-                        ignore=shutil.ignore_patterns("public"))
+        self.root = example_root()
         self.dir = self.root / "events" / "example"
         self.circles, self.menus = self.dir / "data" / "circles.csv", self.dir / "data" / "menus.csv"
 
@@ -125,10 +125,8 @@ class BuildXRuleTest(unittest.TestCase):
         shutil.rmtree(self.root)
 
     def cli(self, *args):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = main(["--root", str(self.root), *args])
-        return code, out.getvalue() + err.getvalue()
+        code, out, err = run_cli(self.root, *args)
+        return code, out + err
 
     def set_x(self, space, x):
         text = self.circles.read_bytes().decode("utf-8")
