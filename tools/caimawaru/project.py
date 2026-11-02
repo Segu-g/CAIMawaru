@@ -31,26 +31,12 @@ def parse_json(text):
     return json.loads(text, object_pairs_hook=_no_duplicate_keys)
 
 
-# このファイルは <リポジトリ>/tools/caimawaru/project.py（uv は編集可能な形で入れるので、ここがリポジトリそのもの）
-CODE_ROOT = Path(__file__).resolve().parents[2]
-
-
 def find_root(root=None):
-    """プロジェクトのフォルダを返す。既定は CLI のコードがあるリポジトリ（どこから実行しても同じ）。
-
-    root（--root）を指定したときは、そのフォルダに events/ があることだけを確かめる。
-    """
-    if root is None:
-        if not (CODE_ROOT / "pyproject.toml").is_file():
-            raise CliError(f"CLI のコードがリポジトリの中にありません（{CODE_ROOT}）。--root でリポジトリのフォルダを指定してください")
-        return CODE_ROOT
-    try:
-        root = Path(root).resolve()
-    except OSError as e:  # 相対パスでカレントディレクトリが消えている など
-        raise CliError(f"--root に指定したフォルダを確かめられません（{root}: {e}）") from e
+    """プロジェクトのフォルダ（events/ のあるフォルダ）を返す。--root がなければカレントディレクトリ。上にはたどらない。"""
+    root = Path(root) if root is not None else Path.cwd()
     if not (root / "events").is_dir():
-        raise CliError(f"--root に指定したフォルダに events/ がありません（{root}）")
-    return root
+        raise CliError(f"{root} に events/ がありません。リポジトリのフォルダで実行するか、--root で指定してください")
+    return root.resolve()
 
 
 def known_events(root):

@@ -14,7 +14,7 @@ from caimawaru.project import CIRCLE_COLS, MENU_COLS, CliError, find_root, known
 
 def _parser():
     p = argparse.ArgumentParser(prog="caimawaru", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--root", type=Path, help="プロジェクトのフォルダ（events/ のあるフォルダ。既定はこの CLI のコードがあるリポジトリ）")
+    p.add_argument("--root", type=Path, help="プロジェクトのフォルダ（events/ のあるフォルダ。既定はカレントディレクトリ）")
     sub = p.add_subparsers(dest="command", required=True, metavar="<command>")
 
     s = sub.add_parser("list", help="イベントの一覧")
