@@ -106,8 +106,8 @@ def read_csv(path):
 # 書き戻すときの CSV の形（docs/event-data.md の「CSV の書き方」。ページ側の編集画面も同じ形で書く）:
 #   UTF-8（BOM なし）・改行 CRLF・必要なときだけ「"」で囲む（「"」は2つ重ねる）。見出しはイベントデータの列の順、
 #   そのあとにファイルにだけある列を元の順で。行は元の順で、足りない値は空。空行と、値がすべて空（空白だけ）の行は落とす。
-#   「#」で始まる行（最初の値が「#」で始まる）はその位置に残し、最初の値だけを1列で書く
-COMMENT = "#"  # コメント行の dict のキー（列名には使えない）
+#   「#」の行（最初の値が「#」で始まる行）はその位置に、読んだときの値のまま（値の数も変えず、埋めない）書く
+COMMENT = object()  # コメント行の dict のキー（列名と重ならない）
 
 
 def is_comment(row):
@@ -117,7 +117,7 @@ def is_comment(row):
 def read_table(path):
     """CSV を見出しと行で読む（書き戻す前提。値は空白も含めてそのまま、コメント行・ファイルにだけある列も残す）。
 
-    コメント行は {COMMENT: 最初の値}。見出しに空の列名・重複した列名があるとき、値が見出しより多い行があるときは
+    コメント行は {COMMENT: 値のリスト}（値の数は見出しと違ってもよい）。見出しに空の列名・重複した列名があるとき、値が見出しより多い行があるときは
     読み落とさないようにエラーにする。
     """
     if not path.exists():
@@ -132,7 +132,7 @@ def read_table(path):
             if values[0].startswith("#"):
                 if header is None:
                     raise CliError(f"{where}: 見出しの行より前に「#」の行があります。見出し（列名）を1行目にしてください")
-                rows.append({COMMENT: values[0]})
+                rows.append({COMMENT: values})
                 continue
             if header is None:
                 header = values
@@ -175,7 +175,7 @@ def format_csv(cols, rows):
     w.writerow(cols)
     for row in rows:
         if is_comment(row):
-            w.writerow([row[COMMENT]])
+            w.writerow(row[COMMENT])
         else:
             w.writerow(["" if row.get(c) is None else row[c] for c in cols])
     return buf.getvalue()

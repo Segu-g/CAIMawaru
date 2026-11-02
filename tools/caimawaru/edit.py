@@ -138,6 +138,17 @@ def _read_text(path):
     return path.read_bytes().decode("utf-8-sig") if path.exists() else ""
 
 
+def _has_lf_records(text):
+    """CSV の行の終わりに LF だけのものがあるか（引用符の中の改行は値の一部なので数えない）。"""
+    quoted = False
+    for i, ch in enumerate(text):
+        if ch == '"':
+            quoted = not quoted  # 「""」は2回切り替わるので元に戻る
+        elif ch == "\n" and not quoted and (i == 0 or text[i - 1] != "\r"):
+            return True
+    return False
+
+
 def _write_all(event, files):
     """files をまとめて書く。どれか1つでも開けなければ（読み取り専用・ほかのアプリが開いている等）、どれも書かない。
 
@@ -174,7 +185,7 @@ def commit(event, files, dry_run=False, no_build=False):
         diff = list(difflib.unified_diff(old.splitlines(), new.splitlines(), f"a/{rel}", f"b/{rel}", lineterm=""))
         for line in diff or [f"{rel}: 改行・空行・BOM だけが変わります"]:
             print(line)
-        if "\n" in old.replace("\r\n", ""):
+        if path.suffix == ".csv" and _has_lf_records(old):
             print(f"{rel}: 改行を CRLF にそろえます")
 
     before = build.validate(event)

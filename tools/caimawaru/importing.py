@@ -71,6 +71,11 @@ def normalize(raw, source, warnings, where):
 
 
 
+def row_id(row):
+    """既存の circles.csv の行の id（build.py と同じく、空ならスペース番号から作る。前後の空白は除く）。"""
+    return (row.get("id") or "").strip() or make_id((row.get("space") or "").strip())
+
+
 def merge(imported, existing_circles, existing_menus, today):
     """取り込んだ行 [(row, menus, provided_cols)] を既存の CSV の内容と合わせる。
 
@@ -89,7 +94,7 @@ def merge(imported, existing_circles, existing_menus, today):
             by_id[cid] = (dict(row), list(menus))
             order.append(cid)
 
-    existing = {r["id"]: r for r in existing_circles}
+    existing = {row_id(r): r for r in existing_circles}
     manual = [c for c in CIRCLE_COLS if c not in provided]
     circles = []
     for cid in order:
@@ -127,14 +132,14 @@ def merge(imported, existing_circles, existing_menus, today):
 def keep_extras_and_comments(table, circles):
     """取り込み結果の circles に、table（今の circles.csv）にだけある列の値と「#」の行を戻した行のリストを返す。"""
     extras = [c for c in table.cols if c not in CIRCLE_COLS]
-    old = {r.get("id"): r for r in table.data_rows()}
+    old = {row_id(r): r for r in table.data_rows()}
     new_ids = {c["id"] for c in circles}
     before, pending = {}, []  # id → その前に置くコメント行
     for r in table.rows:
         if is_comment(r):
             pending.append(r)
-        elif pending and r.get("id") in new_ids:
-            before.setdefault(r["id"], []).extend(pending)
+        elif pending and row_id(r) in new_ids:
+            before.setdefault(row_id(r), []).extend(pending)
             pending = []
     rows = []
     for c in circles:

@@ -83,10 +83,11 @@ def check_config(event, r):
         if not isinstance(info[key], str):
             r.errors.append(f"{where}: info.{key} は文字列にしてください: {info[key]!r}")
 
+    # ページ（src/types.ts の EventInfo）は配列・オブジェクトとして読むので、null も含めて型が違えばエラー
     def array_of(key, ok, what):
-        value = info.get(key)
-        if value is None:
+        if key not in info:
             return
+        value = info[key]
         if not isinstance(value, list):
             r.errors.append(f"{where}: info.{key} は配列にしてください: {value!r}")
             return
@@ -95,11 +96,11 @@ def check_config(event, r):
                 r.errors.append(f"{where}: info.{key} の{what}: {item!r}")
 
     def object_of(key):
-        value = info.get(key)
-        if value is not None and not isinstance(value, dict):
+        value = info.get(key, {})
+        if not isinstance(value, dict):
             r.errors.append(f"{where}: info.{key} はオブジェクト（{{ ... }}）にしてください: {value!r}")
             return {}
-        return value or {}
+        return value
 
     array_of("links", _is_link, "URL が不正です（{ \"label\", \"url\" } にしてください）")
     array_of("hashtags", lambda v: isinstance(v, str), "値は文字列にしてください")
@@ -113,9 +114,12 @@ def check_config(event, r):
             r.errors.append(f"{where}: info.slotColors の枠 {n} は 1〜5 にしてください")
         elif not (isinstance(color, dict) and all(isinstance(v, str) for v in color.values())):
             r.errors.append(f"{where}: info.slotColors の枠 {n} は {{ \"light\", \"dark\", \"ink\", \"darkInk\" }}（文字列）にしてください: {color!r}")
-    contact = info.get("contact")
-    if contact and not _is_link(contact):
-        r.errors.append(f"{where}: info.contact.url が不正です: {contact}")
+    if "contact" in info:
+        contact = info["contact"]
+        if not isinstance(contact, dict):
+            r.errors.append(f'{where}: info.contact は {{ "label", "url" }} にしてください（不要ならキーごと消す）: {contact!r}')
+        elif not _is_link(contact):
+            r.errors.append(f"{where}: info.contact.url が不正です: {contact}")
 
     sources = config.get("sources", [])
     if "outDir" in config:
@@ -154,6 +158,8 @@ def check_circles(event, r):
             r.errors.append(f"{where}: サークル名（name）が空です")
         if not row.get("space"):
             r.warnings.append(f"{where}: スペース番号が未入力です")
+        elif not row.get("id") and row["space"].startswith("#"):
+            r.warnings.append(f"{where}: スペース番号が「#」で始まっています。コメントの行にするなら、最初の列（id）を「#」で始めてください")
         links = {}
         for key in LINK_KEYS:
             url = row.get(key, "")

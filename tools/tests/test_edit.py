@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 from caimawaru.cli import main
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, format_csv, read_csv, read_table
+from caimawaru.project import CIRCLE_COLS, COMMENT, MENU_COLS, format_csv, read_csv, read_table
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -216,9 +216,13 @@ class EditTest(unittest.TestCase):
         lines = self.circles.read_bytes().decode("utf-8").split("\r\n")
         lines[0] += ",memo"
         lines[1] += ",手元のメモ"
-        lines.insert(2, "# コメント行")
-        lines.insert(3, "")
+        lines[2:2] = [self.COMMENT_ROWS[0], "", *self.COMMENT_ROWS[1:]]
         self.circles.write_bytes("\r\n".join(lines).encode("utf-8"))
+
+    # 1行目は1列のコメント、2行目はサークルの行をコメントにしたもの、3行目は「,」「"」を含み列が見出しより多いもの
+    COMMENT_ROWS = ["# コメント行",
+                    "#a-99,A-99,サンプル即売会,消したサークル,,作家99,,0,,,,https://example.com/circle99,,架空の公式サークル一覧",
+                    '"# メモ, ""引用"" つき",' + "," * 15 + "x"]
 
     def test_extra_columns_and_comment_rows_are_kept(self):
         self.write_circles_with_extras()
@@ -227,15 +231,19 @@ class EditTest(unittest.TestCase):
         lines = self.circles.read_bytes().decode("utf-8").split("\r\n")
         self.assertTrue(lines[0].endswith(",source,memo"))
         self.assertTrue(lines[1].endswith(",手元のメモ"))
-        self.assertEqual(lines[2], "# コメント行")  # 位置はそのまま、1列で
-        self.assertTrue(lines[3].endswith(",x,架空の公式サークル一覧,追記"))  # 空行は落とす
+        self.assertEqual(lines[2:5], self.COMMENT_ROWS)  # 位置も値もそのまま（空行は落とす）
+        self.assertTrue(lines[5].endswith(",x,架空の公式サークル一覧,追記"))
 
     def test_canonical_form(self):
         cases = [
             ("﻿id,url,note,checkedAt\na-01,https://example.com/m,,2030-01-01\n\n",  # BOM・LF・空行
              "id,url,note,checkedAt\r\na-01,https://example.com/m,,2030-01-01\r\n"),
-            ("id,url,note,checkedAt\r\n# メモ, 続き,,\r\na-01,https://example.com/m\r\n",  # コメント行・足りない値
-             "id,url,note,checkedAt\r\n# メモ\r\na-01,https://example.com/m,,\r\n"),
+            ("id,url,note,checkedAt\r\n# メモ, 続き\r\na-01,https://example.com/m\r\n",  # コメント行はそのまま・足りない値は埋める
+             "id,url,note,checkedAt\r\n# メモ, 続き\r\na-01,https://example.com/m,,\r\n"),
+            ('id,url,note,checkedAt\r\n#a-01,https://example.com/m,"a,b",,"""x""",\r\n',  # 列が多いコメント行もそのまま
+             'id,url,note,checkedAt\r\n#a-01,https://example.com/m,"a,b",,"""x""",\r\n'),
+            ('id,url,note,checkedAt\r\n"# a\nb",c\r\n',  # 引用符は必要なときだけ
+             'id,url,note,checkedAt\r\n"# a\nb",c\r\n'),
             ('id,url,note,checkedAt\r\na-01,https://example.com/m,"""新刊"", 既刊",2030-01-01\r\n',  # 引用符
              'id,url,note,checkedAt\r\na-01,https://example.com/m,"""新刊"", 既刊",2030-01-01\r\n'),
             ("id,url,note,checkedAt\r\n,,,\r\n , ,\t,\r\na-01,https://example.com/m,,\r\n",  # 値がすべて空の行は空行と同じ
@@ -254,8 +262,7 @@ class EditTest(unittest.TestCase):
         other = self.root / "other.csv"
         other.write_bytes(("id,space,event,name\r\n# メモ,A-01,,\r\n,,,\r\n,#A-10,,番号が「#」で始まる\r\n").encode("utf-8"))
         self.assertEqual([(c["id"], c["space"]) for c in read_csv(other)], [("", "#A-10")])
-        # 「,」を含むコメントは1列なので引用符で囲む
-        self.assertEqual(format_csv(MENU_COLS, [{"#": "# a,b"}]), 'id,url,note,checkedAt\r\n"# a,b"\r\n')
+        self.assertEqual(format_csv(MENU_COLS, [{COMMENT: ["# a,b", "c"]}]), 'id,url,note,checkedAt\r\n"# a,b",c\r\n')
         # 編集コマンドも同じ形で書く
         self.menus.write_bytes(cases[0][0].encode("utf-8"))
         code, out, err = self.cli("menus", "set", "example", "A-01", "note=既刊", "--no-build")
@@ -351,7 +358,7 @@ class EditTest(unittest.TestCase):
         circles = self.circles.read_bytes().decode("utf-8").split("\r\n")
         self.assertTrue(circles[0].endswith(",source,memo"))
         self.assertTrue(circles[1].endswith(",手元のメモ"))
-        self.assertEqual(circles[2], "# コメント行")
+        self.assertEqual(circles[2:5], self.COMMENT_ROWS)
         menus = self.menus.read_bytes().decode("utf-8").split("\r\n")
         self.assertEqual(menus[:2], ["id,url,note,checkedAt,by", "# menus のメモ"])
         self.assertTrue(menus[-2].startswith("a-02,https://example.com/circle2/menu,"))
@@ -364,6 +371,65 @@ class EditTest(unittest.TestCase):
         old, new = before[self.menus], self.menus.read_bytes()
         self.assertTrue(new.startswith(old))
         self.assertTrue(new[len(old):].startswith(b"a-02,https://example.com/circle2/menu,,"))
+
+
+    def test_null_and_wrong_typed_info_values_are_errors(self):
+        before = self.snapshot()
+        for key, value in (("info.links", "null"), ("info.hashtags", "null"), ("info.contact", "[]"),
+                           ("info.contact", '""'), ("info.contact", "null"), ("info.halls", "null"),
+                           ("info.eventSlots", "null")):
+            code, _, err = self.cli("config", "set", "example", key, value, "--json")
+            self.assertEqual(code, 1, (key, value))
+            self.assertIn(key, err)
+            self.assertNotIn("Traceback", err)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_hash_in_space_with_empty_id_warns(self):
+        text = self.circles.read_bytes().decode("utf-8")
+        self.circles.write_bytes((text + ",#A-10,サンプル即売会,メモのつもり,,,,0,,,,,,架空\r\n").encode("utf-8"))
+        code, _, err = self.cli("check", "example")
+        self.assertIn("最初の列（id）を「#」で始めて", err)
+
+    def test_import_keys_existing_rows_by_derived_id(self):
+        lines = self.circles.read_bytes().decode("utf-8").split("\r\n")
+        lines[0] += ",memo"
+        lines = [lines[0]] + [l + ("," if l else "") for l in lines[1:]]
+        lines[2] = lines[2].replace("a-02,", " a-02 ,", 1) + "前後に空白"
+        lines[4] = lines[4].replace("a-09,", ",", 1) + "id が空"
+        lines.insert(4, "# a-09 の前のコメント")
+        self.circles.write_bytes("\r\n".join(lines).encode("utf-8"))
+        code, _, err = self.cli("import", "example", "--no-build")
+        self.assertEqual(code, 0, err)
+        out = self.circles.read_bytes().decode("utf-8").split("\r\n")
+        self.assertTrue(out[2].startswith("a-02,") and out[2].endswith(",前後に空白"), out[2])
+        self.assertEqual(out[4], "# a-09 の前のコメント")
+        self.assertTrue(out[5].startswith("a-09,") and out[5].endswith(",id が空"), out[5])
+
+    def test_crlf_notice_only_when_record_ends_change(self):
+        self.menus.write_bytes('id,url,note,checkedAt\r\na-01,https://example.com/m,"1行目\n2行目",2030-01-01\r\n'.encode("utf-8"))
+        code, out, err = self.cli("menus", "set", "example", "A-01", "checkedAt=2030-01-02", "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("CRLF", out)
+        self.menus.write_bytes('id,url,note,checkedAt\na-01,https://example.com/m,"1行目\n2行目",2030-01-01\n'.encode("utf-8"))
+        code, out, err = self.cli("menus", "set", "example", "A-01", "checkedAt=2030-01-02", "--dry-run")
+        self.assertIn("CRLF", out)
+
+    def test_bom_input_is_written_without_bom(self):
+        self.circles.write_bytes(b"\xef\xbb\xbf" + self.circles.read_bytes())
+        self.assertEqual(self.circle_json("A-01")["id"], "a-01")  # BOM があっても id 列として読む
+        code, _, err = self.cli("circle", "set", "example", "A-01", "notes=x", "--no-build")
+        self.assertEqual(code, 0, err)
+        self.assertTrue(self.circles.read_bytes().startswith(b"id,space,"))
+
+    def test_config_unset_array_element(self):
+        code, _, err = self.cli("config", "set", "example", "info.hashtags", '["a", "b", "c"]', "--json")
+        self.assertEqual(code, 0, err)
+        code, _, err = self.cli("config", "unset", "example", "info.hashtags.1")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(self.config.read_text(encoding="utf-8"))["info"]["hashtags"], ["a", "c"])
+        code, _, err = self.cli("config", "unset", "example", "info.hashtags.5")
+        self.assertEqual(code, 1)
+        self.assertNotIn("Traceback", err)
 
 
 if __name__ == "__main__":
