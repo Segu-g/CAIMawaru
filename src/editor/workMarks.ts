@@ -23,18 +23,18 @@ export function parseMarks(text: string | null): Marks {
     const { later, memo } = v as Record<string, unknown>;
     const m: Mark = {};
     if (later === true) m.later = true;
-    if (typeof memo === 'string' && memo.trim()) m.memo = memo;
+    if (typeof memo === 'string' && memo !== '') m.memo = memo;
     if (m.later || m.memo) out[id] = m;
   }
   return out;
 }
 
-/** 印を変える。印もメモもなくなったら、その id を消す */
+/** 印を変える。印もメモもなくなったら、その id を消す（メモは空文字のときだけ消す。打ち始めの空白を消さないため） */
 export function setMark(marks: Marks, id: string, change: Mark): Marks {
   const m: Mark = { ...marks[id], ...change };
   const next = { ...marks };
   if (!m.later) delete m.later;
-  if (!m.memo?.trim()) delete m.memo;
+  if (!m.memo) delete m.memo;
   if (m.later || m.memo) next[id] = m;
   else delete next[id];
   return next;

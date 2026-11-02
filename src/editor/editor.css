@@ -281,3 +281,4 @@ kbd {
   .ed-tabs button { padding: 0 10px; white-space: nowrap; }
   .ed-main { padding: 10px 10px 32px; }
 }
+.ed-row-buttons > p { flex-basis: 100%; margin: 0; }

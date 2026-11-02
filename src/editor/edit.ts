@@ -118,14 +118,25 @@ export function moveKeepingId(doc: Doc, key: number, space: string): Doc {
   return updateCircle(next, key, 'space', space);
 }
 
-/** 2つのサークルのスペース番号を入れ替える。id は変えない（id 列が空なら、今の id を書く） */
-export function swapSpaces(doc: Doc, a: number, b: number): Doc {
-  const ca = doc.circles.find((c) => c.key === a);
-  const cb = doc.circles.find((c) => c.key === b);
-  if (!ca || !cb || a === b) return doc;
-  const sa = ca.values.space;
-  const sb = cb.values.space;
-  return moveKeepingId(moveKeepingId(doc, a, sb), b, sa);
+/** id を使っているほかのサークル（その id に変えると重複する） */
+export function idUsers(doc: Doc, key: number, id: string): Row[] {
+  const want = id.trim();
+  return want ? doc.circles.filter((c) => c.key !== key && c.comment === undefined && isDataRow(c.values, c.extra) && circleId(c.values) === want) : [];
+}
+
+/**
+ * 入れ替え: スペースが重なったほかのサークル（otherKey）を、空いたスペース（space）へ移す。id は変えない（moveKeepingId）。
+ * 相手の id がほかのサークルと重複しているときは、お品書きがどちらのものか決まらず、id を書くと重複のまま固まるので移さない。
+ */
+export function moveAside(doc: Doc, otherKey: number, space: string): { doc: Doc; ok: true } | { doc: Doc; ok: false; reason: string } {
+  const other = doc.circles.find((c) => c.key === otherKey);
+  if (!other) return { doc, ok: false, reason: 'サークルが見つかりません' };
+  const dup = sameIdCircles(doc, other);
+  if (dup.length) {
+    const names = [other, ...dup].map((c) => `${c.values.space} ${c.values.name}`.trim()).join('・');
+    return { doc, ok: false, reason: `id「${circleId(other.values)}」が重複しているため入れ替えられません（${names}）。先に id を直してください` };
+  }
+  return { doc: moveKeepingId(doc, otherKey, space), ok: true };
 }
 
 /**

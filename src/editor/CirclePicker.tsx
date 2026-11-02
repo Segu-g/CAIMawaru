@@ -1,5 +1,6 @@
 // サークルを選ぶ欄（検索できるコンボボックス）。スペース・名前・読み・@X の ID・id で絞り込み、↑↓ と Enter で選ぶ。
 import { useId, useMemo, useRef, useState } from 'react';
+import { keyAction } from './keys';
 import { circleHay, searchCircles } from './menuMatch';
 import { circleId, isDataRow, type Row } from './model';
 
@@ -66,17 +67,19 @@ export default function CirclePicker({ circles, value, onChange, label, missing 
         }}
         onKeyDown={(e) => {
           if (!open) return;
-          if (e.key === 'ArrowDown') {
+          // 変換中の Enter（確定）・↑↓（候補）は、サークルの選択に使わない
+          const k = keyAction(e);
+          if (k === 'down') {
             e.preventDefault();
             setActive((a) => Math.min(a + 1, shown.length - 1));
-          } else if (e.key === 'ArrowUp') {
+          } else if (k === 'up') {
             e.preventDefault();
             setActive((a) => Math.max(a - 1, 0));
-          } else if (e.key === 'Enter') {
+          } else if (k === 'enter') {
             e.preventDefault();
             choose(shown[active]);
             input.current?.blur();
-          } else if (e.key === 'Escape') {
+          } else if (k === 'escape') {
             setQuery(null);
             input.current?.blur();
           }

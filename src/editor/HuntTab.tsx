@@ -1,9 +1,10 @@
 // お品書き探し: サークルを1つずつ回って、X などで見つけたお品書きの URL を貼り付けて登録する。
-// 「X を開く」「X で検索」は人が新しいタブで開くリンクだけで、このページは X を読まない。
+// 「X を開く」は人が新しいタブで開くリンクだけで、このページは X を読まない。
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { keyAction } from './keys';
 import type { Doc } from './doc';
 import { addMenu, menusOf, replaceMenu, updateCircle, type Dirty } from './edit';
-import { checkMenuUrl, circleHay, profileUrl, searchCircles, xHandleOf, xSearchUrl } from './menuMatch';
+import { checkMenuUrl, circleHay, profileUrl, searchCircles, xHandleOf } from './menuMatch';
 import { circleId, isDataRow, isHttpUrl, type Row } from './model';
 import type { Mark, Marks } from './workMarks';
 
@@ -22,7 +23,6 @@ type Props = {
 };
 
 const short = (url: string) => url.replace(/^https?:\/\/(www\.)?/, '');
-const composing = (e: KeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
 
 export default function HuntTab({ doc, edit, marks, setMark, marksSaved, selected, onSelect, onOpenCircle }: Props) {
   const [q, setQ] = useState('');
@@ -79,8 +79,9 @@ export default function HuntTab({ doc, edit, marks, setMark, marksSaved, selecte
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="検索（スペース・名前・@ID・メモ）" aria-label="サークルを検索"
           data-search
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !composing(e) && shown.length) onSelect(shown[0].key);
-            if (e.key === 'ArrowDown') {
+            const k = keyAction(e);
+            if (k === 'enter' && shown.length) onSelect(shown[0].key);
+            if (k === 'down') {
               e.preventDefault();
               move(1);
             }
@@ -176,15 +177,25 @@ function HuntDetail({ doc, circle, edit, mark, setMark, marksSaved, onDone, onMo
   const [note, setNote] = useState('');
   // 'add' か、差し替えるお品書きの key
   const [mode, setMode] = useState<'add' | number>('add');
-  const [alsoX, setAlsoX] = useState(true);
+  // 投稿者を X に登録するのは、運用者が選んだときだけ（既定はオフ）
+  const [alsoX, setAlsoX] = useState(false);
   const [done, setDone] = useState('');
+  const [notice, setNotice] = useState('');
   const paste = useRef<HTMLInputElement>(null);
   useEffect(() => paste.current?.focus(), []);
 
-  const replacing = mode === 'add' ? undefined : mode;
+  // 差し替える行が（ほかのタブでの削除・付け替えなどで）なくなっていたら、追加に戻して知らせる
+  const target = mode === 'add' ? undefined : menus.find((m) => m.key === mode);
+  useEffect(() => {
+    if (mode !== 'add' && !target) {
+      setMode('add');
+      setNotice('差し替えるお品書きがなくなっていたので（削除されたか、ほかのサークルに付け替えられた）、「追加する」に戻しました');
+    }
+  }, [mode, target]);
+  const replacing = target?.key;
   const check = url.trim() ? checkMenuUrl(doc, circle.key, url, replacing) : null;
-  // X のないサークルに投稿を登録するとき、投稿者をサークルの X にもできる
-  const offerX = !v.x.trim() && !!check?.handle && !check.error;
+  // X のないサークルに投稿を登録するとき、投稿者をサークルの X にもできる（ほかのサークルの X なら出さない）
+  const offerX = !v.x.trim() && !!check?.handle && !check.error && !check.otherOwner;
   const profileForX = !v.x.trim() && check?.profile ? check.profile : null;
 
   const register = (stay: boolean) => {
@@ -196,6 +207,11 @@ function HuntDetail({ doc, circle, edit, mark, setMark, marksSaved, onDone, onMo
       return;
     }
     if (check.error) return;
+    if (mode !== 'add' && !target) {
+      setMode('add');
+      setNotice('差し替えるお品書きがなくなっていたので、登録しませんでした。「追加する」に戻したので、もう一度登録してください');
+      return;
+    }
     const n = note.trim();
     const withX = offerX && alsoX ? check.handle : null;
     edit((d) => {
@@ -206,19 +222,21 @@ function HuntDetail({ doc, circle, edit, mark, setMark, marksSaved, onDone, onMo
     setUrl('');
     setNote('');
     setMode('add');
+    setAlsoX(false);
+    setNotice('');
     setDone(`${replacing === undefined ? '登録' : '差し替え'}しました: ${short(check.url)}${withX ? `（X に @${withX} も登録）` : ''}`);
     onDone(stay);
     if (stay) paste.current?.focus();
   };
 
   const keys = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (composing(e)) return;
-    if (e.key === 'Enter') {
+    const k = keyAction(e);
+    if (k === 'enter' || k === 'shift-enter') {
       e.preventDefault();
-      register(e.shiftKey);
-    } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey) {
+      register(k === 'shift-enter');
+    } else if (k === 'down' || k === 'up') {
       e.preventDefault();
-      onMove(e.key === 'ArrowDown' ? 1 : -1);
+      onMove(k === 'down' ? 1 : -1);
     }
   };
 
@@ -229,9 +247,7 @@ function HuntDetail({ doc, circle, edit, mark, setMark, marksSaved, onDone, onMo
           <a href={v.x.trim()} target="_blank" rel="noopener noreferrer" className="ed-linkbutton">X を開く（@{handle}）↗</a>
         ) : v.x.trim() && isHttpUrl(v.x.trim()) ? (
           <a href={v.x.trim()} target="_blank" rel="noopener noreferrer" className="ed-linkbutton">X を開く ↗</a>
-        ) : (
-          <a href={xSearchUrl(v.name || v.space)} target="_blank" rel="noopener noreferrer" className="ed-linkbutton">X でサークル名を検索 ↗</a>
-        )}
+        ) : null}
         {(['pixiv', 'booth', 'web'] as const).filter((k) => isHttpUrl(v[k].trim())).map((k) => (
           <a key={k} href={v[k].trim()} target="_blank" rel="noopener noreferrer">{k === 'web' ? 'Web' : k === 'booth' ? 'BOOTH' : 'pixiv'} ↗</a>
         ))}
@@ -264,7 +280,7 @@ function HuntDetail({ doc, circle, edit, mark, setMark, marksSaved, onDone, onMo
         {menus.length > 0 && (
           <label>
             <span>登録のしかた</span>
-            <select value={String(mode)} onChange={(e) => setMode(e.target.value === 'add' ? 'add' : Number(e.target.value))}>
+            <select value={String(replacing ?? 'add')} onChange={(e) => { setNotice(''); setMode(e.target.value === 'add' ? 'add' : Number(e.target.value)); }}>
               <option value="add">追加する</option>
               {menus.map((m) => <option key={m.key} value={m.key}>差し替え: {short(m.values.url.trim()).slice(0, 40)}</option>)}
             </select>
@@ -285,6 +301,7 @@ function HuntDetail({ doc, circle, edit, mark, setMark, marksSaved, onDone, onMo
             投稿者 @{check!.handle} をこのサークルの X にも登録する
           </label>
         )}
+        {notice && <p className="ed-inline-warn" role="alert">⚠ {notice}</p>}
         {done && <p className="ed-inline-ok" role="status">✓ {done}</p>}
       </div>
 

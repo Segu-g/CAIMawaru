@@ -1,7 +1,8 @@
 // 1つのサークルの編集（circles.csv の1行）と、そのサークルのお品書き（menus.csv の行）。
 import { useEffect, useMemo, useRef, useState, type InputHTMLAttributes, type Ref } from 'react';
 import type { Doc } from './doc';
-import { addMenu, applyDefaults, changeCircleId, menusOf, moveKeepingId, removeCircle, sameIdCircles, spaceUsers, updateCircle, type Dirty } from './edit';
+import { addMenu, applyDefaults, changeCircleId, idUsers, menusOf, moveAside, moveKeepingId, removeCircle, sameIdCircles, spaceUsers, updateCircle, type Dirty } from './edit';
+import { keyAction } from './keys';
 import { checkMenuUrl } from './menuMatch';
 import MenuRow from './MenuRow';
 import { circleId, isDataRow, type Row } from './model';
@@ -56,8 +57,9 @@ function DraftInput({ value, onCommit, ref, ...rest }: { value: string; onCommit
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur();
-        if (e.key === 'Escape') setDraft(value);
+        const k = keyAction(e);
+        if (k === 'enter') e.currentTarget.blur();
+        if (k === 'escape') setDraft(value);
       }}
     />
   );
@@ -150,6 +152,8 @@ export default function CircleForm({ doc, circle, issues, edit: editDoc, onRemov
   };
   /** スペースを変え、id も変える（お品書きも付け替える） */
   const moveWithId = (space: string) => {
+    // 変えた後の id をほかのサークルが使っているなら変えない（2つのサークルが同じ id になり、お品書きが混ざる）
+    if (idUsers(doc, circle.key, circleId({ ...v, space })).length) return;
     const plan = changeCircleId(doc, circle.key, 'space', space);
     edit((d) => changeCircleId(d, circle.key, 'space', space).doc, ...plan.dirty);
     const others = spaceUsers(doc, circle.key, space);
@@ -157,7 +161,8 @@ export default function CircleForm({ doc, circle, issues, edit: editDoc, onRemov
   };
   /** 同じスペースのサークルを、このサークルの元のスペースへ（入れ替え。相手の id も変えない） */
   const swapWith = (other: Row, space: string) => {
-    edit((d) => moveKeepingId(d, other.key, space), 'circles');
+    if (!moveAside(doc, other.key, space).ok) return;
+    edit((d) => moveAside(d, other.key, space).doc, 'circles');
     setPending(null);
   };
 
@@ -175,7 +180,7 @@ export default function CircleForm({ doc, circle, issues, edit: editDoc, onRemov
     <div
       className="ed-form"
       onKeyDown={(e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        if (keyAction(e) === 'mod-enter') {
           e.preventDefault();
           (document.activeElement as HTMLElement | null)?.blur?.();
           setTimeout(onAddNext, 0);
@@ -217,11 +222,17 @@ export default function CircleForm({ doc, circle, issues, edit: editDoc, onRemov
             </p>
             <div className="ed-row-buttons">
               <button type="button" className="ed-primary" onClick={() => moveKeep(pending.space)}>id を「{id}」のまま移動（公開後はこちら）</button>
-              <button type="button" onClick={() => moveWithId(pending.space)}>
+              <button type="button" onClick={() => moveWithId(pending.space)} disabled={idUsers(doc, circle.key, pending.after).length > 0}>
                 id も「{pending.after}」に変える{menus.length ? `（お品書き ${menus.length} 件も付け替え）` : ''}
               </button>
               <button type="button" onClick={() => setPending(null)}>やめる</button>
             </div>
+            {idUsers(doc, circle.key, pending.after).length > 0 && (
+              <p className="meta">
+                id「{pending.after}」はすでに {idUsers(doc, circle.key, pending.after).map((o) => `${o.values.space} ${o.values.name}`.trim()).join('・')} が使っているので、
+                id を変えて移動することはできません（同じ id になり、お品書きが混ざるため）。
+              </p>
+            )}
           </div>
         )}
         {pending?.kind === 'clash' && (
@@ -230,11 +241,17 @@ export default function CircleForm({ doc, circle, issues, edit: editDoc, onRemov
               「{v.space}」はほかのサークルも使っています: {pending.others.map((o) => `${o.values.space} ${o.values.name}`.trim()).join('・')}
             </p>
             <div className="ed-row-buttons">
-              {pending.others.length === 1 && pending.before.trim() && (
-                <button type="button" onClick={() => swapWith(pending.others[0], pending.before)}>
-                  入れ替える（{pending.others[0].values.name || pending.others[0].values.space} を {pending.before} へ。id は変えない）
-                </button>
-              )}
+              {pending.others.length === 1 && pending.before.trim() && (() => {
+                const aside = moveAside(doc, pending.others[0].key, pending.before);
+                return (
+                  <>
+                    <button type="button" onClick={() => swapWith(pending.others[0], pending.before)} disabled={!aside.ok}>
+                      入れ替える（{pending.others[0].values.name || pending.others[0].values.space} を {pending.before} へ。id は変えない）
+                    </button>
+                    {!aside.ok && <p className="meta wide">{aside.reason}</p>}
+                  </>
+                );
+              })()}
               {pending.others.map((o) => (
                 <button type="button" key={o.key} onClick={() => onSelect(o.key)}>{o.values.name || o.values.space} を開く</button>
               ))}
@@ -309,9 +326,9 @@ export default function CircleForm({ doc, circle, issues, edit: editDoc, onRemov
       {id && (
         <div className="ed-menu-add">
           <input type="url" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="お品書きの URL（X の投稿・BOOTH など）" aria-label="追加するお品書きの URL"
-            onKeyDown={(e) => e.key === 'Enter' && add()} />
+            onKeyDown={(e) => keyAction(e) === 'enter' && add()} />
           <input value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="説明（例: 新刊）" aria-label="追加するお品書きの説明"
-            onKeyDown={(e) => e.key === 'Enter' && add()} />
+            onKeyDown={(e) => keyAction(e) === 'enter' && add()} />
           <button type="button" onClick={add} disabled={!newCheck || !!newCheck.error}>追加</button>
         </div>
       )}

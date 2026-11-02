@@ -4,6 +4,9 @@ import type { Doc } from './doc';
 import { circleId, isDataRow, isHttpUrl, type Row } from './model';
 
 const X_POST = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d+)/i;
+// サークルの x 列のアカウント（menu.py の x_handle と同じ形だけ。照合の規則を CLI とそろえる）
+const X_HANDLE = /^https?:\/\/(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/?$/i;
+// 貼り付けたプロフィールの URL（x 列に登録するときは https://x.com/<ID> の形にそろえて書くので、ここは広めに受け付ける）
 const X_PROFILE = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/?(?:[?#].*)?$/i;
 const X_PAGE = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\//i;
 // プロフィールの URL に見えても、アカウントではない X のページ
@@ -19,25 +22,27 @@ export function normalizeUrl(raw: string): { url: string; handle: string | null 
   return m ? { url: `https://x.com/${m[1]}/status/${m[2]}`, handle: m[1] } : { url, handle: null };
 }
 
-/** X のプロフィールの URL なら、そのアカウントの ID（小文字）。投稿・検索などのページは null */
+/**
+ * 貼り付けた URL が X のプロフィールなら、そのアカウントの ID（小文字）。投稿・検索などのページは null。
+ * 照合（xHandleOf）より広く受け付ける（www.・mobile.・?lang=ja など）。登録するときは profileUrl の形で書く
+ */
 export function profileHandle(url: string): string | null {
   const m = X_PROFILE.exec(url.trim());
   return m && !NOT_ACCOUNTS.has(m[1].toLowerCase()) ? m[1].toLowerCase() : null;
 }
 
-/** サークルの x 列のアカウントの ID（小文字。menu.py の x_handle と同じく、プロフィールの URL のときだけ） */
+/**
+ * サークルの x 列のアカウントの ID（小文字）。menu.py の x_handle と同じ規則（値の前後の空白を除いて
+ * https://x.com/<ID> か https://twitter.com/<ID>、末尾の「/」は可。www.・クエリなどは照合しない）
+ */
 export function xHandleOf(values: Record<string, string>): string | null {
-  return profileHandle(values.x ?? '');
+  const m = X_HANDLE.exec((values.x ?? '').trim());
+  return m ? m[1].toLowerCase() : null;
 }
 
 /** アカウントの ID（@ なし）→ プロフィールの URL（x 列に書く形） */
 export function profileUrl(handle: string): string {
   return `https://x.com/${handle}`;
-}
-
-/** サークル名で X のアカウントを探す検索ページ（人が新しいタブで開くだけ。このページは読まない） */
-export function xSearchUrl(name: string): string {
-  return `https://x.com/search?q=${encodeURIComponent(name.trim())}&f=user`;
 }
 
 const dataCircles = (doc: Doc) => doc.circles.filter((c) => c.comment === undefined && isDataRow(c.values, c.extra));
@@ -93,6 +98,8 @@ export type UrlCheck = {
   sameMenu?: Row;
   /** X のプロフィールの URL（お品書きではなく、サークルの X として登録できる） */
   profile?: string;
+  /** 投稿したアカウントを X にしているほかのサークル */
+  otherOwner?: Row;
 };
 
 const sameUrl = (a: string, b: string) => normalizeUrl(a).url === normalizeUrl(b).url;
@@ -125,12 +132,17 @@ export function checkMenuUrl(doc: Doc, circleKey: number, raw: string, replacing
     });
     warnings.push(`同じ URL がほかのサークル（${names.join('・')}）に登録されています`);
   }
+  let otherOwner: Row | undefined;
   if (handle && circle) {
+    const h = handle.toLowerCase();
     const own = xHandleOf(circle.values);
-    if (own && own !== handle.toLowerCase()) {
-      const owner = dataCircles(doc).find((c) => xHandleOf(c.values) === handle.toLowerCase());
-      warnings.push(`@${handle} の投稿です（このサークルの X は @${own}）` + (owner ? `。@${handle} は ${label(owner)} の X です` : ''));
+    otherOwner = own === h ? undefined : dataCircles(doc).find((c) => c.key !== circle.key && xHandleOf(c.values) === h);
+    if (own && own !== h) {
+      warnings.push(`@${handle} の投稿です（このサークルの X は @${own}）` + (otherOwner ? `。@${handle} は ${label(otherOwner)} の X です` : ''));
+    } else if (!own && otherOwner) {
+      // このサークルの X が空でも、ほかのサークルの X の投稿なら知らせる
+      warnings.push(`@${handle} は ${label(otherOwner)} の X です（このサークルの投稿か確かめてください）`);
     }
   }
-  return { url, handle, warnings };
+  return { url, handle, warnings, ...(otherOwner && { otherOwner }) };
 }

@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import CircleForm from './CircleForm';
 import type { Doc } from './doc';
 import { addCircle, type Dirty } from './edit';
+import { keyAction } from './keys';
 import { circleHay, searchCircles } from './menuMatch';
 import { circleId, isDataRow } from './model';
 import type { Issue } from './validate';
@@ -81,7 +82,7 @@ export default function CirclesTab({ doc, issues, selected, onSelect, edit, mark
             aria-label="検索"
             onKeyDown={(e) => {
               // Enter で先頭のサークルを開く（日本語の変換の確定は除く）
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing && shown.length) onSelect(shown[0].key);
+              if (keyAction(e) === 'enter' && shown.length) onSelect(shown[0].key);
             }}
           />
           <select value={event} onChange={(e) => setEvent(e.target.value)} aria-label="参加イベント">

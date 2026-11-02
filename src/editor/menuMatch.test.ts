@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { loadDoc, serializeCircles, serializeMenus } from './doc';
-import { addCircle, addMenu, applyDefaults, moveKeepingId, replaceMenu, spaceUsers, swapSpaces } from './edit';
-import { checkMenuUrl, circleHay, findCircles, normalizeUrl, profileHandle, searchCircles, xHandleOf, xSearchUrl } from './menuMatch';
+import { addCircle, addMenu, applyDefaults, changeCircleId, idUsers, moveAside, moveKeepingId, replaceMenu, spaceUsers } from './edit';
+import { isComposing, keyAction } from './keys';
+import { checkMenuUrl, circleHay, findCircles, normalizeUrl, profileHandle, searchCircles, xHandleOf } from './menuMatch';
 import { loadMarks, parseMarks, saveMarks, setMark } from './workMarks';
 
 // 架空のサークルとアカウント
@@ -28,8 +29,22 @@ describe('URL の正規化（menu.py の normalize_url と同じ）', () => {
     expect(profileHandle('https://x.com/search?q=a')).toBeNull();
     expect(profileHandle('https://x.com/home')).toBeNull();
     expect(profileHandle('https://x.com/a/status/1')).toBeNull();
+  });
+
+  it('サークルの x 列の照合は menu.py の x_handle と同じ（www.・mobile.・クエリ・# は照合しない。x.com/home も ID として扱う）', () => {
+    const h = (x: string) => xHandleOf({ x });
     expect(xHandleOf(byName(open(), 'まどろみ書房').values)).toBe('madoromi_ex');
-    expect(xSearchUrl(' 星屑 通信 ')).toBe('https://x.com/search?q=%E6%98%9F%E5%B1%91%20%E9%80%9A%E4%BF%A1&f=user');
+    expect(h(' https://x.com/Hoshikuzu_Ex ')).toBe('hoshikuzu_ex');
+    expect(h('http://twitter.com/a_b/')).toBe('a_b');
+    expect(h('https://www.x.com/a_b')).toBeNull();
+    expect(h('https://mobile.twitter.com/a_b')).toBeNull();
+    expect(h('https://x.com/a_b?lang=ja')).toBeNull();
+    expect(h('https://x.com/a_b#a')).toBeNull();
+    expect(h('https://x.com/a_b//')).toBeNull();
+    expect(h('https://x.com/abcdefghijklmnop')).toBeNull(); // 16 文字
+    expect(h('https://x.com/home')).toBe('home');
+    expect(h('https://x.com/search')).toBe('search');
+    expect(h('')).toBeNull();
   });
 });
 
@@ -78,7 +93,13 @@ describe('登録する URL の確認', () => {
     // 差し替えるお品書き自身とは重複にしない
     expect(checkMenuUrl(doc, byName(doc, '星屑通信').key, 'https://x.com/hoshikuzu_ex/status/100', doc.menus[0].key).error).toBeUndefined();
     const other = checkMenuUrl(doc, byName(doc, '星の砂').key, 'https://x.com/hoshikuzu_ex/status/100');
-    expect(other.warnings).toEqual(['同じ URL がほかのサークル（A-01 星屑通信）に登録されています']);
+    expect(other.warnings).toEqual([
+      '同じ URL がほかのサークル（A-01 星屑通信）に登録されています',
+      '@hoshikuzu_ex は A-01 星屑通信 の X です（このサークルの投稿か確かめてください）',
+    ]);
+    // 同じ URL だけ（投稿者は別のサークルの X ではない）
+    const d2 = addMenu(doc, 'a-02', 'https://example.com/m', '').doc;
+    expect(checkMenuUrl(d2, byName(d2, '星の砂').key, 'https://example.com/m').warnings).toEqual(['同じ URL がほかのサークル（A-02 まどろみ書房）に登録されています']);
   });
   it('URL でないもの・X のプロフィール・投稿でない X のページ', () => {
     const doc = open();
@@ -89,8 +110,17 @@ describe('登録する URL の確認', () => {
     expect(prof.profile).toBe('hoshinosuna_ex');
     expect(prof.error).toContain('プロフィール');
     expect(checkMenuUrl(doc, key, 'https://x.com/i/lists/1').warnings).toEqual(['X の投稿ではないページです']);
-    // X のないサークルには投稿者の警告を出さない
+    // X のないサークルでも、どのサークルの X でもない投稿なら警告しない
     expect(checkMenuUrl(doc, key, 'https://x.com/someone_ex/status/1').warnings).toEqual([]);
+  });
+  it('X が空のサークルに、ほかのサークルの X の投稿を貼ったら知らせる', () => {
+    const doc = open();
+    const r = checkMenuUrl(doc, byName(doc, '星の砂').key, 'https://x.com/Hoshikuzu_Ex/status/9');
+    expect(r.error).toBeUndefined();
+    expect(r.otherOwner?.values.name).toBe('星屑通信');
+    expect(r.warnings).toEqual(['@Hoshikuzu_Ex は A-01 星屑通信 の X です（このサークルの投稿か確かめてください）']);
+    // 自分の X の投稿なら otherOwner はない
+    expect(checkMenuUrl(doc, byName(doc, '星屑通信').key, 'https://x.com/hoshikuzu_ex/status/9').otherOwner).toBeUndefined();
   });
 });
 
@@ -123,13 +153,28 @@ describe('配置換え', () => {
     const explicit = moveKeepingId(doc, byName(doc, '星屑通信').key, 'A-12');
     expect(serializeCircles(explicit)).toContain('\r\na-01,A-12,サンプル即売会,星屑通信,');
   });
-  it('入れ替えは両方のスペースを交換し、id は変えない', () => {
-    const doc = open();
-    const swapped = swapSpaces(doc, byName(doc, '星の砂').key, byName(doc, '青い鳥工房').key);
-    const text = serializeCircles(swapped);
-    expect(text).toContain('\r\na-10,"A-03,A-04",サンプル即売会,星の砂,');
-    expect(text).toContain('\r\na-03-a-04,A-10,サンプル即売会,青い鳥工房,');
-    expect(serializeMenus(swapped)).toBe(menusCsv);
+  it('使われているスペースへ id ごと移すと id が重複するので、idUsers で分かる（画面はそのボタンを無効にする）', () => {
+    // id が空の 甲(A-01) と 乙(A-02)
+    const doc = loadDoc({ event: '{}', circles: 'id,space,name\r\n,A-01,甲\r\n,A-02,乙\r\n', menus: 'id,url\r\na-01,https://example.com/k\r\na-02,https://example.com/o\r\n' }).doc;
+    const k = byName(doc, '甲').key;
+    expect(idUsers(doc, k, 'a-02').map((c) => c.values.name)).toEqual(['乙']);
+    expect(idUsers(doc, k, 'a-03')).toEqual([]);
+    expect(idUsers(doc, k, '')).toEqual([]);
+    // id を変えずに A-02 へ移し、乙を A-01 へ（入れ替え）: どちらの id もお品書きも変わらない
+    const moved = moveKeepingId(doc, k, 'A-02');
+    const aside = moveAside(moved, byName(moved, '乙').key, 'A-01');
+    expect(aside.ok).toBe(true);
+    expect(serializeCircles(aside.doc)).toBe('id,space,event,name,kana,penNames,tags,adult,x,pixiv,booth,web,notes,source\r\na-01,A-02,,甲,,,,,,,,,,\r\na-02,A-01,,乙,,,,,,,,,,\r\n');
+    expect(serializeMenus(aside.doc)).toBe(serializeMenus(doc));
+  });
+  it('id が重複しているサークルは入れ替えで移さない（id を書くと重複のまま固まる）', () => {
+    const doc = loadDoc({ event: '{}', circles: 'id,space,name\r\n,A-01,甲\r\n,A-02,乙\r\n', menus: '' }).doc;
+    // 画面では止めるが、id ごと移して重複させた状態を作る
+    const dup = changeCircleId(doc, byName(doc, '甲').key, 'space', 'A-02').doc;
+    const res = moveAside(dup, byName(dup, '乙').key, 'A-01');
+    expect(res.ok).toBe(false);
+    expect(res.doc).toBe(dup);
+    if (!res.ok) expect(res.reason).toContain('id「a-02」が重複しているため入れ替えられません');
   });
 });
 
@@ -141,6 +186,29 @@ describe('新しいサークルの既定値', () => {
     expect(filled.circles.at(-1)!.values).toMatchObject({ event: '併設オンリー', source: '架空の公式サークル一覧', name: '' });
     // すでに値のある行は変えない
     expect(applyDefaults(doc, byName(doc, '星の砂').key, { source: 'x' })).toBe(doc);
+  });
+});
+
+describe('キー操作（日本語入力の変換中は何もしない）', () => {
+  it('Enter・Shift+Enter・Ctrl+Enter・↑↓・Esc を読み替える', () => {
+    expect(keyAction({ key: 'Enter' })).toBe('enter');
+    expect(keyAction({ key: 'Enter', shiftKey: true })).toBe('shift-enter');
+    expect(keyAction({ key: 'Enter', ctrlKey: true })).toBe('mod-enter');
+    expect(keyAction({ key: 'Enter', metaKey: true })).toBe('mod-enter');
+    expect(keyAction({ key: 'ArrowDown' })).toBe('down');
+    expect(keyAction({ key: 'ArrowUp' })).toBe('up');
+    expect(keyAction({ key: 'ArrowUp', shiftKey: true })).toBeNull();
+    expect(keyAction({ key: 'Escape' })).toBe('escape');
+    expect(keyAction({ key: 'a' })).toBeNull();
+    expect(keyAction({ key: 'Enter', altKey: true })).toBeNull();
+  });
+  it('変換中（isComposing・keyCode 229）は null', () => {
+    for (const key of ['Enter', 'ArrowDown', 'ArrowUp', 'Escape']) {
+      expect(keyAction({ key, nativeEvent: { isComposing: true } })).toBeNull();
+      expect(keyAction({ key, keyCode: 229 })).toBeNull();
+      expect(keyAction({ key, isComposing: true })).toBeNull();
+    }
+    expect(isComposing({ key: 'Enter', nativeEvent: { isComposing: false } })).toBe(false);
   });
 });
 
@@ -156,7 +224,10 @@ describe('作業用の印（localStorage）', () => {
     expect(saveMarks(s, 'ev', marks)).toBe(true);
     expect(loadMarks(s, 'ev')).toEqual({ 'a-01': { later: true }, 'a-02': { memo: '告知待ち' } });
     expect(loadMarks(s, 'other')).toEqual({});
-    marks = setMark(setMark(marks, 'a-01', { later: false }), 'a-02', { memo: '  ' });
+    // 打ち始めの空白は消さない（空文字だけを削除にする）
+    marks = setMark(marks, 'a-02', { memo: ' ' });
+    expect(marks['a-02']).toEqual({ memo: ' ' });
+    marks = setMark(setMark(marks, 'a-01', { later: false }), 'a-02', { memo: '' });
     expect(marks).toEqual({});
     saveMarks(s, 'ev', marks);
     expect(s.m.size).toBe(0);
