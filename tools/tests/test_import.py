@@ -162,6 +162,15 @@ class SockbaseImporterTest(unittest.TestCase):
         [row] = sockbase.read({}, p)
         self.assertEqual((row["id"], row["space"], row["name"]), ("c-07", "C-07", "架空書房"))
 
+    def test_short_multi_space_is_written_in_full(self):
+        """「A-03,04」は配置図の番号と合うよう「A-03,A-04」にする。id は Sockbase の表記から作る（変えない）"""
+        cases = {"A-03,04": ("A-03,A-04", "a-03-04"), "う-09,10": ("う-09,う-10", "う-09-10"),
+                 "B-01,B-02": ("B-01,B-02", "b-01-b-02"), "1年C,D組": ("1年C,D組", "1年c-d組"), "C-05": ("C-05", "c-05")}
+        circles = [[0, {"spaceName": [0, space], "circleName": [0, f"架空{n}"]}] for n, space in enumerate(cases)]
+        props = html.escape(json.dumps({"circles": [1, circles]}), quote=True)
+        p = tmpfile("list.html", f'<astro-island component-url="/_astro/SearchableCircleList.abc.js" props="{props}"></astro-island>')
+        self.assertEqual([(r["space"], r["id"]) for r in sockbase.read({}, p)], list(cases.values()))
+
     def test_before_layout_is_refused(self):
         """配置の発表前（spaceName がすべて null）は、id を作れないので取り込まない"""
         circles = [[0, {"id": [0, n], "spaceName": [0, None], "circleName": [0, f"架空{n}"]}] for n in (1, 2)]

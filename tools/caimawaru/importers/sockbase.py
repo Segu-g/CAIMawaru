@@ -53,6 +53,21 @@ def _text(record, key):
     return value.strip() if isinstance(value, str) else ""
 
 
+SPACE_HEAD = re.compile(r"(.*?\D)\d+")
+
+
+def _full_spaces(space):
+    """「A-03,04」のように2つめ以降を番号だけで書いた複数スペースを「A-03,A-04」にする（イベントデータの書き方）。
+
+    1つめの番号の前の部分（「A-」）を、数字だけの2つめ以降に付ける。それ以外の書き方（「1年C,D組」など）はそのまま。
+    """
+    parts = [part.strip() for part in space.split(",")]
+    head = SPACE_HEAD.fullmatch(parts[0])
+    if len(parts) < 2 or not head:
+        return space
+    return ",".join([parts[0]] + [head.group(1) + part if part.isascii() and part.isdigit() else part for part in parts[1:]])
+
+
 def read(source, path):
     circles = _circles(Path(path).read_text(encoding="utf-8"))
     if circles and not any(_text(circle, "spaceName") for circle in circles):
@@ -64,8 +79,8 @@ def read(source, path):
         space = _text(circle, "spaceName")
         menu = _text(links, "menuURL")
         rows.append({
-            "id": space.replace(",", "-").lower(),
-            "space": space,
+            "id": space.replace(",", "-").lower(),  # Sockbase の表記のまま（取り込み済みの id を変えない）
+            "space": _full_spaces(space),
             "event": _text(circle, "eventName"),
             "name": _text(circle, "circleName"),
             "kana": _text(circle, "circleNameYomi"),
