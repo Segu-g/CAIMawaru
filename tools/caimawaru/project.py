@@ -3,11 +3,14 @@ import csv
 import io
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
 EVENT_ID = re.compile(r"[0-9A-Za-z][0-9A-Za-z_-]*")
+
+DRY_RUN_NOTICE = "（--dry-run のため書き込みません）"
 
 
 class CliError(Exception):
@@ -19,10 +22,10 @@ class DuplicateKeyError(ValueError):
 
 
 def _no_duplicate_keys(pairs):
-    keys = [k for k, _ in pairs]
-    dup = sorted({k for k in keys if keys.count(k) > 1})
-    if dup:
-        raise DuplicateKeyError(f"同じキーが2回以上あります: {', '.join(dup)}")
+    keys = [key for key, _ in pairs]
+    duplicates = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicates:
+        raise DuplicateKeyError(f"同じキーが2回以上あります: {', '.join(duplicates)}")
     return dict(pairs)
 
 
@@ -31,16 +34,26 @@ def parse_json(text):
     return json.loads(text, object_pairs_hook=_no_duplicate_keys)
 
 
+def format_json(value):
+    """イベントのフォルダに書く JSON の形（インデント 2・日本語はそのまま・末尾に改行）。"""
+    return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+
+
+def print_warnings(messages):
+    for message in messages:
+        print(f"警告: {message}", file=sys.stderr)
+
+
 def find_events_dir(events_dir=None):
     """イベントのフォルダ（<eventId>/ を並べたフォルダ）を返す。既定はカレントディレクトリの events/。上にはたどらない。"""
-    d = Path(events_dir) if events_dir is not None else Path("events")
-    if not d.is_dir():
-        raise CliError(f"{d.resolve()} がありません。リポジトリのフォルダで実行するか、--events-dir で指定してください")
-    return d.resolve()
+    path = Path(events_dir) if events_dir is not None else Path("events")
+    if not path.is_dir():
+        raise CliError(f"{path.resolve()} がありません。リポジトリのフォルダで実行するか、--events-dir で指定してください")
+    return path.resolve()
 
 
 def known_events(events_dir):
-    return sorted(p.parent.name for p in Path(events_dir).glob("*/event.json"))
+    return sorted(config.parent.name for config in Path(events_dir).glob("*/event.json"))
 
 
 @dataclass(frozen=True)
@@ -63,16 +76,20 @@ class Event:
         return self.dir / "layout.json"
 
     @property
-    def data(self):
+    def data_dir(self):
         return self.dir / "data"
 
     @property
     def circles_csv(self):
-        return self.data / "circles.csv"
+        return self.data_dir / "circles.csv"
 
     @property
     def menus_csv(self):
-        return self.data / "menus.csv"
+        return self.data_dir / "menus.csv"
+
+    @property
+    def sources_dir(self):
+        return self.dir / "sources"
 
     @property
     def out_json(self):
@@ -102,6 +119,18 @@ def load_event(events_dir, event_id):
 CIRCLE_COLS = ["id", "space", "event", "name", "kana", "penNames", "tags", "adult",
                "x", "pixiv", "booth", "web", "notes", "source"]
 MENU_COLS = ["id", "url", "note", "checkedAt"]
+# 値を「;」区切りのリストとして読む列
+LIST_COLS = ("penNames", "tags")
+
+
+def split_list(value):
+    """「;」区切りの値（penNames・tags）をリストにする。"""
+    return [item.strip() for item in value.split(";") if item.strip()]
+
+
+def stripped(row, key):
+    """行の値（前後の空白を除く）。列がない・None なら空文字。"""
+    return (row.get(key) or "").strip()
 
 
 def read_csv(path, base_cols, warnings=None):
@@ -110,10 +139,10 @@ def read_csv(path, base_cols, warnings=None):
     返す dict のキーは base_cols の列（見出しにない列は空）、値は前後の空白を除いたもの。
     読み方の警告（列の重複・列の多い行など）は warnings（リスト）に足す。
     """
-    t = read_table(path, base_cols)
+    parsed = read_table(path, base_cols)
     if warnings is not None:
-        warnings.extend(t.warnings)
-    return [{c: (row.get(c) or "").strip() for c in base_cols} for row in t.rows if not is_comment(row)]
+        warnings.extend(parsed.warnings)
+    return [{col: stripped(row, col) for col in base_cols} for row in parsed.rows if not is_comment(row)]
 
 
 # 書き戻すときの CSV の形（docs/event-data.md の「CSV の書き方」。ページ側の編集画面も同じ形で書く）:
@@ -138,6 +167,11 @@ class Extra:
         return f"Extra({self.label!r})"
 
 
+def column_label(key):
+    """見出しに書く列名（イベントデータの列は列名そのもの、ファイルにだけある列は元の列名）。"""
+    return key.label if isinstance(key, Extra) else key
+
+
 def is_comment(row):
     return COMMENT in row
 
@@ -150,51 +184,62 @@ class ParsedCsv:
     warnings: list  # 読み方の警告
 
 
+def _header_keys(header, base_cols):
+    """見出しの各位置のキー。イベントデータの列名でも、2回目以降はファイルにだけある列として扱う。"""
+    keys = []
+    for label in header:
+        keys.append(label if label in base_cols and label not in keys else Extra(label))
+    return keys
+
+
+def _header_warnings(file_name, header, base_cols):
+    warnings = []
+    for col in base_cols:
+        count = header.count(col)
+        if count > 1:
+            warnings.append(f"{file_name}: {col} 列が{count}つあります。最初の列を使います")
+    if not any(label in base_cols for label in header):
+        table_kind = "サークル" if list(base_cols) == CIRCLE_COLS else "お品書き"
+        warnings.append(f"{file_name}: {table_kind}の列が見つかりません（見出しに {', '.join(base_cols)} のどれもありません）")
+    return warnings
+
+
 def read_table(path, base_cols):
     """CSV を書き戻す前提で読む（値は空白も含めてそのまま。コメント行・ファイルにだけある列も残す）。
 
     データを失わずに読める CSV は受け付け、気になる点は warnings にする。CSV として読めないときだけ CliError。
     """
-    out = ParsedCsv([], [], [], [])
+    parsed = ParsedCsv([], [], [], [])
     if not path.exists():
-        return out
-    kind = "サークル" if list(base_cols) == CIRCLE_COLS else "お品書き"
+        return parsed
     try:
         with path.open(encoding="utf-8-sig", newline="") as f:
             reader = csv.reader(f, strict=True)
-            header, start = None, 1
+            header = None
+            record_start = 1  # 今読んでいる行が始まった行（値の中の改行で複数行になることがある）
             for values in reader:
-                line, start = start, reader.line_num + 1  # この行が始まった行（値の中の改行で複数行になることがある）
-                if not any(v.strip() for v in values):
+                line_number, record_start = record_start, reader.line_num + 1
+                if not any(value.strip() for value in values):
                     continue  # 空行・値がすべて空の行（「,,,」）
                 if values[0].startswith("#"):
-                    (out.rows if header is not None else out.head).append({COMMENT: values})
+                    (parsed.rows if header is not None else parsed.head).append({COMMENT: values})
                     continue
                 if header is None:
                     header = values
-                    out.keys = []
-                    for c in values:
-                        if c in base_cols and c not in out.keys:
-                            out.keys.append(c)
-                        else:
-                            out.keys.append(Extra(c))
-                    for c in base_cols:
-                        n = values.count(c)
-                        if n > 1:
-                            out.warnings.append(f"{path.name}: {c} 列が{n}つあります。最初の列を使います")
-                    if not any(c in base_cols for c in values):
-                        out.warnings.append(f"{path.name}: {kind}の列が見つかりません（見出しに {', '.join(base_cols)} のどれもありません）")
+                    parsed.keys = _header_keys(header, base_cols)
+                    parsed.warnings.extend(_header_warnings(path.name, header, base_cols))
                     continue
                 if len(values) > len(header):
-                    out.warnings.append(f"{path.name}: {line}行目は見出しより列が多いため、コメント行にしました")
-                    out.rows.append({COMMENT: ["#" + values[0], *values[1:]]})
+                    parsed.warnings.append(f"{path.name}: {line_number}行目は見出しより列が多いため、コメント行にしました")
+                    parsed.rows.append({COMMENT: ["#" + values[0], *values[1:]]})
                     continue
-                out.rows.append(dict(zip(out.keys, values + [""] * (len(header) - len(values)))))
+                padded = values + [""] * (len(header) - len(values))
+                parsed.rows.append(dict(zip(parsed.keys, padded)))
     except csv.Error as e:
-        raise CliError(f"{path.name}: {start}行目から始まる行を CSV として読めません（{e}）。引用符（\"）の閉じ忘れなどを直してください")
+        raise CliError(f"{path.name}: {record_start}行目から始まる行を CSV として読めません（{e}）。引用符（\"）の閉じ忘れなどを直してください")
     except UnicodeDecodeError as e:
         raise CliError(f"{path.name}: UTF-8 として読めません（{e}）。UTF-8 で保存し直してください")
-    return out
+    return parsed
 
 
 class Table:
@@ -202,27 +247,25 @@ class Table:
 
     def __init__(self, path, base_cols):
         self.path = path
-        t = read_table(path, base_cols)
-        self.head, self.rows, self.warnings = t.head, t.rows, t.warnings
-        self.cols = list(base_cols) + [k for k in t.keys if isinstance(k, Extra)]
+        parsed = read_table(path, base_cols)
+        self.head, self.rows, self.warnings = parsed.head, parsed.rows, parsed.warnings
+        self.cols = list(base_cols) + [key for key in parsed.keys if isinstance(key, Extra)]
 
     @property
     def names(self):
         """列名 → キー。ファイルにだけある列は、列名が空でなく1つだけ（イベントデータの列名とも違う）ものを名前で指定できる。"""
-        labels = [c.label if isinstance(c, Extra) else c for c in self.cols]
-        return {c.label if isinstance(c, Extra) else c: c for c in self.cols
-                if not isinstance(c, Extra) or (c.label.strip() and labels.count(c.label) == 1)}
+        labels = [column_label(key) for key in self.cols]
+        return {column_label(key): key for key in self.cols
+                if not isinstance(key, Extra) or (key.label.strip() and labels.count(key.label) == 1)}
 
     def data_rows(self):
-        return [r for r in self.rows if not is_comment(r)]
+        return [row for row in self.rows if not is_comment(row)]
 
     def text(self):
         return format_csv(self.cols, self.rows, self.head)
 
     def write(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("w", encoding="utf-8", newline="") as f:
-            f.write(self.text())
+        _write_text(self.path, self.text())
 
 
 def format_csv(cols, rows, head=()):
@@ -231,27 +274,32 @@ def format_csv(cols, rows, head=()):
     cols は列名か Extra、rows は dict（cols にないキーは無視）かコメント行、head は見出しより前のコメント行。
     """
     buf = io.StringIO(newline="")
-    w = csv.writer(buf)  # 既定: QUOTE_MINIMAL・改行 CRLF
+    writer = csv.writer(buf)  # 既定: QUOTE_MINIMAL・改行 CRLF
     for row in head:
-        w.writerow(row[COMMENT])
-    w.writerow([c.label if isinstance(c, Extra) else c for c in cols])
+        writer.writerow(row[COMMENT])
+    writer.writerow([column_label(key) for key in cols])
     for row in rows:
         if is_comment(row):
-            w.writerow(row[COMMENT])
+            writer.writerow(row[COMMENT])
         else:
-            w.writerow(["" if row.get(c) is None else row[c] for c in cols])
+            writer.writerow(["" if row.get(key) is None else row[key] for key in cols])
     return buf.getvalue()
 
 
 def write_csv(path, cols, rows):
+    _write_text(path, format_csv(cols, rows))
+
+
+def _write_text(path, text):
+    """改行を変換せずに書く（CSV の CRLF をそのまま書くため）。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
-        f.write(format_csv(cols, rows))
+        f.write(text)
 
 
 def is_http_url(value):
-    u = urlparse(value)
-    return u.scheme in ("http", "https") and bool(u.netloc)
+    parts = urlparse(value)
+    return parts.scheme in ("http", "https") and bool(parts.netloc)
 
 
 def make_id(space):
@@ -263,4 +311,4 @@ def circle_id(row):
 
     build・import・menu・編集コマンドはどれもこの id を使う（エディタの circleId と同じ規則）。
     """
-    return (row.get("id") or "").strip() or make_id((row.get("space") or "").strip())
+    return stripped(row, "id") or make_id(stripped(row, "space"))
