@@ -61,7 +61,7 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 cli.py ─┬▶ build.py ──▶ layout.py
         │     ├──────▶ project.py
         │     └──────▶ xurl.py（X の URL の規則。menu・edit・importing も使う）
-        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json）
+        ├▶ importing.py ─┬▶ importers/（sockbase・csv・json。csv は project.py の LIST_COLS を使う）
         │                ├▶ build.py（取り込み後の検証・生成。同じプロセス内で関数として呼ぶ）
         │                └▶ xurl.py（X の ID を URL にするときの x.com）
         ├▶ menu.py ──────┬▶ build.py
@@ -105,7 +105,7 @@ pnpm build:editor ───────▶ tsc ─▶ vite build --config vite.e
 
 - `events/*/event.json` からイベントの一覧を作る処理（`tools/caimawaru/project.py` と `vite.config.ts`）。
   どちらも「`events/` の下で `event.json` があるフォルダ」というだけの規則
-- サークルの複数スペース（`A-01,A-02`）の分け方（`tools/caimawaru/build.py` の `circle_spaces` と `src/filter.ts` の `spacesOf`）。
+- サークルの複数スペース（`A-01,A-02`）の分け方（`tools/caimawaru/project.py` の `circle_spaces` と `src/filter.ts` の `spacesOf`）。
   「`,` で区切る」というだけの規則
 - イベントデータの CSV の読み書き（`tools/caimawaru/project.py` の `CIRCLE_COLS`・`MENU_COLS`・`read_table`・`format_csv`・`make_id` と、
   `src/editor/csv.ts`・`src/editor/model.ts`）。docs/event-data.md の「CSV の書き方」（列の並び・CRLF・囲み方・空の行・`#` の行・ほかの列）。

@@ -304,3 +304,8 @@ def circle_id(row):
     build・import・menu・編集コマンドはどれもこの id を使う（エディタの circleId と同じ規則）。
     """
     return stripped(row, "id") or make_id(stripped(row, "space"))
+
+
+def circle_spaces(circle):
+    """「A-01,A-02」のような複数スペース（「,」区切り。src/filter.ts の spacesOf と同じ）。"""
+    return [space.strip() for space in circle["space"].split(",") if space.strip()]

@@ -14,7 +14,8 @@ from datetime import date
 from caimawaru import importers
 from caimawaru import layout as layout_mod
 from caimawaru.console import print_warnings
-from caimawaru.project import CIRCLE_COLS, MENU_COLS, DuplicateKeyError, circle_id, format_json, is_http_url, read_csv, split_list
+from caimawaru.project import (CIRCLE_COLS, MENU_COLS, DuplicateKeyError, circle_id, circle_spaces, format_json, is_http_url,
+                               read_csv, split_list)
 from caimawaru.xurl import is_x_page, normalize_url, x_handle
 
 LINK_KEYS = ("x", "pixiv", "booth", "web")
@@ -37,11 +38,6 @@ class Result:
     info: dict = field(default_factory=dict)
     circles: list = field(default_factory=list)
     layout: dict | None = None
-
-
-def circle_spaces(circle):
-    """「A-01,A-02」のような複数スペース（「,」区切り。src/filter.ts の spacesOf と同じ）。"""
-    return [space.strip() for space in circle["space"].split(",") if space.strip()]
 
 
 def _is_url(value):
