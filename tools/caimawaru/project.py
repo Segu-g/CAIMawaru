@@ -118,7 +118,7 @@ def load_event(events_dir, event_id):
 
 CIRCLE_COLS = ["id", "space", "event", "name", "kana", "penNames", "tags", "adult",
                "x", "pixiv", "booth", "web", "notes", "source"]
-MENU_COLS = ["id", "url", "note", "checkedAt"]
+MENU_COLS = ["id", "url", "note", "checkedAt"]  # id はお品書きのサークルの id（コードでは circle_ref と呼ぶ）
 # 値を「;」区切りのリストとして読む列
 LIST_COLS = ("penNames", "tags")
 

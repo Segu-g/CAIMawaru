@@ -253,13 +253,13 @@ def _load(event):
     return Loaded(circles, _row_views(circles, with_circle_id=True), menus, _row_views(menus, with_circle_id=False))
 
 
-def _menu_views_of(menu_views, owner_id):
-    return [menu for menu in menu_views if menu["id"] == owner_id]
+def _menu_views_of(menu_views, circle_ref):
+    return [menu for menu in menu_views if menu["id"] == circle_ref]
 
 
-def _menus_json(menu_views, owner_id, names):
+def _menus_json(menu_views, circle_ref, names):
     """サークルのお品書き（id 以外の列）。"""
-    return [{name: menu[name] for name in names if name != "id"} for menu in _menu_views_of(menu_views, owner_id)]
+    return [{name: menu[name] for name in names if name != "id"} for menu in _menu_views_of(menu_views, circle_ref)]
 
 
 def _print_json(value):
@@ -370,9 +370,9 @@ def _circles_for_menus(loaded, query):
     found = find_circles(loaded.circle_views, query)
     if found:
         return found
-    orphan_id = query.strip()
-    if any(menu["id"] == orphan_id for menu in loaded.menu_views):
-        return [{"id": orphan_id, "space": "", "name": "（circles.csv にないサークル）", "event": ""}]
+    circle_ref = query.strip()
+    if any(menu["id"] == circle_ref for menu in loaded.menu_views):
+        return [{"id": circle_ref, "space": "", "name": "（circles.csv にないサークル）", "event": ""}]
     raise _no_circle_error(query)
 
 

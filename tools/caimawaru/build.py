@@ -187,7 +187,7 @@ def _circle_links(row, result, where):
     return links
 
 
-def _check_circle_row(row, row_id, result, where):
+def _check_circle_row(row, circle_ref, result, where):
     """circles.csv の1行を検証し、circles.json のサークルにして返す。"""
     if not row.get("name"):
         result.errors.append(f"{where}: サークル名（name）が空です")
@@ -205,7 +205,7 @@ def _check_circle_row(row, row_id, result, where):
     if not row.get("event"):
         result.warnings.append(f"{where}: 参加イベント（event）が未入力です")
     return {
-        "id": row_id,
+        "id": circle_ref,
         "space": row.get("space", ""),
         "event": row.get("event", ""),
         "name": row.get("name", ""),
@@ -224,15 +224,15 @@ def _read_circles(event, result):
     circles, first_line_of = [], {}
     for line_number, row in enumerate(read_csv(event.circles_csv, CIRCLE_COLS, result.warnings), start=2):  # 1行目は見出し
         where = f"circles.csv:{line_number}"
-        row_id = circle_id(row)
-        if not row_id:
+        circle_ref = circle_id(row)
+        if not circle_ref:
             result.errors.append(f"{where}: id もスペース番号もありません")
             continue
-        if row_id in first_line_of:
-            result.errors.append(f"{where}: id '{row_id}' が重複しています（{first_line_of[row_id]} と同じ）")
+        if circle_ref in first_line_of:
+            result.errors.append(f"{where}: id '{circle_ref}' が重複しています（{first_line_of[circle_ref]} と同じ）")
             continue
-        first_line_of[row_id] = where
-        circles.append(_check_circle_row(row, row_id, result, where))
+        first_line_of[circle_ref] = where
+        circles.append(_check_circle_row(row, circle_ref, result, where))
     return circles
 
 
@@ -241,9 +241,9 @@ def _attach_menus(event, circles, result):
     circle_by_id = {circle["id"]: circle for circle in circles}
     for line_number, row in enumerate(read_csv(event.menus_csv, MENU_COLS, result.warnings), start=2):
         where = f"menus.csv:{line_number}"
-        menu_id, url = row.get("id", ""), row.get("url", "")
-        if menu_id not in circle_by_id:
-            result.errors.append(f"{where}: circles.csv に id '{menu_id}' がありません")
+        circle_ref, url = row.get("id", ""), row.get("url", "")
+        if circle_ref not in circle_by_id:
+            result.errors.append(f"{where}: circles.csv に id '{circle_ref}' がありません")
             continue
         if not is_http_url(url):
             result.errors.append(f"{where}: URLが不正です: {url}")
@@ -253,7 +253,7 @@ def _attach_menus(event, circles, result):
         clean_url, post_handle = normalize_url(url)
         if not post_handle and is_x_page(url):
             result.warnings.append(f"{where}: Xの投稿ではないページです（プロフィール等を登録していませんか）: {url}")
-        menus = circle_by_id[menu_id]["menus"]
+        menus = circle_by_id[circle_ref]["menus"]
         if any(menu["url"] == clean_url for menu in menus):
             result.warnings.append(f"{where}: 同じURLが重複しています: {clean_url}")
             continue
