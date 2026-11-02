@@ -146,7 +146,7 @@ def _run(a):
     if a.command == "data":
         return build.run(event, check=a.check)
     if a.command == "import":
-        return importing.run(event, fetch=a.fetch, input=a.input, dry_run=a.dry_run, no_build=a.no_build)
+        return importing.run(event, fetch=a.fetch, input_file=a.input, dry_run=a.dry_run, no_build=a.no_build)
     if a.command == "menu":
         return menu.run(event, a.urls, circle=a.circle, note=a.note, dry_run=a.dry_run)
     if a.command in ("circle", "menus", "config"):

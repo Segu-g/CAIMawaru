@@ -12,6 +12,8 @@ X_POST = re.compile(
 X_PROFILE = re.compile(
     r"https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})/?(?:[?#].*)?", re.IGNORECASE | re.ASCII | re.DOTALL
 )
+# URL をそろえるときの X の正規の場所（twitter.com・www.・mobile. はこれに置き換える）
+X_ORIGIN = "https://x.com"
 # X のページ（投稿でないものを menus.csv に登録していないかの確認に使う）
 X_PAGE = re.compile(r"https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/", re.IGNORECASE | re.ASCII)
 # URL の前後から除く空白。Python の str.strip() と JavaScript の trim() は対象が少し違う（U+FEFF・\x1c〜\x1f・U+0085）ので、
@@ -40,7 +42,7 @@ def normalize_url(url):
     url = trim(url)
     m = X_POST.match(url)
     if m:
-        return f"https://x.com/{m.group(1)}/status/{m.group(2)}", m.group(1)
+        return f"{X_ORIGIN}/{m.group(1)}/status/{m.group(2)}", m.group(1)
     return url, None
 
 
