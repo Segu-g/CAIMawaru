@@ -3,7 +3,8 @@
 元データは、公式リストのページの HTML。サークルの情報はページ内の astro-island の props に入っていて、
 サーバが返す HTML にそのまま含まれる（ブラウザで描画しなくてよい）。サークル一覧（SearchableCircleCardRack の circles）は配置図の有無に
 かかわらず載っているのでそれを優先し、なければ配置図（SpaceMapViewer の spaces）から読む。
-Sockbase 側の変更で壊れることがある。
+サークル一覧の部品名は SearchableCircleList（以前は SearchableCircleCardRack）。Sockbase 側の変更で壊れることがある。
+配置が発表される前のリストは spaceName が空で、id を作れないので取り込まない（id はスペース番号から作り、公開後は変えないため）。
 
 event.json:
     { "type": "sockbase", "url": "https://list.sockbase.net/circle-lists/<id>" }
@@ -32,7 +33,7 @@ def _astro(value):
 
 
 # サークルの一覧が入っている部品と、その props のキー（先にあるものを優先）
-COMPONENTS = (("SearchableCircleCardRack", "circles"), ("SpaceMapViewer", "spaces"))
+COMPONENTS = (("SearchableCircleList", "circles"), ("SearchableCircleCardRack", "circles"), ("SpaceMapViewer", "spaces"))
 ISLAND = re.compile(r'<astro-island[^>]*component-url="[^"]*/([A-Za-z]+)\.[^"]*"[^>]*props="([^"]*)"')
 
 
@@ -53,8 +54,12 @@ def _text(record, key):
 
 
 def read(source, path):
+    circles = _circles(Path(path).read_text(encoding="utf-8"))
+    if circles and not any(_text(circle, "spaceName") for circle in circles):
+        raise ValueError(f"どのサークル（{len(circles)} 件）にもスペース番号がありません。配置が発表される前のリストです。"
+                         "id はスペース番号から作るので、配置の発表後に取り込んでください")
     rows = []
-    for circle in _circles(Path(path).read_text(encoding="utf-8")):
+    for circle in circles:
         links = circle.get("links") or {}
         space = _text(circle, "spaceName")
         menu = _text(links, "menuURL")

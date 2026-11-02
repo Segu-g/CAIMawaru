@@ -38,6 +38,7 @@ uv run caimawaru importers                    # 使えるインポーター
 - 元データは公式リストのページの HTML（既定 `sources/sockbase.html`）。`--fetch` で取得できる（`list.sockbase.net` だけ。ブラウザは使わない）
 - 取り込む列: id, space, event, name, kana, penNames, adult, x, pixiv, web とお品書き URL。サークルカット画像は取り込まない
 - 配置図のあるリストもないリストも読める（ページ内のサークル一覧を読む）
+- 配置が発表される前のリスト（スペース番号が空）は取り込まない。id はスペース番号から作り公開後は変えないため、配置の発表後に取り込む
 
 ### csv — CSV / TSV
 

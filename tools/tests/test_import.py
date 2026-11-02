@@ -155,6 +155,22 @@ class SockbaseImporterTest(unittest.TestCase):
         self.assertEqual((row["space"], row["name"], row["kana"], row["x"], row["menus"], row["adult"]),
                          ("B-03", "架空工房", "", "", [], True))
 
+    def test_searchable_circle_list(self):
+        circle = {"spaceName": [0, "C-07"], "circleName": [0, "架空書房"], "links": [0, {}]}
+        props = html.escape(json.dumps({"showSpaceName": [0, True], "circles": [1, [[0, circle]]]}), quote=True)
+        p = tmpfile("list.html", f'<astro-island component-url="/_astro/SearchableCircleList.abc.js" props="{props}"></astro-island>')
+        [row] = sockbase.read({}, p)
+        self.assertEqual((row["id"], row["space"], row["name"]), ("c-07", "C-07", "架空書房"))
+
+    def test_before_layout_is_refused(self):
+        """配置の発表前（spaceName がすべて null）は、id を作れないので取り込まない"""
+        circles = [[0, {"id": [0, n], "spaceName": [0, None], "circleName": [0, f"架空{n}"]}] for n in (1, 2)]
+        props = html.escape(json.dumps({"showSpaceName": [0, False], "circles": [1, circles]}), quote=True)
+        p = tmpfile("list.html", f'<astro-island component-url="/_astro/SearchableCircleList.abc.js" props="{props}"></astro-island>')
+        with self.assertRaises(ValueError) as cm:
+            sockbase.read({}, p)
+        self.assertIn("配置が発表される前", str(cm.exception))
+
     def test_prefers_circle_list_over_map(self):
         def island(comp, key, name):
             rec = {"spaceName": [0, "A-01"], "circleName": [0, name]}
