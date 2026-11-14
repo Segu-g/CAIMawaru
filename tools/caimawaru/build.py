@@ -16,7 +16,7 @@ from caimawaru import layout as layout_mod
 from caimawaru.console import print_warnings
 from caimawaru.project import (CIRCLE_COLS, MENU_COLS, DuplicateKeyError, circle_id, circle_spaces, format_json, is_http_url,
                                read_csv, split_list)
-from caimawaru.xurl import is_x_page, normalize_url, x_handle
+from caimawaru.xurl import TRIM, is_x_page, normalize_url, x_handle
 
 LINK_KEYS = ("x", "pixiv", "booth", "web")
 INFO_REQUIRED = ("name", "date", "venue")
@@ -222,10 +222,13 @@ def id_origin(row):
 
 
 def check_id_text(circle_ref, row):
-    """id 列に書いた id の、紛らわしい書き方（空白・「,」・大文字）の警告。スペース番号から作った id にはない。止めはしない。"""
+    """id 列に書いた id の、紛らわしい書き方（空白・「,」・大文字）の警告。スペース番号から作った id にはない。止めはしない。
+
+    空白は xurl.TRIM の文字（エディタの validate.ts と同じ集合）。
+    """
     if not row.get("id"):
         return None
-    found = [label for label, hit in (("空白", any(ch.isspace() for ch in circle_ref)), ("「,」", "," in circle_ref),
+    found = [label for label, hit in (("空白", any(ch in TRIM for ch in circle_ref)), ("「,」", "," in circle_ref),
                                       ("大文字", circle_ref != circle_ref.lower())) if hit]
     if not found:
         return None

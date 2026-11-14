@@ -15,6 +15,11 @@ const TRIM = '\t\n\x0b\x0c\r\x1c\x1d\x1e\x1f \x85\xa0\u1680\u2000\u2001\u2002\u2
   + '\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff';
 const TRIM_SET = new Set(TRIM);
 
+/** TRIM の文字（空白）を含むか（build.py の check_id_text と同じ集合） */
+export function hasSpace(s: string): boolean {
+  return [...s].some((c) => TRIM_SET.has(c));
+}
+
 /** 前後の空白（TRIM の文字）を除く（xurl.py の trim と同じ） */
 export function trimUrl(s: string): string {
   let a = 0;

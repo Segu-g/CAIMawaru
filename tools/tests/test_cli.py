@@ -52,6 +52,14 @@ class CliTest(unittest.TestCase):
         self.assertIn("警告: circles.csv:17: id 'x 1,y' に空白・「,」が入っています", err)
         self.assertNotIn("id もスペース番号もありません", err)
 
+    def test_id_whitespace_is_the_same_set_as_the_editor(self):
+        """空白とみなす文字は xurl.TRIM（str.isspace と JavaScript の \\s の両方。エディタの validate.ts と同じ）"""
+        from caimawaru.build import check_id_text
+        for ch in ("\x1c", "\x85", "\ufeff", "\u3000", "\t"):
+            with self.subTest(ch=repr(ch)):
+                self.assertIn("空白", check_id_text(f"a{ch}1", {"id": f"a{ch}1"}))
+        self.assertIsNone(check_id_text("a-1", {"id": "a-1"}))
+
     def test_updated_at_changes_only_with_circles(self):
         from caimawaru import build
         from caimawaru.project import load_event

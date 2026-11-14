@@ -69,6 +69,10 @@ describe('サークルの確認', () => {
       ['warning', 'B-03 丙: id「x 1,y」に空白・「,」が入っています（そのままでも使えます。新しく付ける id は、空白・「,」を入れず小文字にしてください。公開後は変えません）'],
     ]);
   });
+  it.each(['\x1c', '\x85', '\ufeff', '\u3000', '\t'])('id の空白（%j）は build.py の check_id_text と同じ集合', (ch) => {
+    const messages = checkCircles([circle({ id: `a${ch}1`, space: 'A-01', name: '甲' })]).map((i) => i.message);
+    expect(messages.some((m) => m.includes('空白'))).toBe(true);
+  });
   it('x 列は照合できる X のアカウントの URL か（build.py・menu.py と同じ規則）', () => {
     const issues = checkCircles([
       circle({ id: 'a-01', name: 'ok', x: 'https://mobile.twitter.com/Example_User?lang=ja' }),

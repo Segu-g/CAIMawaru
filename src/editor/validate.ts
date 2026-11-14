@@ -1,6 +1,6 @@
 // 保存前の簡単な確認。正式な検証は Python の uv run caimawaru data <eventId>（tools/caimawaru/build.py）で、
 // ここでは入力の間違いに早く気づくための、明らかなものだけを見る。
-import { isXPage, normalizeUrl, xHandleOf } from './menuMatch';
+import { hasSpace, isXPage, normalizeUrl, xHandleOf } from './menuMatch';
 import { circleId, DATE, isDataRow, isHttpUrl, LINK_KEYS, type JsonObject, type Row } from './model';
 
 export type Issue = {
@@ -25,7 +25,7 @@ export function idOrigin(values: Record<string, string>): string {
 /** id 列に書いた id の、紛らわしい書き方（空白・「,」・大文字）の警告（build.py の check_id_text と同じ）。止めはしない */
 export function idTextWarning(id: string, values: Record<string, string>): string | null {
   if (!values.id?.trim()) return null;
-  const found = ([['空白', /\s/.test(id)], ['「,」', id.includes(',')], ['大文字', id !== id.toLowerCase()]] as const)
+  const found = ([['空白', hasSpace(id)], ['「,」', id.includes(',')], ['大文字', id !== id.toLowerCase()]] as const)
     .filter(([, hit]) => hit).map(([name]) => name);
   if (!found.length) return null;
   return `id「${id}」に${found.join('・')}が入っています（そのままでも使えます。新しく付ける id は、空白・「,」を入れず小文字にしてください。公開後は変えません）`;
