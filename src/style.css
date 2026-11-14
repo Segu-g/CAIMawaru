@@ -639,37 +639,39 @@ button.danger { color: var(--danger); border-color: var(--danger); }
 .map-legend i.tagged { --ev: var(--tagged); --ev-ink: var(--tagged-ink); }
 .map-legend i.bought { --ev: var(--done); --ev-ink: var(--done-ink); }
 
-/* 描き起こしの配置図と配置図の画像の切り替え（両方あるイベントだけ） */
-.map-switcher { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); }
-.map-pane { min-height: 0; min-width: 0; }
-.map-switch {
-  display: flex;
-  gap: 6px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-}
-.map-switch button {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: var(--tap-sm);
-  padding: 0 8px;
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  border-radius: 999px;
-  color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.map-switch button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-
 /* 配置図の画像（event.json の info.mapImage）。画像の色はそのまま */
 .map-image .map-canvas { cursor: grab; }
 .map-image .map-canvas:focus-visible { outline-offset: -3px; }
 .map-image > .empty { align-self: center; }
-.map-caption { justify-content: space-between; }
-.map-caption a { color: var(--accent); }
+.map-caption { justify-content: space-between; align-items: center; }
+.map-caption button { margin-left: auto; min-height: var(--tap-sm); font-size: var(--fs-sm); }
+/* 画像の全画面表示（ページの中。画像のファイルへは移動しない） */
+.map-full {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--surface);
+  color: var(--ink);
+}
+.map-full[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); }
+.map-full::backdrop { background: rgb(0 0 0 / .6); }
+.map-full-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  min-width: 0;
+  padding: 0 12px;
+  padding-top: env(safe-area-inset-top);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.map-full-head span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-full-head .sheet-close { margin: 0; }
 
 /* 選択したサークルの情報（配置図の下に出るシート） */
 .map-sheet {

@@ -23,8 +23,6 @@ const DATA_URL = `${import.meta.env.BASE_URL}data/circles.json`;
 const initialFilters: Filters = { q: '', event: '', tag: '', pick: '', menu: '', sort: 'space' };
 
 type Tab = 'map' | 'list' | 'mine';
-// 描き起こしの配置図（layout）と配置図の画像（event.mapImage）が両方あるときの表示
-type MapMode = 'layout' | 'image';
 
 type LoadState =
   | { status: 'loading' }
@@ -41,7 +39,6 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(HAS_MAP ? 'map' : 'list');
   const [selectedId, setSelectedId] = useState<string>();
   const [mapFocus, setMapFocus] = useState(0);
-  const [mapMode, setMapMode] = useState<MapMode>('layout');
   const [cardFocus, setCardFocus] = useState<string>();
   const [menuFor, setMenuFor] = useState<string>();
   const scrollRef = useRef<HTMLElement>(null);
@@ -59,7 +56,8 @@ export default function App() {
   const circles = load.status === 'ready' ? load.data.circles : [];
   const event = load.status === 'ready' ? load.data.event : undefined;
   const layout = load.status === 'ready' ? load.data.layout : undefined;
-  const mapImage = event?.mapImage;
+  // 配置図の画像は、描き起こしの配置図がないイベントだけで使う（両方あれば build.py が警告して mapImage を書かない）
+  const mapImage = layout ? undefined : event?.mapImage;
   const tags = useMemo(() => allTags(circles), [circles]);
   const events = useMemo(() => allEvents(circles), [circles]);
   const visible = useMemo(
@@ -116,11 +114,10 @@ export default function App() {
   const showMapPane = HAS_MAP && (wide || tab === 'map');
   const pane: Tab = tab === 'map' && (wide || !HAS_MAP) ? 'list' : tab;
 
-  // 一覧・チェック → 配置図（横並びのときはタブを切り替えない）。画像を表示中なら描き起こしの配置図に切り替える
+  // 一覧・チェック → 配置図（横並びのときはタブを切り替えない）
   const showOnMap = useCallback((id: string) => {
     setSelectedId(id);
     if (!wide) setTab('map');
-    setMapMode('layout');
     setMapFocus((n) => n + 1);
   }, [wide]);
 
@@ -143,7 +140,7 @@ export default function App() {
     else setTab(t);
   };
 
-  // 配置図の画面の中身。描き起こしの配置図（layout）と配置図の画像（event.mapImage）のどちらか、または両方
+  // 配置図の画面の中身。描き起こしの配置図（layout）か、それがないイベントでは配置図の画像（event.mapImage）
   const spaceMap = load.status === 'ready' && circles.length > 0 && layout && (
     <SpaceMap
       layout={layout}
@@ -201,17 +198,7 @@ export default function App() {
       {/* 配置図は表示範囲（拡大状態）を保つため、タブを切り替えても破棄しない */}
       {HAS_MAP && (
       <div className="view map-view" hidden={!showMapPane}>
-        {spaceMap && imageMap ? (
-          <div className="map-switcher">
-            <div className="map-switch" role="group" aria-label="配置図の表示">
-              <button type="button" aria-pressed={mapMode === 'layout'} onClick={() => setMapMode('layout')}>サークル配置図</button>
-              <button type="button" aria-pressed={mapMode === 'image'} onClick={() => setMapMode('image')}>公式の配置図（画像）</button>
-            </div>
-            {/* 切り替えても表示範囲（拡大状態）を保つため、どちらも破棄しない */}
-            <div className="map-pane" hidden={mapMode !== 'layout'}>{spaceMap}</div>
-            <div className="map-pane" hidden={mapMode !== 'image'}>{imageMap}</div>
-          </div>
-        ) : (spaceMap || imageMap || <Status load={load} />)}
+        {spaceMap || imageMap || <Status load={load} />}
       </div>
       )}
 

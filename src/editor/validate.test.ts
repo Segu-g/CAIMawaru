@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { circleId, CIRCLE_COLS, isDataRow, makeId, newRow, type Row } from './model';
+import { circleId, CIRCLE_COLS, isDataRow, makeId, newRow, type Json, type Row } from './model';
 import { checkCircles, checkEvent, checkMenus } from './validate';
 
 const circle = (v: Record<string, string>): Row =>
@@ -106,5 +106,16 @@ describe('event.json の確認', () => {
       ['error', 'info.contact の URL が不正です: '],
       ['error', 'info.eventSlots の 併設 は 1〜5 にしてください: 6'],
     ]);
+  });
+  it('info.mapImage は src の形と拡張子だけを見る（build.py と同じ規則）', () => {
+    const check = (mapImage: Json) => messages(checkEvent({ storeId: 's', title: 't', info: { name: 'n', date: '2030-01-01', venue: 'v', mapImage } }));
+    expect(check({ src: 'data/map.webp' })).toEqual([]);
+    expect(check({ src: 'data/Map.SVG', alt: '説明' })).toEqual([]);
+    expect(check({ alt: 'x' })).toEqual(['info.mapImage.src（public/ の下の画像ファイル）がありません']);
+    expect(check('data/map.png')).toEqual(['info.mapImage.src（public/ の下の画像ファイル）がありません']);
+    for (const src of ['../map.png', '/map.png', 'https://example.com/map.png', 'data/配置図.png', 'data//map.png', 'data/./map.png']) {
+      expect(check({ src })).toEqual([`info.mapImage.src は public/ からの相対パスで、英数字・「-」・「_」・「.」・「/」だけにしてください（例: data/map.webp）: ${src}`]);
+    }
+    expect(check({ src: 'data/map.gif' })).toEqual(['info.mapImage.src は .png / .jpg / .jpeg / .webp / .svg のどれかにしてください: data/map.gif']);
   });
 });

@@ -34,7 +34,7 @@ CAIMawaru は2つの独立したツールでできています。**互いを呼�
 | `data/circles.csv`・`data/menus.csv` | 人・エージェント、CLI（`import`・`menu`・`circle add/set/remove`・`menus set/remove`）、エディタ（ブラウザ） | CLI、エディタ |
 | `sources/` | 人・エージェント、CLI（`import --fetch`） | CLI だけ（インポーター） |
 | `public/data/circles.json` | CLI だけ（`caimawaru data`） | ページだけ（実行時に読み込む。`vite.config.ts` は配置図（`layout`・`event.mapImage`）の有無を見る。テストは形を確かめる） |
-| `public/` のほかのファイル（配置図の画像など） | 人（運用者） | CLI（`info.mapImage.src` のファイルがあるかの検証だけ）、ページ（Vite がそのまま `dist/<eventId>/` に写し、実行時に読み込む） |
+| `public/` のほかのファイル（配置図の画像など） | 人（運用者） | CLI（`info.mapImage.src` のファイルがあるか・SVG の中身の検証だけ）、ページ（Vite がそのまま `dist/<eventId>/` に写し、実行時に読み込む） |
 
 エディタは、ページの中で唯一イベントデータを書くもので、書くのは利用者がブラウザで選んだフォルダの event.json・data/circles.csv・data/menus.csv だけです
 （File System Access API。サーバや Node のスクリプトはファイルを書かない）。書式は CLI と同じで、同じ内容なら同じバイト列になります:
@@ -119,5 +119,5 @@ pnpm build:editor ───────▶ tsc ─▶ vite build --config vite.e
   お品書きが X の投稿か、投稿の URL の正規化と重複）が同じ関数を使い、エディタでは `findCircles` と `validate.ts` が使う。例は `tools/tests/fixtures/x_urls.json` にまとめ、
   `tools/tests/test_menu.py` と `src/editor/menuMatch.test.ts` がそれぞれこのファイルを読んで確かめる（互いのコードは呼ばない）
 - 配置図の画像のパス（`info.mapImage.src`）に使える文字と拡張子（`tools/caimawaru/build.py` の `MAP_IMAGE_SRC`・`MAP_IMAGE_EXTENSIONS` と、
-  それを確かめる `src/layout.test.ts`）。ページは検証済みの値をそのまま URL にする
+  エディタの `src/editor/validate.ts`、生成物を確かめる `src/layout.test.ts`）。ページは検証済みの値をそのまま URL にする
 - 簡単な検証（`src/editor/validate.ts`）は `build.py` のエラーの一部と同じ規則。正式な検証は `build.py` だけ

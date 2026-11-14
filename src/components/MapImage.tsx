@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { MapImage as MapImageInfo } from '../types';
 import { fitView, viewBox, type Size } from '../mapView';
 import { usePanZoom } from '../usePanZoom';
@@ -11,13 +11,23 @@ const DEFAULT_ALT = '会場の配置図（画像）';
 type Props = { image: MapImageInfo };
 
 /**
- * 公式の配置図などの画像（event.json の info.mapImage）を、拡大縮小・移動できるように表示する。
- * スペースの選択や強調はしない（描き起こしの配置図 layout.json の役目）。
+ * 配置図の画像（event.json の info.mapImage。layout.json がないイベントだけ）を、拡大縮小・移動できるように表示する。
+ * スペースの選択や強調はしない。大きく見るときもページの中の全画面表示にし、画像のファイルの URL へは移動させない。
  */
 export default function MapImage({ image }: Props) {
   // src は events/<eventId>/public/ からの相対パス（build.py が検証済み）。ページの URL からの相対で読む
   const url = `${import.meta.env.BASE_URL}${image.src}`;
+  const alt = image.alt || DEFAULT_ALT;
   const [natural, setNatural] = useState<Size | 'error'>();
+  const [full, setFull] = useState(false);
+  const fullButton = useRef<HTMLButtonElement>(null);
+  const wasFull = useRef(false);
+  // 閉じたら「全画面で見る」にフォーカスを戻す（押してもフォーカスが移らないブラウザがあるため、自分で戻す）。
+  // 開いている間はダイアログの外を操作できないので、ダイアログが閉じたあと（この effect）で戻す
+  useEffect(() => {
+    if (wasFull.current && !full) fullButton.current?.focus();
+    wasFull.current = full;
+  }, [full]);
 
   useEffect(() => {
     const img = new Image();
@@ -32,15 +42,39 @@ export default function MapImage({ image }: Props) {
       {natural === 'error' ? (
         <p className="empty">配置図の画像を読み込めませんでした。</p>
       ) : natural ? (
-        <ImageCanvas url={url} size={natural} alt={image.alt || DEFAULT_ALT} />
+        <ImageCanvas url={url} size={natural} alt={alt} />
       ) : (
         <p className="empty">読み込み中…</p>
       )}
       <div className="map-legend map-caption">
         {image.caption && <span>{image.caption}</span>}
-        <a href={url} target="_blank" rel="noopener noreferrer">画像だけを開く</a>
+        {natural && natural !== 'error' && (
+          <button ref={fullButton} type="button" aria-haspopup="dialog" onClick={() => setFull(true)}>全画面で見る</button>
+        )}
       </div>
+      {full && natural && natural !== 'error' && (
+        <FullScreen url={url} size={natural} alt={alt} caption={image.caption} onClose={() => setFull(false)} />
+      )}
     </div>
+  );
+}
+
+// 全画面表示。✕・Esc で閉じる（<dialog> の showModal で、開いている間はフォーカスが中にとどまる）
+function FullScreen({ url, size, alt, caption, onClose }: { url: string; size: Size; alt: string; caption?: string; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => dialog?.close();
+  }, []);
+  return (
+    <dialog ref={ref} className="map-full" aria-label={`${alt}（全画面）`} onCancel={(e) => { e.preventDefault(); onClose(); }}>
+      <div className="map-full-head">
+        <span>{caption}</span>
+        <button type="button" className="sheet-close" aria-label="全画面表示を閉じる" onClick={onClose}>✕</button>
+      </div>
+      <ImageCanvas url={url} size={size} alt={alt} />
+    </dialog>
   );
 }
 
@@ -61,6 +95,7 @@ function ImageCanvas({ url, size: natural, alt }: { url: string; size: Size; alt
     e.preventDefault();
   };
 
+  // 読み上げのラベルは画像の説明の1か所だけ（描画する svg は読み上げない）。操作のキーは aria-keyshortcuts で示す
   return (
     <div
       className="map-canvas"
@@ -68,11 +103,12 @@ function ImageCanvas({ url, size: natural, alt }: { url: string; size: Size; alt
       {...handlers}
       tabIndex={0}
       role="group"
-      aria-label={`${alt}（＋・−で拡大縮小、矢印で移動、0 で全体）`}
+      aria-label={alt}
+      aria-keyshortcuts="+ - 0 ArrowLeft ArrowRight ArrowUp ArrowDown"
       onKeyDown={onKeyDown}
     >
       {view && ready && (
-        <svg viewBox={viewBox(view, size)} width={size.w} height={size.h} role="img" aria-label={alt}>
+        <svg viewBox={viewBox(view, size)} width={size.w} height={size.h} aria-hidden="true">
           <image href={url} x={0} y={0} width={natural.w} height={natural.h} />
         </svg>
       )}

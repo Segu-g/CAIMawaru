@@ -61,7 +61,8 @@ events/<eventId>/
   public/…                   配置図の画像など、ページと一緒に公開するファイル（任意。info.mapImage）
 ```
 
-配置図は、描き起こし（`layout.json`）・画像（`info.mapImage`）のどちらか、両方、またはなし（一覧とマイリストだけのページ）にできます。
+配置図は、描き起こし（`layout.json`）・画像（`info.mapImage`）のどちらか、またはなし（一覧とマイリストだけのページ）にできます。
+`layout.json` があれば描き起こしだけを出し、画像は使いません。
 
 実在のイベントの `events/<eventId>/` は `.gitignore` でこのリポジトリから外してあります（必要なら別の非公開リポジトリで管理してください）。
 
@@ -133,18 +134,16 @@ uv run caimawaru import <eventId> --fetch
 
 ### 画像を載せる
 
-公式の配置図の画像をそのまま載せることもできます（拡大縮小・移動はできるが、スペースを押してもサークルは出ない）。
+`layout.json` がないイベントでは、公式の配置図の画像をそのまま載せることもできます（拡大縮小・移動・全画面表示はできるが、スペースを押してもサークルは出ない）。
 載せてよいかは、主催の方針を確かめたうえで運用者が決めます（エージェントは自分で決めて画像を足さない）。
 
-1. 画像（PNG・JPEG・WebP・SVG）を `events/<eventId>/public/data/` に置く（例: `public/data/map.webp`）。
+1. 画像（PNG・JPEG・WebP・SVG）を `events/<eventId>/public/data/` に置く（例: `public/data/map.webp`）。SVG はスクリプトなどを含むとエラーになる（[event-data.md](event-data.md#infomapimage)）。
    ファイル名は英数字・`-`・`_`・`.` だけ。差し替えるときはファイル名を変える（公開先の CDN が古い画像を返し続けることがあるため）
 2. `event.json` の `info.mapImage` に書く（[event-data.md の「info.mapImage」](event-data.md#infomapimage)）
    ```sh
    uv run caimawaru config set <eventId> info.mapImage '{"src": "data/map.webp", "alt": "会場の配置図。…", "caption": "出典: 主催の配置図"}' --json --dry-run
    ```
 3. `uv run caimawaru data <eventId>` で、ファイルがあるかなどを確かめる
-
-`layout.json` と両方あるときは、配置図の画面の上に「サークル配置図」「公式の配置図（画像）」の切り替えが出ます（最初は描き起こし）。
 
 ## 6. 確かめる
 

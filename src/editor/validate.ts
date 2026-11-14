@@ -92,5 +92,15 @@ export function checkEvent(event: JsonObject): Issue[] {
   for (const [name, n] of Object.entries(obj(info.eventSlots) ?? {})) {
     if (!(Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 5)) add('error', `info.eventSlots の ${name} は 1〜5 にしてください: ${String(n)}`);
   }
+  if ('mapImage' in info) {
+    // src の形と拡張子だけ（build.py の MAP_IMAGE_SRC・MAP_IMAGE_EXTENSIONS と同じ規則）。ファイルの有無と SVG の中身は CLI が確かめる
+    const src = obj(info.mapImage)?.src;
+    if (typeof src !== 'string' || !src) add('error', 'info.mapImage.src（public/ の下の画像ファイル）がありません');
+    else if (!MAP_IMAGE_SRC.test(src)) add('error', `info.mapImage.src は public/ からの相対パスで、英数字・「-」・「_」・「.」・「/」だけにしてください（例: data/map.webp）: ${src}`);
+    else if (!MAP_IMAGE_EXT.test(src)) add('error', `info.mapImage.src は .png / .jpg / .jpeg / .webp / .svg のどれかにしてください: ${src}`);
+  }
   return issues;
 }
+
+const MAP_IMAGE_SRC = /^[A-Za-z0-9_-][A-Za-z0-9._-]*(\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/;
+const MAP_IMAGE_EXT = /\.(png|jpg|jpeg|webp|svg)$/i;

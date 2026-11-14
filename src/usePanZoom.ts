@@ -15,7 +15,7 @@ type Gesture = {
 /**
  * 配置図（描き起こし・画像）の拡大縮小と移動。2本指で拡大縮小・1本指で移動・ダブルタップで拡大、PC はホイール。
  * bounds は移動できる範囲、initial は最初に収める範囲。1回のタップ（ダブルタップでないもの）は onTap に渡す。
- * 返す handlers を wrapRef の要素に付ける。.map-tools・.map-chip・.map-switch の中の操作は拾わない。
+ * 返す handlers を wrapRef の要素に付ける。.map-tools・.map-chip の中の操作は拾わない。
  */
 export function usePanZoom(bounds: Bounds, initial: Bounds, onTap?: (e: PointerEvent<HTMLDivElement>) => void) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -73,7 +73,7 @@ export function usePanZoom(bounds: Bounds, initial: Bounds, onTap?: (e: PointerE
   };
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if ((e.target as Element).closest('.map-tools, .map-chip, .map-switch')) return;
+    if ((e.target as Element).closest('.map-tools, .map-chip')) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, local(e));
     regrip(pointers.current.size > 1 || !!gesture.current?.moved);
