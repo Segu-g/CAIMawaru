@@ -8,6 +8,7 @@ data/circles.csv と data/menus.csv に取り込む（caimawaru import）。
 - イベントデータにない列（直接足した列）と「#」の行は残す（「#」の行は、元のファイルで次にあったサークルの前に置く）
 - 公式リストから消えたサークルは知らせる（配置変更・参加取り消しの可能性。menus.csv に残った行は検証でエラーになる）
 - 取り込んだサークルは、circles.csv の行と1対1で対応付ける（id が1対1で同じ → スペース番号 → サークル名 → 順番）。
+  対応付けた行とサークル名が違えば知らせる（別のサークルが ★・タグ・メモとお品書きを引き継がないように）
   id をスペース番号から作るサークルは、対応する行の id を使う（circles.csv に書いた id は変えない）。対応付けは
   circles.csv の行ごとに行うので、同じ id の行が2つあっても、それぞれの直接編集した列・ほかの列・「#」の行を保つ
 - 同じ取り込み元の別の行が同じ id になったら（「A-01」と「A 01」など）、1つにまとめず両方を残す。
@@ -51,7 +52,7 @@ def describe_id(row, derived):
 class MergeReport:
     added: list           # 新しいサークルの id
     changed: list         # 値が変わったサークルの id
-    removed: list         # 取り込み元から消えた id
+    removed: list         # 取り込み元から消えた circles.csv の行（「id（スペース番号・サークル名）」）
     orphan_menus: list    # menus.csv に残る、サークルのない id
     added_menus: int      # 追加したお品書きの数
     manual_cols: list     # 直接編集する列（既存の値を残す列）
@@ -135,13 +136,13 @@ def _combine_sources(imported):
 
     別の source にある同じ id の行は同じサークルとして、後の source の空でない値で上書きし、お品書きと取り込んだ列は足し合わせる。
     同じ source の中で同じ id になった行は別のサークルなので、まとめずに両方を残す（まとめると片方の値とお品書きが黙って混ざる）。
-    id が空の行（スペース番号から id を作れない行）は、どれもまとめない。
+    id が空の行（スペース番号から id を作れない行）は、別の source にあって、スペース番号とサークル名の両方が同じときだけまとめる。
     """
     combined, sources_of = [], []
     position_of = {}  # id → combined の位置（まとめる先。最初の行）
     for circle in imported:
         circle_ref = circle.row["id"]
-        position = position_of.get(circle_ref) if circle_ref else None
+        position = position_of.get(circle_ref) if circle_ref else _same_circle_without_id(combined, sources_of, circle)
         if position is not None and circle.source is not None and circle.source in sources_of[position]:
             position = None
         if position is None:
@@ -158,6 +159,23 @@ def _combine_sources(imported):
     return combined
 
 
+def _same_circle_without_id(combined, sources_of, circle):
+    """id が空の行と、スペース番号とサークル名の両方が同じで、別の source の id が空の行の位置（なければ None）。"""
+    space, name = circle.row.get("space", ""), circle.row.get("name", "")
+    if not space or not name:
+        return None
+    for position, other in enumerate(combined):
+        if (not other.row["id"] and other.row.get("space", "") == space and other.row.get("name", "") == name
+                and circle.source not in sources_of[position]):
+            return position
+    return None
+
+
+def space_key(space):
+    """スペース番号を比べる形。書き方の違い（「A-01」と「A 01」）は同じにする（make_id）。id を作れないもの（「★」）はそのまま。"""
+    return make_id(space) or space.strip()
+
+
 def _group(indexes, key):
     groups = {}
     for index in indexes:
@@ -171,7 +189,8 @@ def _match_existing(combined, existing_circles):
     返り値: combined の各サークルに対応する existing_circles の位置（なければ None）。行は dict にまとめず位置で扱うので、
     同じ id の行が2つあっても、どちらも別々に対応付ける。順に:
       1. id（空でない）が両方に1つずつしかない
-      2. スペース番号から id を作るサークルは、同じスペース番号の行（1つずつならそのまま、複数ならサークル名が同じもの、残りは順に）
+      2. スペース番号から id を作るサークルは、同じスペース番号の行（space_key で比べる。1つずつならそのまま、
+         複数ならサークル名が同じもの、残りは順に）
       3. 同じ id（空でない）の行を順に
     """
     old_ids = [circle_id(row) for row in existing_circles]
@@ -195,8 +214,8 @@ def _match_existing(combined, existing_circles):
         if circle_ref and len(news) == 1 and len(old_by_id.get(circle_ref, [])) == 1:
             pair(news[0], old_by_id[circle_ref][0])
 
-    old_by_space = _group(sorted(free_old), lambda old: old_spaces[old])
-    for space, news in _group(unmatched(lambda index: combined[index].derived), lambda index: combined[index].row.get("space", "")).items():
+    old_by_space = _group(sorted(free_old), lambda old: space_key(old_spaces[old]))
+    for space, news in _group(unmatched(lambda index: combined[index].derived), lambda index: space_key(combined[index].row.get("space", ""))).items():
         olds = [old for old in old_by_space.get(space, []) if old in free_old] if space else []
         if len(news) > 1 or len(olds) > 1:
             for new in news:
@@ -218,23 +237,26 @@ def _match_existing(combined, existing_circles):
 
 
 def _final_ids(combined, existing_circles, match):
-    """id をスペース番号から作るサークルに、対応する行の id を使う。返り値: (使い続けた id の説明, 確かめてほしいこと)。"""
+    """id をスペース番号から作るサークルに、対応する行の id を使う。返り値: (使い続けた id の説明, 確かめてほしいこと)。
+
+    対応付けたすべての組で、サークル名が違えば知らせる（別のサークルなら、閲覧者の ★・タグ・メモとお品書きを黙って引き継ぐため）。
+    """
     kept, warnings = [], []
     for circle, old in zip(combined, match):
-        if old is None or not circle.derived:
+        if old is None:
             continue
         old_row = existing_circles[old]
         old_ref, made = circle_id(old_row), circle.row["id"]
-        if not old_ref or old_ref == made:
-            continue
-        circle.row["id"] = old_ref
         space = circle.row.get("space", "")
-        kept.append(f"{space} は '{old_ref}'（作ると '{made}'）")
+        if circle.derived and old_ref and old_ref != made:
+            circle.row["id"] = old_ref
+            kept.append(f"{space} は '{old_ref}'（作ると '{made}'）")
         new_name, old_name = circle.row.get("name", ""), stripped(old_row, "name")
         if new_name and old_name and new_name != old_name:
-            warnings.append(f"{circle.where}（スペース {space}・{new_name}）: circles.csv の id '{old_ref}'（{old_name}）を使い続けますが、"
-                            "サークル名が違います。別のサークルなら、閲覧者の ★・タグ・メモがこのサークルに引き継がれます。"
-                            "別のサークルのときは、取り込んだあと circles.csv の id 列で別の id を付けてください")
+            final_ref = circle.row["id"]
+            warnings.append(f"{circle.where}（スペース {space}・{new_name}）: circles.csv の行（スペース {stripped(old_row, 'space')}・{old_name}）と"
+                            f"対応付けて id '{final_ref}' を使いますが、サークル名が違います。別のサークルなら、閲覧者の ★・タグ・メモと"
+                            "お品書きがこのサークルに引き継がれます。別のサークルのときは、取り込んだあと circles.csv の id 列で別の id を付けてください")
     return kept, warnings
 
 
@@ -254,6 +276,12 @@ def _same_id_reports(combined):
             notices.append(f"{rows}は、スペース番号から作ると同じ id '{made_ref}' ですが、"
                            f"circles.csv の id（{', '.join(repr(final_id) for final_id in final_ids)}）で区別します")
     return duplicates, notices
+
+
+def _describe_row(row):
+    """circles.csv の行の説明（「a-01（A-01・甲）」）。同じ id の行があっても見分けられるように、スペース番号とサークル名を添える。"""
+    details = "・".join(value for value in (stripped(row, "space"), stripped(row, "name")) if value)
+    return f"{circle_id(row) or '（id なし）'}（{details}）" if details else circle_id(row)
 
 
 def merge(imported, existing_circles, existing_menus, today):
@@ -291,7 +319,7 @@ def merge(imported, existing_circles, existing_menus, today):
     report = MergeReport(
         added=[circle["id"] for circle, old in zip(circles, match) if old is None],
         changed=list(dict.fromkeys(changed)),
-        removed=sorted({circle_id(row) for index, row in enumerate(existing_circles) if index not in matched_old}),
+        removed=[_describe_row(row) for index, row in enumerate(existing_circles) if index not in matched_old],
         orphan_menus=sorted({menu["id"] for menu in menus} - imported_ids),
         added_menus=added_menus,
         manual_cols=manual_cols,
@@ -389,7 +417,8 @@ def _import_source(event, index, source, input_file, fetch, warnings):
         derived = not str(raw.get("id") or "").strip()
         if not row["id"]:
             warnings.append(f"{where}: スペース番号 {row.get('space', '')!r} から id を作れません（文字か数字が要ります）。"
-                            "取り込んだあと circles.csv の id 列に id を書いてください")
+                            "取り込み元か circles.csv の id 列で id を付けてください（id のない行は、別の取り込み元の"
+                            "スペース番号とサークル名が同じ行としかまとめません）")
         imported.append(ImportedCircle(row, menus, provided_cols, where, index, derived))
     print(f"{label}: {len(raw_rows)} 件")
     return imported
@@ -407,7 +436,7 @@ def _print_report(circles, report):
     for duplicate in report.duplicates:
         print(f"同じ id: {duplicate}", file=sys.stderr)
     if report.removed:
-        print(f"取り込み元から消えた id: {', '.join(report.removed)}", file=sys.stderr)
+        print(f"取り込み元から消えたサークル: {', '.join(report.removed)}", file=sys.stderr)
     if report.orphan_menus:
         print(f"menus.csv に残る、サークルのない id（検証でエラーになります）: {', '.join(report.orphan_menus)}", file=sys.stderr)
 

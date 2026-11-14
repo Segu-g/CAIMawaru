@@ -195,7 +195,47 @@ class MergeTest(unittest.TestCase):
         circles, _, report = ic.merge([self.imported("壁-02", 1, name="甲"), self.imported("壁-01", 2, name="新")], existing, [], "2030-01-01")
         self.assertEqual([(c["id"], c["name"]) for c in circles], [("壁-02", "甲"), ("01", "新")])
         self.assertEqual(len(report.warnings), 1)
-        self.assertIn("一覧 2件目（スペース 壁-01・新）: circles.csv の id '01'（甲）を使い続けますが、サークル名が違います", report.warnings[0])
+        self.assertIn("一覧 2件目（スペース 壁-01・新）: circles.csv の行（スペース 壁-01・甲）と対応付けて id '01' を使いますが、サークル名が違います",
+                      report.warnings[0])
+
+    def test_other_name_is_warned_for_every_pair(self):
+        """id を書き換えない組でも、対応付けた行とサークル名が違えば知らせる（別のサークルが ★・メモ・お品書きを黙って引き継がないように）"""
+        cases = {
+            # 甲が A-01 から A-02 へ移り、乙が A-01 に入る（id 列は空）
+            "id 列が空": ([self.imported("A-02", 1, name="甲"), self.imported("A-01", 2, name="乙")],
+                          [row(space="A-01", name="甲", notes="甲メモ")], "一覧 2件目（スペース A-01・乙）: circles.csv の行（スペース A-01・甲）と対応付けて id 'a-01'"),
+            # 書いた id がスペース番号から作る id と同じ（手で B-01 に移した a-01 の行。乙が A-01 に入る）
+            "作る id と同じ": ([self.imported("B-01", 1, name="甲"), self.imported("A-01", 2, name="乙")],
+                             [row(id="a-01", space="B-01", name="甲")], "一覧 2件目（スペース A-01・乙）: circles.csv の行（スペース B-01・甲）と対応付けて id 'a-01'"),
+            # 2つのサークルがスペースを入れ替える（id 列は空）
+            "入れ替え": ([self.imported("A-02", 1, name="甲"), self.imported("A-01", 2, name="乙")],
+                         [row(space="A-01", name="甲"), row(space="A-02", name="乙")], "一覧 1件目（スペース A-02・甲）: circles.csv の行（スペース A-02・乙）と対応付けて id 'a-02'"),
+        }
+        for label, (imported, existing, expected) in cases.items():
+            with self.subTest(label):
+                _, _, report = ic.merge(imported, existing, [], "2030-01-01")
+                self.assertTrue(any(warning.startswith(expected) for warning in report.warnings), report.warnings)
+        _, _, report = ic.merge([self.imported("A-01", 1, name="甲")], [row(space="A-01", name="甲")], [], "2030-01-01")
+        self.assertEqual(report.warnings, [])
+
+    def test_space_written_differently_still_matches(self):
+        """取り込み元ごとにスペース番号の書き方が違っても（「A-01」と「A 01」）、既存の行と対応付けて id を保つ"""
+        circles, _, report = ic.merge([self.imported("A-01", 1, source=0, name="甲"), self.imported("A 01", 1, source=1, name="甲", kana="こう")],
+                                      [row(id="k1", space="A-01", name="甲")], [], "2030-01-01")
+        self.assertEqual([(c["id"], c["kana"]) for c in circles], [("k1", "こう")])
+        self.assertEqual((report.added, report.removed), ([], []))
+
+    def test_rows_without_id_combine_only_with_same_space_and_name(self):
+        """id のない行は、別の取り込み元でスペース番号とサークル名の両方が同じときだけまとめる"""
+        circles, _, report = ic.merge([self.imported("★", 1, source=0, name="甲"), self.imported("★", 1, source=1, name="甲", kana="こう"),
+                                       self.imported("★", 2, source=1, name="乙")], [row(id="s1", space="★", name="甲")], [], "2030-01-01")
+        self.assertEqual([(c["id"], c["name"], c["kana"]) for c in circles], [("s1", "甲", "こう"), ("", "乙", "")])
+        self.assertEqual(report.removed, [])
+
+    def test_removed_rows_show_space_and_name(self):
+        """消えた行は、同じ id の行が残っていても分かるように、スペース番号とサークル名を添える"""
+        _, _, report = ic.merge([self.imported("A-01", 1, name="甲")], [row(space="A-01", name="甲"), row(space="A 01", name="乙")], [], "2030-01-01")
+        self.assertEqual(report.removed, ["a-01（A 01・乙）"])
 
     def test_extras_and_comments_follow_each_row(self):
         """同じ id の行が2つあっても、ほかの列の値と「#」の行は、それぞれの行に付いたまま"""
