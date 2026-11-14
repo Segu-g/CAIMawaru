@@ -10,11 +10,12 @@ import { useTheme } from './useTheme';
 import { useMediaQuery } from './useMediaQuery';
 import SpaceMap from './components/SpaceMap';
 import MenuDialog from './components/MenuDialog';
+import MapImage from './components/MapImage';
 import { slotColorCss } from './slotColors';
 
 // これ以上の幅（PC・タブレット横）では配置図と一覧を横に並べる。style.css の同じ値と合わせる
 const WIDE_QUERY = '(min-width: 900px)';
-// 配置図を載せるイベントか（circles.json に layout があるか。vite.config.ts が設定）。載せない場合は一覧とマイリストだけ
+// 配置図の画面を出すイベントか（circles.json に layout か event.mapImage があるか。vite.config.ts が設定）。出さない場合は一覧とマイリストだけ
 const HAS_MAP = import.meta.env.VITE_HAS_MAP !== 'false';
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/circles.json`;
@@ -22,6 +23,8 @@ const DATA_URL = `${import.meta.env.BASE_URL}data/circles.json`;
 const initialFilters: Filters = { q: '', event: '', tag: '', pick: '', menu: '', sort: 'space' };
 
 type Tab = 'map' | 'list' | 'mine';
+// 描き起こしの配置図（layout）と配置図の画像（event.mapImage）が両方あるときの表示
+type MapMode = 'layout' | 'image';
 
 type LoadState =
   | { status: 'loading' }
@@ -38,6 +41,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(HAS_MAP ? 'map' : 'list');
   const [selectedId, setSelectedId] = useState<string>();
   const [mapFocus, setMapFocus] = useState(0);
+  const [mapMode, setMapMode] = useState<MapMode>('layout');
   const [cardFocus, setCardFocus] = useState<string>();
   const [menuFor, setMenuFor] = useState<string>();
   const scrollRef = useRef<HTMLElement>(null);
@@ -55,6 +59,7 @@ export default function App() {
   const circles = load.status === 'ready' ? load.data.circles : [];
   const event = load.status === 'ready' ? load.data.event : undefined;
   const layout = load.status === 'ready' ? load.data.layout : undefined;
+  const mapImage = event?.mapImage;
   const tags = useMemo(() => allTags(circles), [circles]);
   const events = useMemo(() => allEvents(circles), [circles]);
   const visible = useMemo(
@@ -111,10 +116,11 @@ export default function App() {
   const showMapPane = HAS_MAP && (wide || tab === 'map');
   const pane: Tab = tab === 'map' && (wide || !HAS_MAP) ? 'list' : tab;
 
-  // 一覧・チェック → 配置図（横並びのときはタブを切り替えない）
+  // 一覧・チェック → 配置図（横並びのときはタブを切り替えない）。画像を表示中なら描き起こしの配置図に切り替える
   const showOnMap = useCallback((id: string) => {
     setSelectedId(id);
     if (!wide) setTab('map');
+    setMapMode('layout');
     setMapFocus((n) => n + 1);
   }, [wide]);
 
@@ -137,6 +143,31 @@ export default function App() {
     else setTab(t);
   };
 
+  // 配置図の画面の中身。描き起こしの配置図（layout）と配置図の画像（event.mapImage）のどちらか、または両方
+  const spaceMap = load.status === 'ready' && circles.length > 0 && layout && (
+    <SpaceMap
+      layout={layout}
+      bySpace={bySpace}
+      events={events}
+      eventSlots={event?.eventSlots}
+      mine={mine}
+      allTags={myTagList}
+      visibleIds={visibleIds}
+      filtered={filtered}
+      selected={selected}
+      focusKey={mapFocus}
+      onSelect={setSelectedId}
+      onShowInList={showInList}
+      onOpenMenus={openMenus}
+      onToggleStar={toggleStar}
+      onToggleBought={toggleBought}
+      onToggleTag={toggleTag}
+      onMemo={setMemo}
+      onClearFilters={clearFilters}
+    />
+  );
+  const imageMap = load.status === 'ready' && mapImage && <MapImage image={mapImage} />;
+
   const card = (c: Circle) => (
     <CircleCard
       key={c.id}
@@ -154,7 +185,7 @@ export default function App() {
       onMemo={(text) => setMemo(c.id, text)}
       onTag={(t) => { update({ tag: t }); setTab('list'); }}
       onEvent={(ev) => { update({ event: ev }); setTab('list'); }}
-      onShowOnMap={HAS_MAP ? () => showOnMap(c.id) : undefined}
+      onShowOnMap={layout ? () => showOnMap(c.id) : undefined}
       onOpenMenus={() => openMenus(c.id)}
     />
   );
@@ -170,30 +201,17 @@ export default function App() {
       {/* 配置図は表示範囲（拡大状態）を保つため、タブを切り替えても破棄しない */}
       {HAS_MAP && (
       <div className="view map-view" hidden={!showMapPane}>
-        {load.status === 'ready' && circles.length > 0 && layout ? (
-          <SpaceMap
-            layout={layout}
-            bySpace={bySpace}
-            events={events}
-            eventSlots={event?.eventSlots}
-            mine={mine}
-            allTags={myTagList}
-            visibleIds={visibleIds}
-            filtered={filtered}
-            selected={selected}
-            focusKey={mapFocus}
-            onSelect={setSelectedId}
-            onShowInList={showInList}
-            onOpenMenus={openMenus}
-            onToggleStar={toggleStar}
-            onToggleBought={toggleBought}
-            onToggleTag={toggleTag}
-            onMemo={setMemo}
-            onClearFilters={clearFilters}
-          />
-        ) : (
-          <Status load={load} />
-        )}
+        {spaceMap && imageMap ? (
+          <div className="map-switcher">
+            <div className="map-switch" role="group" aria-label="配置図の表示">
+              <button type="button" aria-pressed={mapMode === 'layout'} onClick={() => setMapMode('layout')}>サークル配置図</button>
+              <button type="button" aria-pressed={mapMode === 'image'} onClick={() => setMapMode('image')}>公式の配置図（画像）</button>
+            </div>
+            {/* 切り替えても表示範囲（拡大状態）を保つため、どちらも破棄しない */}
+            <div className="map-pane" hidden={mapMode !== 'layout'}>{spaceMap}</div>
+            <div className="map-pane" hidden={mapMode !== 'image'}>{imageMap}</div>
+          </div>
+        ) : (spaceMap || imageMap || <Status load={load} />)}
       </div>
       )}
 
@@ -255,7 +273,7 @@ export default function App() {
           bought={!!mine.bought[menuCircle.id]}
           onToggleStar={() => toggleStar(menuCircle.id)}
           onToggleBought={() => toggleBought(menuCircle.id)}
-          onShowOnMap={HAS_MAP ? () => { closeMenus(); showOnMap(menuCircle.id); } : undefined}
+          onShowOnMap={layout ? () => { closeMenus(); showOnMap(menuCircle.id); } : undefined}
           onClose={closeMenus}
         />
       )}

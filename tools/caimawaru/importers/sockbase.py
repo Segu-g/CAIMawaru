@@ -90,7 +90,7 @@ def read(source, path):
             "web": _text(links, "websiteURL"),
             "menus": [menu] if menu else [],
         })
-    # サークルカット画像は取り込まない（署名付き URL で期限切れになるうえ、転載になる）
+    # サークルカット画像は取り込まない（署名付き URL で期限切れになる。載せるかは運用者の判断で、取り込みでは扱わない）
     return rows
 
 

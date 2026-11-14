@@ -53,12 +53,15 @@ CAIMawaru が読む **イベントデータ**（[event-data.md](event-data.md)�
 ```
 events/<eventId>/
   event.json                 設定とイベント情報                     ┐
-  layout.json                会場配置図（任意。なければ配置図なし）  │ イベントデータ
+  layout.json                会場配置図（任意）                      │ イベントデータ
   data/circles.csv           サークル情報                            │
   data/menus.csv             お品書きのURL                           ┘
   sources/                   主催の元データ（Sockbase の HTML・配布 CSV など。任意の形式）
   public/data/circles.json   ページが読み込むデータ（uv run caimawaru data が生成。直接編集しない）
+  public/…                   配置図の画像など、ページと一緒に公開するファイル（任意。info.mapImage）
 ```
+
+配置図は、描き起こし（`layout.json`）・画像（`info.mapImage`）のどちらか、両方、またはなし（一覧とマイリストだけのページ）にできます。
 
 実在のイベントの `events/<eventId>/` は `.gitignore` でこのリポジトリから外してあります（必要なら別の非公開リポジトリで管理してください）。
 
@@ -78,7 +81,7 @@ events/<eventId>/
 ## 4. サークルとお品書きを集める
 
 集め方ごとに、手順と守ることを書きます。どの場合も、サークル情報の出典を `source` 列に書き、欠席などの事情（健康・家族など）は `notes` に書きません。
-サークルカット画像・公式の配置図画像は取り込みません。
+インポーターはサークルカット画像・公式の配置図画像を取り込みません（配置図の画像は「5. 配置図」で運用者が置きます）。
 
 ### 公式リストを取り込む
 
@@ -120,10 +123,28 @@ uv run caimawaru import <eventId> --fetch
 - X の URL は人が閲覧して集める（API や自動操作は使わない）
 - 品目・価格を載せるのは、サークル本人の許可があるときか、X 以外（BOOTH 等）が出典のときだけ
 
-## 5. 配置図を描き起こす（任意）
+## 5. 配置図（任意）
+
+### 描き起こす
 
 主催が配置図の二次利用を制限していないときだけ、公式配置図を見ながら `layout.json` に描き起こします（[layout.md](layout.md)）。
 公式配置図のスペース数を `expectedSpaces` に書いておくと、数え間違いを検出できます。
+スペースを押すとサークルが分かり、★・タグ・購入済みが色と記号で出ます。
+
+### 画像を載せる
+
+公式の配置図の画像をそのまま載せることもできます（拡大縮小・移動はできるが、スペースを押してもサークルは出ない）。
+載せてよいかは、主催の方針を確かめたうえで運用者が決めます（エージェントは自分で決めて画像を足さない）。
+
+1. 画像（PNG・JPEG・WebP・SVG）を `events/<eventId>/public/data/` に置く（例: `public/data/map.webp`）。
+   ファイル名は英数字・`-`・`_`・`.` だけ。差し替えるときはファイル名を変える（公開先の CDN が古い画像を返し続けることがあるため）
+2. `event.json` の `info.mapImage` に書く（[event-data.md の「info.mapImage」](event-data.md#infomapimage)）
+   ```sh
+   uv run caimawaru config set <eventId> info.mapImage '{"src": "data/map.webp", "alt": "会場の配置図。…", "caption": "出典: 主催の配置図"}' --json --dry-run
+   ```
+3. `uv run caimawaru data <eventId>` で、ファイルがあるかなどを確かめる
+
+`layout.json` と両方あるときは、配置図の画面の上に「サークル配置図」「公式の配置図（画像）」の切り替えが出ます（最初は描き起こし）。
 
 ## 6. 確かめる
 

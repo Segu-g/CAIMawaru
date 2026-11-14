@@ -17,8 +17,13 @@ export type EventInfo = {
   slotColors?: Record<string, SlotColor>;
   // ページ作成者（修正・削除の依頼先）
   contact?: { label: string; url: string };
+  // 配置図の画像（公式の配置図など）。layout と両方あれば配置図の画面で切り替える
+  mapImage?: MapImage;
   updatedAt: string;
 };
+
+// src は events/<eventId>/public/ からの相対パス（ページの URL からの相対で読む）
+export type MapImage = { src: string; alt?: string; caption?: string };
 
 export type SlotColor = { light: string; dark?: string; ink?: string; darkInk?: string };
 

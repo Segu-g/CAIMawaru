@@ -60,6 +60,62 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("event.json", err)
 
+    def set_map_image(self, image):
+        path = self.root / "events/example/event.json"
+        config = json.loads(path.read_text(encoding="utf-8"))
+        config["info"]["mapImage"] = image
+        path.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
+
+    def test_map_image_goes_to_circles_json(self):
+        image = self.root / "events/example/public/data/map.svg"
+        image.parent.mkdir(parents=True)
+        image.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>', encoding="utf-8")
+        self.set_map_image({"src": "data/map.svg", "alt": "架空の会場の配置図", "caption": "出典: 架空"})
+        code, out, err = self.cli("data", "example")
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("mapImage", err)
+        data = json.loads((self.root / "events/example/public/data/circles.json").read_text(encoding="utf-8"))
+        self.assertEqual(data["event"]["mapImage"], {"src": "data/map.svg", "alt": "架空の会場の配置図", "caption": "出典: 架空"})
+        self.assertIn("cells", data["layout"])  # 描き起こしの配置図と両方あってよい
+        # alt がなければ警告だけ
+        self.set_map_image({"src": "data/map.svg"})
+        code, _, err = self.cli("check", "example")
+        self.assertEqual(code, 0)
+        self.assertIn("info.mapImage.alt", err)
+
+    def test_map_image_errors(self):
+        (self.root / "events/example/public/data").mkdir(parents=True)
+        (self.root / "events/example/public/data/map.gif").write_bytes(b"GIF89a")
+        (self.root / "events/example/secret.png").write_bytes(b"")
+        for image, message in (
+            ("map.png", "info.mapImage は"),
+            ({"alt": "x"}, "info.mapImage.src"),
+            ({"src": "data/none.png", "alt": "x"}, "がありません"),
+            ({"src": "data/map.gif", "alt": "x"}, ".png / .jpg"),
+            ({"src": "../secret.png", "alt": "x"}, "相対パス"),
+            ({"src": "/etc/x.png", "alt": "x"}, "相対パス"),
+            ({"src": "https://example.com/map.png", "alt": "x"}, "相対パス"),
+            ({"src": "data/配置図.png", "alt": "x"}, "相対パス"),
+            ({"src": "data/map.svg", "alt": 1}, "info.mapImage.alt は文字列"),
+        ):
+            with self.subTest(image=image):
+                self.set_map_image(image)
+                code, _, err = self.cli("check", "example")
+                self.assertEqual(code, 1)
+                self.assertIn(message, err)
+
+    def test_map_image_symlink_outside_public(self):
+        (self.root / "events/example/public/data").mkdir(parents=True)
+        (self.root / "events/example/secret.png").write_bytes(b"")
+        try:
+            (self.root / "events/example/public/data/link.png").symlink_to(self.root / "events/example/secret.png")
+        except OSError:
+            self.skipTest("シンボリックリンクを作れない環境")
+        self.set_map_image({"src": "data/link.png", "alt": "x"})
+        code, _, err = self.cli("check", "example")
+        self.assertEqual(code, 1)
+        self.assertIn("の外を指しています", err)
+
     def test_unknown_event(self):
         code, _, err = self.cli("data", "nosuch")
         self.assertEqual(code, 1)

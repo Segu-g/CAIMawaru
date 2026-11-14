@@ -7,6 +7,7 @@
 circles.json はページ（src/）との唯一の境界。形は src/types.ts の CircleData。
 """
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import date
@@ -27,6 +28,9 @@ SLOTS = range(1, 6)
 SLOTS_TEXT = f"{SLOTS[0]}〜{SLOTS[-1]}"
 # 元データのファイル（file）が必須の取り込み元の type
 FILE_SOURCE_TYPES = ("csv", "json")
+# 配置図の画像（info.mapImage.src）。events/<eventId>/public/ からの相対パスで、そのまま URL の一部になる
+MAP_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp", ".svg")
+MAP_IMAGE_SRC = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*")
 
 
 @dataclass
@@ -151,6 +155,41 @@ def _check_sources(sources, result, where):
             result.errors.append(f"{where}: sources[{index}].url が不正です: {source['url']}")
 
 
+def _check_map_image(event, info, result, where):
+    """info.mapImage（配置図の画像）を検証する。ファイルは events/<eventId>/public/ の下にあること。
+
+    ページは src を自分の URL からの相対パスとして読むので、public/ の外を指す・URL に使えない文字を含むものはエラーにする。
+    """
+    if "mapImage" not in info:
+        return
+    image = info["mapImage"]
+    if not isinstance(image, dict):
+        result.errors.append(f'{where}: info.mapImage は {{ "src", "alt", "caption" }} にしてください（不要ならキーごと消す）: {image!r}')
+        return
+    for key in ("alt", "caption"):
+        if not isinstance(image.get(key, ""), str):
+            result.errors.append(f"{where}: info.mapImage.{key} は文字列にしてください: {image[key]!r}")
+    if not image.get("alt"):
+        result.warnings.append(f"{where}: info.mapImage.alt（画像の説明。読み上げに使う）が未入力です")
+    src = image.get("src")
+    if not isinstance(src, str) or not src:
+        result.errors.append(f"{where}: info.mapImage.src（public/ の下の画像ファイル）がありません")
+        return
+    if not MAP_IMAGE_SRC.fullmatch(src):
+        result.errors.append(f"{where}: info.mapImage.src は public/ からの相対パスで、英数字・「-」・「_」・「.」・「/」だけにしてください"
+                             f"（例: data/map.webp）: {src}")
+        return
+    if not src.lower().endswith(MAP_IMAGE_EXTENSIONS):
+        result.errors.append(f"{where}: info.mapImage.src は {' / '.join(MAP_IMAGE_EXTENSIONS)} のどれかにしてください: {src}")
+        return
+    public = (event.dir / "public").resolve()
+    path = (public / src).resolve()
+    if not path.is_relative_to(public):
+        result.errors.append(f"{where}: info.mapImage.src が {event.rel(public)}/ の外を指しています: {src}")
+    elif not path.is_file():
+        result.errors.append(f"{where}: info.mapImage.src のファイル {event.rel(event.dir / 'public' / src)} がありません")
+
+
 def check_config(event, result):
     """event.json の検証。ページに出すイベント情報（info）を result.info に入れる。
 
@@ -166,6 +205,7 @@ def check_config(event, result):
         elif not isinstance(config[key], str):
             result.errors.append(f"{where}: {key} は文字列にしてください: {config[key]!r}")
     info = _check_info(config.get("info") or {}, result, where)
+    _check_map_image(event, info, result, where)
     _check_sources(config.get("sources", []), result, where)
     result.info = info
 
