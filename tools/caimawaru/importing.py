@@ -7,6 +7,8 @@ data/circles.csv と data/menus.csv に取り込む（caimawaru import）。
 - menus.csv は取り込んだお品書き URL を追加し、直接追加した行は残す
 - イベントデータにない列（直接足した列）と「#」の行は残す（「#」の行は、元のファイルで次にあったサークルの前に置く）
 - 公式リストから消えたサークルは知らせる（配置変更・参加取り消しの可能性。menus.csv に残った行は検証でエラーになる）
+- id をスペース番号から作るサークルは、circles.csv に同じスペース番号の行があれば、その行の id を使う（書いた id は変えない）
+- 同じ取り込み元の別の行が同じ id になったら（「A-01」と「A 01」など）、1つにまとめず両方を残して知らせる（検証で id の重複のエラーになる）
 - 書き込んだあと検証・生成する（--no-build で省略）
 """
 import sys
@@ -32,6 +34,14 @@ class ImportedCircle(NamedTuple):
     row: dict             # circles.csv の列 → 文字列
     menus: list           # お品書き [(URL, 説明)]
     provided_cols: set    # インポーターが返した列（毎回上書きする列）
+    where: str = ""       # 知らせるときの場所（「<label> 3件目」）
+    source: object = None  # 取り込み元（event.json の sources の位置）。同じ取り込み元の行どうしはまとめない
+    derived: bool = False  # id をスペース番号から作った
+
+
+def describe_id(row, derived):
+    """id の出どころの説明（「スペース エ-04 から作った id」「id 列の値」）。"""
+    return f"スペース {row.get('space', '')} から作った id" if derived else "id 列の値"
 
 
 @dataclass
@@ -42,6 +52,8 @@ class MergeReport:
     orphan_menus: list    # menus.csv に残る、サークルのない id
     added_menus: int      # 追加したお品書きの数
     manual_cols: list     # 直接編集する列（既存の値を残す列）
+    duplicates: list      # 同じ取り込み元で同じ id になった行の説明（両方を残した）
+    kept_ids: list        # スペース番号から作る id の代わりに、既存の行の id を使ったもの（説明）
 
 
 def as_list(value):
@@ -113,21 +125,54 @@ def normalize(raw, source, warnings, where):
 
 
 def _combine_sources(imported):
-    """id ごとに1つの ImportedCircle にまとめる（取り込んだ順）。
+    """同じサークルを1つの ImportedCircle にまとめる（取り込んだ順）。返り値: ([ImportedCircle], [知らせる文])。
 
-    複数の source に同じサークルがあれば、後の source の空でない値で上書きし、お品書きと取り込んだ列は足し合わせる。
+    別の source にある同じ id の行は同じサークルとして、後の source の空でない値で上書きし、お品書きと取り込んだ列は足し合わせる。
+    同じ source の中で同じ id になった行は別のサークルなので、まとめずに両方を残して知らせる（まとめると片方の値とお品書きが黙って混ざる）。
     """
-    combined = {}
+    combined, sources_of, duplicates = [], [], []
+    position_of = {}  # id → combined の位置（まとめる先。最初の行）
     for circle in imported:
         circle_ref = circle.row["id"]
-        if circle_ref not in combined:
-            combined[circle_ref] = ImportedCircle(dict(circle.row), list(circle.menus), set(circle.provided_cols))
+        position = position_of.get(circle_ref)
+        if position is None:
+            position_of[circle_ref] = len(combined)
+        elif circle.source is not None and circle.source in sources_of[position]:
+            first = combined[position]
+            duplicates.append(f"{circle.where}（{describe_id(circle.row, circle.derived)}）と {first.where}（{describe_id(first.row, first.derived)}）が"
+                              f"同じ id '{circle_ref}' です。別のサークルとして両方を残します（検証で id の重複のエラーになるので、"
+                              "取り込み元の id 列か、取り込んだあとの circles.csv の id 列で別の id を付けてください）")
+            position = None
+        if position is None:
+            combined.append(ImportedCircle(dict(circle.row), list(circle.menus), set(circle.provided_cols), circle.where, circle.source, circle.derived))
+            sources_of.append({circle.source})
             continue
-        current = combined[circle_ref]
+        current = combined[position]
         current.row.update({key: value for key, value in circle.row.items() if value})
         current.menus.extend(menu for menu in circle.menus if menu not in current.menus)
         current.provided_cols.update(circle.provided_cols)
-    return combined
+        sources_of[position].add(circle.source)
+    return combined, duplicates
+
+
+def _keep_existing_ids(combined, existing):
+    """スペース番号から作った id が circles.csv にないとき、同じスペース番号の行が1つだけあれば、その行の id を使う。
+
+    id は ★・タグ・メモと menus.csv が参照するので、一度書いた id は、作り方の規則が変わっても変えない。
+    combined の行の id を書き換え、説明のリストを返す。
+    """
+    taken = {circle.row["id"] for circle in combined}
+    kept = []
+    for circle in combined:
+        circle_ref, space = circle.row["id"], circle.row.get("space", "")
+        if not circle.derived or circle_ref in existing or not space:
+            continue
+        same_space = [old_ref for old_ref, row in existing.items() if stripped(row, "space") == space]
+        if len(same_space) == 1 and same_space[0] not in taken:
+            circle.row["id"] = same_space[0]
+            taken.add(same_space[0])
+            kept.append(f"{space} は '{same_space[0]}'（作ると '{circle_ref}'）")
+    return kept
 
 
 def merge(imported, existing_circles, existing_menus, today):
@@ -135,34 +180,39 @@ def merge(imported, existing_circles, existing_menus, today):
 
     返り値: (circles, menus, MergeReport)。menus は既存の行のあとに追加した行を並べる。
     """
-    combined = _combine_sources(imported)
-    provided_cols = set().union(*(circle.provided_cols for circle in combined.values()))
+    combined, duplicates = _combine_sources(imported)
+    provided_cols = set().union(*(circle.provided_cols for circle in combined))
     existing = {circle_id(row): row for row in existing_circles}
+    kept_ids = _keep_existing_ids(combined, existing)
     manual_cols = [col for col in CIRCLE_COLS if col not in provided_cols]
     circles = []
-    for circle_ref, imported_circle in combined.items():
-        old = existing.get(circle_ref, {})
+    for imported_circle in combined:
+        old = existing.get(imported_circle.row["id"], {})
         circles.append({col: old.get(col, "") if col in manual_cols else imported_circle.row.get(col, "") for col in CIRCLE_COLS})
 
     menus = [dict(menu) for menu in existing_menus]
     known_menus = {(stripped(menu, "id"), stripped(menu, "url")) for menu in menus}
     added_menus = 0
-    for circle_ref, imported_circle in combined.items():
+    for imported_circle in combined:
+        circle_ref = imported_circle.row["id"]
         for url, note in imported_circle.menus:
             if (circle_ref, url) not in known_menus:
                 menus.append({"id": circle_ref, "url": url, "note": note, "checkedAt": today})
                 known_menus.add((circle_ref, url))
                 added_menus += 1
 
-    changed = [circle_ref for circle_ref, circle in zip(combined, circles) if circle_ref in existing
-               and any(stripped(existing[circle_ref], col) != (circle[col] or "").strip() for col in CIRCLE_COLS)]
+    imported_ids = list(dict.fromkeys(circle["id"] for circle in circles))
+    changed = list(dict.fromkeys(circle["id"] for circle in circles if circle["id"] in existing
+                                 and any(stripped(existing[circle["id"]], col) != (circle[col] or "").strip() for col in CIRCLE_COLS)))
     report = MergeReport(
-        added=[circle_ref for circle_ref in combined if circle_ref not in existing],
+        added=[circle_ref for circle_ref in imported_ids if circle_ref not in existing],
         changed=changed,
-        removed=sorted(set(existing) - set(combined)),
-        orphan_menus=sorted({menu["id"] for menu in menus if menu["id"] not in combined}),
+        removed=sorted(set(existing) - set(imported_ids)),
+        orphan_menus=sorted({menu["id"] for menu in menus} - set(imported_ids)),
         added_menus=added_menus,
         manual_cols=manual_cols,
+        duplicates=duplicates,
+        kept_ids=kept_ids,
     )
     return circles, menus, report
 
@@ -181,7 +231,7 @@ def keep_extras_and_comments(table, circles):
             pending_comments = []
     rows = []
     for circle in circles:
-        rows.extend(comments_before.get(circle["id"], []))
+        rows.extend(comments_before.pop(circle["id"], []))  # 同じ id の行が2つあっても、コメントは1回だけ書く
         old_row = old_rows.get(circle["id"], {})
         rows.append({**circle, **{col: old_row.get(col, "") for col in extra_cols}})
     return rows + pending_comments
@@ -242,7 +292,11 @@ def _import_source(event, index, source, input_file, fetch, warnings):
             continue
         row, menus = normalize(raw, source, warnings, where)
         provided_cols = {key for key in raw if key in CIRCLE_COLS} | ALWAYS_PROVIDED_COLS
-        imported.append(ImportedCircle(row, menus, provided_cols))
+        derived = not str(raw.get("id") or "").strip()
+        if not row["id"]:
+            warnings.append(f"{where}: スペース番号 {row.get('space', '')!r} から id を作れません（文字か数字が要ります）。"
+                            "取り込んだあと circles.csv の id 列に id を書いてください")
+        imported.append(ImportedCircle(row, menus, provided_cols, where, index, derived))
     print(f"{label}: {len(raw_rows)} 件")
     return imported
 
@@ -250,6 +304,10 @@ def _import_source(event, index, source, input_file, fetch, warnings):
 def _print_report(circles, report):
     print(f"サークル {len(circles)} 件（新規 {len(report.added)}・変更 {len(report.changed)}）、お品書きの追加 {report.added_menus} 件")
     print(f"直接編集する列（既存の値を残す）: {', '.join(report.manual_cols) or 'なし'}")
+    if report.kept_ids:
+        print(f"スペース番号から作る id と違う、circles.csv の今の id を使うサークル: {', '.join(report.kept_ids)}")
+    for duplicate in report.duplicates:
+        print(f"同じ id: {duplicate}", file=sys.stderr)
     if report.removed:
         print(f"取り込み元から消えた id: {', '.join(report.removed)}", file=sys.stderr)
     if report.orphan_menus:

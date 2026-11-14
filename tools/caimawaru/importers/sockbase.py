@@ -3,6 +3,7 @@
 元データは、公式リストのページの HTML。サークルの情報はページ内の astro-island の props に入っていて、
 サーバが返す HTML にそのまま含まれる（ブラウザで描画しなくてよい）。
 サークル一覧の部品は SearchableCircleCardRack か SearchableCircleList（props の circles を読む）。なければ配置図（SpaceMapViewer の spaces）から読む。
+id は spaceName から、ほかの取り込みと同じ規則（project.make_id）で作る。
 配置が発表される前のリストは spaceName が空で、id を作れないので取り込まない（id はスペース番号から作り、公開後は変えないため）。
 
 event.json:
@@ -14,6 +15,8 @@ import re
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+from caimawaru.project import make_id
 
 DESCRIPTION = "Sockbase の公式サークルリスト（ページの HTML）"
 DEFAULT_FILE = "sources/sockbase.html"
@@ -78,7 +81,7 @@ def read(source, path):
         space = _text(circle, "spaceName")
         menu = _text(links, "menuURL")
         rows.append({
-            "id": space.replace(",", "-").lower(),  # 書き直す前の spaceName から作る
+            "id": make_id(space),  # 書き直す前の spaceName から作る（「A-03,04」→「a-03-04」。公開後に id が変わらないように）
             "space": _full_spaces(space),
             "event": _text(circle, "eventName"),
             "name": _text(circle, "circleName"),

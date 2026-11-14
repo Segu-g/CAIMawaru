@@ -13,6 +13,9 @@ from caimawaru import importing as ic
 from caimawaru.importers import csv as csv_importer
 from caimawaru.importers import json as json_importer
 from caimawaru.importers import sockbase
+from caimawaru.project import make_id
+
+MAKE_ID_CASES = json.loads((Path(__file__).parent / "fixtures" / "make_id.json").read_text(encoding="utf-8"))["makeId"]
 
 
 def tmpfile(name, text):
@@ -21,6 +24,14 @@ def tmpfile(name, text):
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text, encoding="utf-8")
     return p
+
+
+class MakeIdTest(unittest.TestCase):
+    def test_same_table_as_editor(self):
+        """fixtures/make_id.json はエディタ（src/editor/validate.test.ts）のテストも読む。CLI とエディタで同じ id になる"""
+        for space, expected in MAKE_ID_CASES:
+            with self.subTest(space=space):
+                self.assertEqual(make_id(space), expected)
 
 
 class NormalizeTest(unittest.TestCase):
@@ -92,6 +103,42 @@ class MergeTest(unittest.TestCase):
         ]
         circles, _, _ = ic.merge(imported, [], [], "2030-01-01")
         self.assertEqual((circles[0]["name"], circles[0]["kana"]), ("名前", "なまえ"))
+
+
+    def imported(self, space, number, source=0, menus=(), **row):
+        """取り込んだ1行（id を渡さなければスペース番号から作る）"""
+        circle_id = row.pop("id", "")
+        row = {"id": circle_id or make_id(space), "space": space, **row}
+        return ic.ImportedCircle(row, list(menus), set(row), f"一覧 {number}件目", source, not circle_id)
+
+    def test_same_id_in_one_source_keeps_both_and_reports(self):
+        """同じ取り込み元の別の行が同じ id になっても、1つにまとめない（値とお品書きが黙って混ざらないように）"""
+        first = self.imported("A-01", 1, name="甲")
+        second = self.imported("A 01", 2, name="乙", menus=[("https://example.com/m", "")])
+        circles, menus, report = ic.merge([first, second], [], [], "2030-01-01")
+        self.assertEqual([(c["id"], c["space"], c["name"]) for c in circles], [("a-01", "A-01", "甲"), ("a-01", "A 01", "乙")])
+        self.assertEqual([m["id"] for m in menus], ["a-01"])
+        self.assertEqual(len(report.duplicates), 1)
+        self.assertIn("一覧 2件目（スペース A 01 から作った id）と 一覧 1件目（スペース A-01 から作った id）が同じ id 'a-01' です",
+                      report.duplicates[0])
+        self.assertEqual(report.added, ["a-01"])
+
+    def test_same_id_in_other_sources_is_the_same_circle(self):
+        circles, _, report = ic.merge([self.imported("A-01", 1, source=0, name="甲"),
+                                       self.imported("A-01", 1, source=1, kana="こう")], [], [], "2030-01-01")
+        self.assertEqual([(c["name"], c["kana"]) for c in circles], [("甲", "こう")])
+        self.assertEqual(report.duplicates, [])
+
+    def test_derived_id_keeps_written_id_of_same_space(self):
+        """スペース番号から作る id が今の circles.csv にないとき、同じスペース番号の行の id を使う（書いた id は変えない）"""
+        existing = [{**{c: "" for c in ic.CIRCLE_COLS}, "id": "01", "space": "壁-01", "name": "甲"},
+                    {**{c: "" for c in ic.CIRCLE_COLS}, "id": "b-01", "space": "B-01", "name": "乙"}]
+        imported = [self.imported("壁-01", 1, name="甲"), self.imported("B-01", 2, name="乙"),
+                    self.imported("エ-04", 3, id="x-1", name="丙")]
+        circles, _, report = ic.merge(imported, existing, [], "2030-01-01")
+        self.assertEqual([c["id"] for c in circles], ["01", "b-01", "x-1"])
+        self.assertEqual(report.kept_ids, ["壁-01 は '01'（作ると '壁-01'）"])
+        self.assertEqual((report.added, report.removed), (["x-1"], []))
 
 
 class CsvImporterTest(unittest.TestCase):
@@ -170,6 +217,14 @@ class SockbaseImporterTest(unittest.TestCase):
         props = html.escape(json.dumps({"circles": [1, circles]}), quote=True)
         p = tmpfile("list.html", f'<astro-island component-url="/_astro/SearchableCircleList.abc.js" props="{props}"></astro-island>')
         self.assertEqual([(r["space"], r["id"]) for r in sockbase.read({}, p)], list(cases.values()))
+
+    def test_id_is_made_like_other_importers(self):
+        """id は make_id と同じ規則（かな・漢字は残し、空白・記号は「-」）"""
+        cases = {"エ-04": "エ-04", "ロ-01,ロ-02": "ロ-01-ロ-02", "A-01, A-02": "a-01-a-02", "Ａ－０１": "a-01"}
+        circles = [[0, {"spaceName": [0, space], "circleName": [0, f"架空{n}"]}] for n, space in enumerate(cases)]
+        props = html.escape(json.dumps({"circles": [1, circles]}), quote=True)
+        p = tmpfile("list.html", f'<astro-island component-url="/_astro/SearchableCircleList.abc.js" props="{props}"></astro-island>')
+        self.assertEqual([r["id"] for r in sockbase.read({}, p)], list(cases.values()))
 
     def test_before_layout_is_refused(self):
         """配置の発表前（spaceName がすべて null）は、id を作れないので取り込まない"""

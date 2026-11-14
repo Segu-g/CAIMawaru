@@ -46,6 +46,12 @@ class XUrlTest(unittest.TestCase):
         self.assertEqual([c["id"] for c in find_circles(circles, "@hoshikuzu_ex")], ["a-01"])
         self.assertEqual(find_circles(circles, "search"), [])  # x.com/search はアカウントではない
 
+    def test_find_circles_by_written_id(self):
+        """id 列に大文字で書いた id も、書いたとおりの形で指定できる（小文字にした形でも当たる）"""
+        circles = [{"id": "A-01", "space": "B-01", "name": "甲"}, {"id": "エ-04", "space": "エ-04", "name": "乙"}]
+        self.assertEqual([c["name"] for c in find_circles(circles, "A-01")], ["甲"])
+        self.assertEqual([c["name"] for c in find_circles(circles, "エ-04")], ["乙"])
+
 
 class BlankIdTest(unittest.TestCase):
     """id 列が空のサークルは、スペース番号から作った id（build と同じ）で扱う。"""

@@ -61,7 +61,7 @@ export function profileUrl(handle: string): string {
 const dataCircles = (doc: Doc) => doc.circles.filter((c) => c.comment === undefined && isDataRow(c.values, c.extra));
 
 /**
- * 検索語に当たるサークル（menu.py の find_circles と同じ）。id・スペース（複数スペースのどれか）・@X の ID の完全一致を優先し、
+ * 検索語に当たるサークル（menu.py の find_circles と同じ）。id（書いたとおり・小文字）・スペース（複数スペースのどれか）・@X の ID の完全一致を優先し、
  * なければサークル名・読みの部分一致。
  */
 export function findCircles(circles: Row[], query: string): Row[] {
@@ -71,7 +71,8 @@ export function findCircles(circles: Row[], query: string): Row[] {
   const rows = circles.filter((c) => c.comment === undefined && isDataRow(c.values, c.extra));
   const exact = rows.filter((c) => {
     const v = c.values;
-    return circleId(v) === ql || v.space.trim().toLowerCase() === ql
+    const id = circleId(v); // id は書いたとおりの形（大文字の id も）と、小文字にした形のどちらでも当たる
+    return id === q || id === ql || v.space.trim().toLowerCase() === ql
       || v.space.split(',').some((s) => s.trim().toLowerCase() === ql) || xHandleOf(v) === ql;
   });
   if (exact.length) return exact;
