@@ -291,7 +291,7 @@ export default function CircleForm({ doc, circle, issues, edit: editDoc, onRemov
         <label>
           <span>id</span>
           <DraftInput value={v.id} onCommit={(s) => commitIdField('id', s)} placeholder={id ? `空欄なら ${id}` : '空欄ならスペース番号から作る'} className="ed-mono" />
-          <small>英数字とハイフン。menus.csv と閲覧者の ★ が参照するので、公開後は変えない</small>
+          <small>空白と「,」は入れない（小文字を勧める）。menus.csv と閲覧者の ★・タグ・メモが参照するので、公開後は変えない</small>
         </label>
         <label>
           <span>成人向け（adult）</span>

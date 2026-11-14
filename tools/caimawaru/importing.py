@@ -158,7 +158,7 @@ def _combine_sources(imported):
 def _keep_existing_ids(combined, existing):
     """スペース番号から作った id が circles.csv にないとき、同じスペース番号の行が1つだけあれば、その行の id を使う。
 
-    id は ★・タグ・メモと menus.csv が参照するので、一度書いた id は、作り方の規則が変わっても変えない。
+    id は ★・タグ・メモと menus.csv が参照するので、circles.csv に書いた id は、スペース番号から作る id と違っても変えない。
     combined の行の id を書き換え、説明のリストを返す。
     """
     taken = {circle.row["id"] for circle in combined}
