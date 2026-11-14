@@ -30,7 +30,8 @@ uv run caimawaru menu <eventId> -                                               
 ```
 
 サークル指定はスペース番号・id・サークル名の一部・@X の ID のどれでもよく、登録後に `uv run caimawaru data` まで自動で実行します（`--dry-run` は判定結果の表示だけ）。
-id 列が空のサークルは、スペース番号から作った id（`A-10` → `a-10`）で menus.csv に書きます（`--dry-run` でも、書く id を表示します）。
+id 列が空のサークルは、スペース番号から作った id（`A-10` → `a-10`、`エ-04` → `エ-04`。規則は [event-data.md の「サークルの id」](event-data.md#サークルの-id)）で menus.csv に書きます（`--dry-run` でも、書く id を表示します）。
+id での指定は、id 列に書いたとおりの形（大文字も）と小文字にした形のどちらでも当たります。
 X の投稿からの自動判定と @X の ID での指定は、サークルの `x` 列のプロフィールの URL（`x.com`・`twitter.com`、`www.`・`mobile.` 付き、
 末尾の `/`・`?lang=ja`・`#…` があってもよい）と照らし合わせます。`x.com/home`・`x.com/search` などアカウントではないページは照合しません。`caimawaru check`・`data` も同じ規則で、照合できない `x` 列を警告します。
 
