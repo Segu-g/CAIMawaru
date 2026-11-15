@@ -639,6 +639,40 @@ button.danger { color: var(--danger); border-color: var(--danger); }
 .map-legend i.tagged { --ev: var(--tagged); --ev-ink: var(--tagged-ink); }
 .map-legend i.bought { --ev: var(--done); --ev-ink: var(--done-ink); }
 
+/* 配置図の画像（event.json の info.mapImage）。画像の色はそのまま */
+.map-image .map-canvas { cursor: grab; }
+.map-image .map-canvas:focus-visible { outline-offset: -3px; }
+.map-image > .empty { align-self: center; }
+.map-caption { justify-content: space-between; align-items: center; }
+.map-caption button { margin-left: auto; min-height: var(--tap-sm); font-size: var(--fs-sm); }
+/* 画像の全画面表示（ページの中。画像のファイルへは移動しない） */
+.map-full {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--surface);
+  color: var(--ink);
+}
+.map-full[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); }
+.map-full::backdrop { background: rgb(0 0 0 / .6); }
+.map-full-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  min-width: 0;
+  padding: 0 12px;
+  padding-top: env(safe-area-inset-top);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.map-full-head span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-full-head .sheet-close { margin: 0; }
+
 /* 選択したサークルの情報（配置図の下に出るシート） */
 .map-sheet {
   display: grid;

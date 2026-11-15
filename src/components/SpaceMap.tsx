@@ -1,12 +1,11 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
+import { memo, useEffect, useRef, type PointerEvent } from 'react';
 import type { Circle, Mine } from '../types';
 import { svgRect, type Layout } from '../layout';
-import { anchorView, clampView, fitView, toMap, viewBox, zoomAt, type Point, type Size, type View } from '../mapView';
+import { fitView, viewBox } from '../mapView';
+import { usePanZoom } from '../usePanZoom';
 import MapSheet from './MapSheet';
 import { slotOf } from '../filter';
 
-const TAP_SLOP = 8; // これ以上動いたらタップではなくドラッグ
-const DOUBLE_TAP_MS = 300;
 // 「配置図で見る」で拡大するときの表示幅。画面の幅 1px あたり配置図 1 単位（セル約45px）を目安に、
 // スマホでは 420 を下限にする（PC の広い配置図で拡大しすぎないように幅に合わせる）
 const focusWidth = (px: number) => Math.max(420, px);
@@ -33,47 +32,21 @@ type Props = {
   onClearFilters: () => void;
 };
 
-type Gesture = {
-  anchor: Point; // 配置図上で掴んでいる点
-  startW: number;
-  startDist: number;
-  startPx: Point;
-  moved: boolean;
-};
-
 function SpaceMap({
   layout, bySpace, events, eventSlots, mine, allTags, visibleIds, filtered, selected, focusKey,
   onSelect, onShowInList, onOpenMenus, onToggleStar, onToggleBought, onToggleTag, onMemo, onClearFilters,
 }: Props) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<Size>({ w: 0, h: 0 });
-  const [view, setView] = useState<View>();
-  const pointers = useRef(new Map<number, Point>());
-  const gesture = useRef<Gesture>(undefined);
-  const lastTap = useRef({ t: 0, x: 0, y: 0 });
+  // 1回のタップ: 押したスペースのサークルを選ぶ（もう一度押すか空きを押すと閉じる）
+  const onTap = (e: PointerEvent<HTMLDivElement>) => {
+    const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest<SVGGElement>('[data-circle]');
+    const id = hit?.dataset.circle;
+    onSelect(id && id !== selected?.id ? id : undefined);
+  };
+  const { wrapRef, size, view, ready, apply, zoomCenter, handlers } = usePanZoom(layout.bounds, layout.focus, onTap);
   const handledFocus = useRef(0);
 
   const mainEvents = events.filter((ev) => slotOf(ev, eventSlots) > 0).sort((a, b) => slotOf(a, eventSlots) - slotOf(b, eventSlots));
   const otherEvents = events.filter((ev) => slotOf(ev, eventSlots) === 0);
-
-  // タブ切り替えで非表示→表示になったときもサイズを取り直す
-  useLayoutEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setSize({ w: width, h: height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const ready = size.w > 0 && size.h > 0;
-  useEffect(() => {
-    if (ready && !view) setView(fitView(layout.focus, size));
-  }, [ready, view, size]);
-
-  const apply = useCallback((v: View) => setView(clampView(v, layout.bounds, size)), [size, layout]);
 
   // 非表示中に要求された場合は、表示されてサイズが取れた時点で一度だけ処理する
   useEffect(() => {
@@ -88,90 +61,12 @@ function SpaceMap({
     apply({ cx, cy: cy + ((w * size.h) / size.w) * 0.15, w });
   }, [focusKey, ready, selected, bySpace, apply, size, layout]);
 
-  // PC: ホイールで拡大縮小（ページのスクロールを止めるため passive: false で登録）
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el || !view) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const r = el.getBoundingClientRect();
-      apply(zoomAt(view, size, Math.exp(-e.deltaY * 0.0015), { x: e.clientX - r.left, y: e.clientY - r.top }));
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [view, size, apply]);
-
-  const local = (e: PointerEvent): Point => {
-    const r = wrapRef.current!.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  };
-
-  // 指の本数が変わるたびに掴み直す
-  const regrip = (moved: boolean) => {
-    if (!view) return;
-    const pts = [...pointers.current.values()];
-    if (!pts.length) { gesture.current = undefined; return; }
-    const mid = { x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length };
-    const dist = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 1;
-    gesture.current = { anchor: toMap(view, size, mid), startW: view.w, startDist: dist, startPx: mid, moved };
-  };
-
-  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if ((e.target as Element).closest('.map-tools, .map-chip')) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    pointers.current.set(e.pointerId, local(e));
-    regrip(pointers.current.size > 1 || !!gesture.current?.moved);
-  };
-
-  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    const g = gesture.current;
-    if (!g || !pointers.current.has(e.pointerId)) return;
-    pointers.current.set(e.pointerId, local(e));
-    const pts = [...pointers.current.values()];
-    const mid = { x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length };
-    if (!g.moved && Math.hypot(mid.x - g.startPx.x, mid.y - g.startPx.y) < TAP_SLOP && pts.length === 1) return;
-    g.moved = true;
-    const dist = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : g.startDist;
-    apply(anchorView(g.anchor, mid, (g.startW * g.startDist) / dist, size));
-  };
-
-  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
-    if (!pointers.current.has(e.pointerId)) return;
-    const wasTap = !gesture.current?.moved && pointers.current.size === 1;
-    const px = local(e);
-    pointers.current.delete(e.pointerId);
-    regrip(true);
-    if (!wasTap || !view) return;
-
-    const now = e.timeStamp;
-    const last = lastTap.current;
-    if (now - last.t < DOUBLE_TAP_MS && Math.hypot(px.x - last.x, px.y - last.y) < 30) {
-      apply(zoomAt(view, size, 2, px));
-      lastTap.current = { t: 0, x: 0, y: 0 };
-      return;
-    }
-    lastTap.current = { t: now, x: px.x, y: px.y };
-    const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest<SVGGElement>('[data-circle]');
-    const id = hit?.dataset.circle;
-    onSelect(id && id !== selected?.id ? id : undefined);
-  };
-
-  const onPointerCancel = (e: PointerEvent<HTMLDivElement>) => {
-    pointers.current.delete(e.pointerId);
-    regrip(true);
-  };
-
-  const zoomCenter = (factor: number) => view && apply(zoomAt(view, size, factor, { x: size.w / 2, y: size.h / 2 }));
-
   return (
     <div className="space-map">
       <div
         className="map-canvas"
         ref={wrapRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerCancel}
+        {...handlers}
       >
         {view && ready && (
           <svg viewBox={viewBox(view, size)} width={size.w} height={size.h} role="group" aria-label="会場配置図">

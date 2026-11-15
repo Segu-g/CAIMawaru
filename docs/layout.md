@@ -1,6 +1,7 @@
 # 配置図（layout.json）の書き方
 
-`events/<eventId>/layout.json` があるイベントだけ配置図を表示します。公式配置図を見ながら座標を描き起こします（公式画像は転載しない）。
+`events/<eventId>/layout.json` があるイベントだけ、サークルの位置が分かる配置図を表示します。公式配置図を見ながら座標を描き起こします
+（主催が配置図の二次利用を制限していないときだけ）。`layout.json` がないイベントで公式の配置図の画像をそのまま載せる方法は [event-data.md の「info.mapImage」](event-data.md#infomapimage)。
 座標はホール左上を原点とした任意の単位で、セル（1スペース）の既定の大きさは 45×26 です。
 
 ```jsonc

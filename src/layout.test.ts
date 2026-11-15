@@ -12,6 +12,12 @@ describe.each(Object.entries(generated))('%s', (_, data) => {
     expect(Array.isArray(data.circles)).toBe(true);
   });
 
+  const image = data.event.mapImage;
+  it.runIf(!!image)('配置図の画像は public/ からの相対パス', () => {
+    expect(image!.src).toMatch(/^[A-Za-z0-9_-][A-Za-z0-9._-]*(\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*\.(png|jpe?g|webp)$/i);
+    for (const key of ['alt', 'caption'] as const) expect(['string', 'undefined']).toContain(typeof image![key]);
+  });
+
   const layout = data.layout;
   it.runIf(!!layout)('配置図は展開済みのセルで、スペース番号が重複しない', () => {
     for (const c of layout!.cells) expect(c).toEqual(expect.objectContaining({ space: expect.any(String), x: expect.any(Number), w: expect.any(Number) }));

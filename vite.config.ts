@@ -11,7 +11,7 @@ import react from '@vitejs/plugin-react';
 // Vite は「--」より後ろの引数を使わないので、その最初の値を eventId として読む（「--」がないと Vite は
 // eventId をプロジェクトのフォルダ（root）と解釈してしまうため、package.json の scripts に「--」を入れてある）。
 // 読むのは events/<eventId>/event.json（storeId・title）と、Python の caimawaru data が書いた
-// public/data/circles.json だけ（Python は呼ばない。依存関係は docs/architecture.md）。
+// public/data/circles.json（配置図・配置図の画像の有無）だけ（Python は呼ばない。依存関係は docs/architecture.md）。
 // 出力先は dist/<eventId>/ で、ビルドのたびに Vite が空にする（この設定ではファイルやフォルダを消したり書いたりしない）。
 const root = import.meta.dirname;
 const eventsDir = resolve(root, 'events');
@@ -76,7 +76,9 @@ export default defineConfig(({ command, isPreview }) => {
   if (!existsSync(dataJson)) {
     fail(`events/${eventId}/public/data/circles.json がありません。先に uv run caimawaru data ${eventId} で作ってください`);
   }
-  const hasMap = !!readJson<{ layout?: unknown }>(dataJson, `events/${eventId}/public/data/circles.json`).layout;
+  // 配置図の画面を出すか（描き起こしの配置図か、配置図の画像のどちらかがあれば出す）
+  const data = readJson<{ layout?: unknown; event?: { mapImage?: unknown } }>(dataJson, `events/${eventId}/public/data/circles.json`);
+  const hasMap = !!data.layout || !!data.event?.mapImage;
 
   const outDir = resolve(root, 'dist', eventId);
   if (isPreview && !existsSync(resolve(outDir, 'index.html'))) {

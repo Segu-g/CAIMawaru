@@ -39,6 +39,33 @@ events/<eventId>/sources/…   ──取り込み──▶  events/<eventId>/eve
 | `info.slotColors` | | 枠ごとの色の上書き `{ "1": { "light", "dark", "ink", "darkInk" } }`（既定は `src/style.css` の `--ev-1〜5`） |
 | `info.halls` | | 同じサイト内の別ページへの切り替え `[{ "label", "url", "current" }]`（url は相対パス） |
 | `info.contact` | | 修正・削除の依頼先 `{ "label", "url" }`（X の URL ならヘッダーに X のボタンも出る） |
+| `info.mapImage` | | 配置図の画像 `{ "src", "alt", "caption" }`（下の「info.mapImage」） |
+
+### info.mapImage
+
+`layout.json` がないイベントで、配置図の画面に画像をそのまま表示する（拡大縮小・移動と全画面表示だけ。スペースの選択や ★ の表示はしない）。
+`layout.json` があるイベントでは使わない（描き起こしだけを出し、検証で警告して circles.json に入れない）。
+使わなくても `public/` のファイルは公開されるので、`src` のファイルが `public/` にあれば、その形式（下）だけは確かめる。
+公式の配置図の画像を載せてよいかは、主催の方針を確かめたうえで運用者が決める（ツールは制限しない）。
+
+```json
+"mapImage": { "src": "data/map.webp", "alt": "会場の配置図。A〜F の島が横に並び、左下に出入口", "caption": "出典: 主催の配置図" }
+```
+
+| キー | 必須 | 内容 |
+|---|---|---|
+| `src` | ✓ | 画像ファイルの `events/<eventId>/public/` からの相対パス。PNG・JPEG・WebP（`.png`・`.jpg`・`.jpeg`・`.webp`）。英数字・`-`・`_`・`.`・`/` だけ |
+| `alt` | | 画像の説明（読み上げに使う）。空なら検証で警告し、ページは「会場の配置図（画像）」と読み上げる |
+| `caption` | | 画像の下に出す一文（出典など） |
+
+ほかのキーは使わない（検証で警告）。
+
+- `public/` の中身はそのまま `dist/<eventId>/` に入って公開される。画像は `public/data/` に置くと、circles.json と一緒に先に上げられる
+- 使える形式は PNG・JPEG・WebP だけ。SVG はスクリプトを動かせるので使えない（PNG・JPEG・WebP に書き出す）
+- 検証（`uv run caimawaru data`）は、ファイルがあるか（大文字小文字も同じ名前か）、`public/` の外を指していないか（シンボリックリンクも）、拡張子と、
+  中身が拡張子どおりの形式か（ファイルの先頭のバイト）を確かめる。名前だけ `.png` に変えた HTML・SVG などはエラー
+- エディタ（`pnpm editor`）は src の形と拡張子だけを確かめる。ファイルの有無と中身の形式は CLI だけ
+- 差し替えるときはファイル名を変える（公開先の CDN が古い画像を返し続けることがあるため）
 
 ## data/circles.csv
 
@@ -136,4 +163,4 @@ CLI（`import`・`menu`・`circle`・`menus`）とページ側の編集画面は
 
 ## layout.json
 
-会場配置図（任意）。書き方は [layout.md](layout.md)。ないイベントは配置図なしのページになる。
+会場配置図（任意）。書き方は [layout.md](layout.md)。ないイベントは、`info.mapImage` があればその画像を配置図として出し、どちらもなければ配置図なしのページ（一覧とマイリストだけ）になる。

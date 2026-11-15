@@ -7,6 +7,8 @@
 circles.json はページ（src/）との唯一の境界。形は src/types.ts の CircleData。
 """
 import json
+import os
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import date
@@ -27,6 +29,12 @@ SLOTS = range(1, 6)
 SLOTS_TEXT = f"{SLOTS[0]}〜{SLOTS[-1]}"
 # 元データのファイル（file）が必須の取り込み元の type
 FILE_SOURCE_TYPES = ("csv", "json")
+# 配置図の画像（info.mapImage.src）。events/<eventId>/public/ からの相対パスで、そのまま URL の一部になる
+MAP_IMAGE_SRC = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*")
+MAP_IMAGE_KEYS = ("src", "alt", "caption")
+# 使える形式（拡張子 → 形式の名前）。SVG はスクリプトを動かせるので受け付けない
+MAP_IMAGE_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG", ".webp": "WebP"}
+MAP_IMAGE_FORMATS_TEXT = "PNG・JPEG・WebP"
 
 
 @dataclass
@@ -151,6 +159,102 @@ def _check_sources(sources, result, where):
             result.errors.append(f"{where}: sources[{index}].url が不正です: {source['url']}")
 
 
+def _is_listed(public, src):
+    """src の各段が、親フォルダの一覧に大文字小文字まで同じ名前で載っているか（大文字小文字を区別しないファイルシステムでも、公開先で同じ URL になるように）。"""
+    folder = public
+    for part in src.split("/"):
+        try:
+            names = os.listdir(folder)
+        except OSError:
+            return False
+        if part not in names:
+            return False
+        folder = folder / part
+    return True
+
+
+def image_format(head):
+    """ファイルの先頭のバイトから分かる画像の形式（PNG・JPEG・WebP）。どれでもなければ None。"""
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "PNG"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "JPEG"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "WebP"
+    return None
+
+
+def _check_map_image_src(event, src, result, where, used):
+    """info.mapImage.src と、それが指すファイルを検証する。
+
+    使わないとき（used=False。layout.json があるイベント）も、public/ にファイルがあれば公開されるので、ファイルの形式だけは確かめる。
+    """
+    if not MAP_IMAGE_SRC.fullmatch(src):
+        if used:
+            result.errors.append(f"{where}: info.mapImage.src は public/ からの相対パスで、英数字・「-」・「_」・「.」・「/」だけにしてください"
+                                 f"（例: data/map.webp）: {src}")
+        return
+    public = (event.dir / "public").resolve()
+    path = (public / src).resolve()
+    shown = event.rel(event.dir / "public" / src)
+    if not path.is_relative_to(public):
+        if used:
+            result.errors.append(f"{where}: info.mapImage.src が {event.rel(public)}/ の外を指しています: {src}")
+        return
+    exists = path.is_file() and _is_listed(public, src)
+    expected = MAP_IMAGE_FORMATS.get(os.path.splitext(src)[1].lower())
+    if expected is None:
+        if used or exists:
+            result.errors.append(f"{where}: info.mapImage.src は {MAP_IMAGE_FORMATS_TEXT}（{' / '.join(MAP_IMAGE_FORMATS)}）にしてください。"
+                                 f"SVG などは {MAP_IMAGE_FORMATS_TEXT} に書き出してください: {src}")
+        return
+    if not exists:
+        if used:
+            result.errors.append(f"{where}: info.mapImage.src のファイル {shown} がありません（大文字小文字も同じ名前にしてください）")
+        return
+    # 名前だけ変えた HTML・SVG などを止める（ブラウザは中身から形式を推測することがあるため）
+    with open(path, "rb") as f:
+        actual = image_format(f.read(16))
+    if actual != expected:
+        result.errors.append(f"{where}: info.mapImage.src のファイル {shown} の中身が {expected} ではありません"
+                             f"（{actual or '画像でないか、使えない形式'}）。{MAP_IMAGE_FORMATS_TEXT} に書き出したファイルにしてください")
+
+
+def _check_map_image(event, info, result, where):
+    """info.mapImage（配置図の画像）を検証する。ファイルは events/<eventId>/public/ の下にあること。
+
+    ページは src を自分の URL からの相対パスとして読むので、public/ の外を指す・URL に使えない文字を含むものはエラーにする。
+    layout.json があるイベントでは画像は使わない（警告し、circles.json に入れない）。src が public/ のファイルを指していれば、その形式だけ確かめる。
+    """
+    if "mapImage" not in info:
+        return
+    if event.layout_json.exists():
+        image = info.pop("mapImage")
+        result.warnings.append(f"{where}: {event.rel(event.layout_json)} があるので info.mapImage は使いません（配置図は描き起こしだけを出します）。"
+                               "使わなくても、public/ のファイルは公開されます")
+        src = image.get("src") if isinstance(image, dict) else None
+        if isinstance(src, str) and src:
+            _check_map_image_src(event, src, result, where, used=False)
+        return
+    image = info["mapImage"]
+    if not isinstance(image, dict):
+        result.errors.append(f'{where}: info.mapImage は {{ "src", "alt", "caption" }} にしてください（不要ならキーごと消す）: {image!r}')
+        return
+    for key in image:
+        if key not in MAP_IMAGE_KEYS:
+            result.warnings.append(f"{where}: info.mapImage.{key} は使いません（使えるのは {'・'.join(MAP_IMAGE_KEYS)}）")
+    for key in ("alt", "caption"):
+        if not isinstance(image.get(key, ""), str):
+            result.errors.append(f"{where}: info.mapImage.{key} は文字列にしてください: {image[key]!r}")
+    if not image.get("alt"):
+        result.warnings.append(f"{where}: info.mapImage.alt（画像の説明。読み上げに使う）が未入力です")
+    src = image.get("src")
+    if not isinstance(src, str) or not src:
+        result.errors.append(f"{where}: info.mapImage.src（public/ の下の画像ファイル）がありません")
+        return
+    _check_map_image_src(event, src, result, where, used=True)
+
+
 def check_config(event, result):
     """event.json の検証。ページに出すイベント情報（info）を result.info に入れる。
 
@@ -166,6 +270,7 @@ def check_config(event, result):
         elif not isinstance(config[key], str):
             result.errors.append(f"{where}: {key} は文字列にしてください: {config[key]!r}")
     info = _check_info(config.get("info") or {}, result, where)
+    _check_map_image(event, info, result, where)
     _check_sources(config.get("sources", []), result, where)
     result.info = info
 
