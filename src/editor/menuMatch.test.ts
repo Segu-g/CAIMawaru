@@ -80,6 +80,11 @@ describe('サークルの指定（menu.py の find_circles と同じ）', () => 
     expect(names('A-03,A-04')).toEqual(['青い鳥工房']);
     expect(names('@MADOROMI_EX')).toEqual(['まどろみ書房']);
   });
+  it('id 列に大文字で書いた id も、書いたとおりの形で指定できる', () => {
+    const d = loadDoc({ event: '{}', circles: 'id,space,name\r\nA-01,B-01,甲\r\nエ-04,エ-04,乙\r\n', menus: '' }).doc;
+    expect(findCircles(d.circles, 'A-01').map((c) => c.values.name)).toEqual(['甲']);
+    expect(findCircles(d.circles, 'エ-04').map((c) => c.values.name)).toEqual(['乙']);
+  });
   it('なければ名前・読みの部分一致。空や「@」だけは何にも当たらない', () => {
     expect(names('星')).toEqual(['星屑通信', '星の砂']);
     expect(names('ほしくず')).toEqual(['星屑通信']);

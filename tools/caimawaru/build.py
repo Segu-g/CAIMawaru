@@ -18,7 +18,7 @@ from caimawaru import layout as layout_mod
 from caimawaru.console import print_warnings
 from caimawaru.project import (CIRCLE_COLS, MENU_COLS, DuplicateKeyError, circle_id, circle_spaces, format_json, is_http_url,
                                read_csv, split_list)
-from caimawaru.xurl import is_x_page, normalize_url, x_handle
+from caimawaru.xurl import TRIM, is_x_page, normalize_url, x_handle
 
 LINK_KEYS = ("x", "pixiv", "booth", "web")
 INFO_REQUIRED = ("name", "date", "venue")
@@ -321,18 +321,51 @@ def _check_circle_row(row, circle_ref, result, where):
     }
 
 
+def id_origin(row):
+    """id の出どころ（「id 列」「スペース エ-04 から作った id」）。重複などを知らせるときに添える（エディタの idOrigin と同じ）。"""
+    return "id 列" if row.get("id") else f"スペース {row.get('space', '')} から作った id"
+
+
+def check_id_text(circle_ref, row):
+    """id 列に書いた id の、紛らわしい書き方（空白・「,」・大文字）の警告。スペース番号から作った id にはない。止めはしない。
+
+    空白は xurl.TRIM の文字（エディタの validate.ts と同じ集合）。
+    """
+    if not row.get("id"):
+        return None
+    found = [label for label, hit in (("空白", any(ch in TRIM for ch in circle_ref)), ("「,」", "," in circle_ref),
+                                      ("大文字", circle_ref != circle_ref.lower())) if hit]
+    if not found:
+        return None
+    return (f"id '{circle_ref}' に{'・'.join(found)}が入っています（そのままでも使えます。新しく付ける id は、空白・「,」を入れず小文字にしてください。"
+            "公開後は変えません）")
+
+
 def _read_circles(event, result):
-    circles, first_line_of = [], {}
+    """circles.csv を読み、id ごとに確かめる。同じ id の行はエラー（★・タグ・メモとお品書きが混ざる）にして、行の検証は続ける。"""
+    circles, first_of, first_lower_of = [], {}, {}
     for line_number, row in enumerate(read_csv(event.circles_csv, CIRCLE_COLS, result.warnings), start=2):  # 1行目は見出し
         where = f"circles.csv:{line_number}"
         circle_ref = circle_id(row)
         if not circle_ref:
-            result.errors.append(f"{where}: id もスペース番号もありません")
+            if row.get("space"):
+                result.errors.append(f"{where}: スペース番号 '{row['space']}' から id を作れません（文字か数字が要ります）。id 列に id を書いてください")
+            else:
+                result.errors.append(f"{where}: id もスペース番号もありません")
             continue
-        if circle_ref in first_line_of:
-            result.errors.append(f"{where}: id '{circle_ref}' が重複しています（{first_line_of[circle_ref]} と同じ）")
-            continue
-        first_line_of[circle_ref] = where
+        text_warning = check_id_text(circle_ref, row)
+        if text_warning:
+            result.warnings.append(f"{where}: {text_warning}")
+        here = f"{where}（{id_origin(row)}）"
+        if circle_ref in first_of:
+            result.errors.append(f"{here}: id '{circle_ref}' が {first_of[circle_ref]}と重複しています。"
+                                 "★・タグ・メモとお品書きが2つのサークルで混ざるので、どちらかの id 列に別の id を書いてください")
+        else:
+            first_of[circle_ref] = here
+            other_ref, other_where = first_lower_of.setdefault(circle_ref.lower(), (circle_ref, where))
+            if other_ref != circle_ref:
+                result.warnings.append(f"{where}: id '{circle_ref}' は {other_where} の id '{other_ref}' と大文字・小文字だけが違います"
+                                       "（別のサークルとして扱います）")
         circles.append(_check_circle_row(row, circle_ref, result, where))
     return circles
 

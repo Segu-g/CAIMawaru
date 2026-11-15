@@ -13,6 +13,14 @@ from caimawaru import importing as ic
 from caimawaru.importers import csv as csv_importer
 from caimawaru.importers import json as json_importer
 from caimawaru.importers import sockbase
+from caimawaru.project import Table, make_id
+
+MAKE_ID_CASES = json.loads((Path(__file__).parent / "fixtures" / "make_id.json").read_text(encoding="utf-8"))["makeId"]
+
+
+def row(**values):
+    """circles.csv の1行（足りない列は空）"""
+    return {**{col: "" for col in ic.CIRCLE_COLS}, **values}
 
 
 def tmpfile(name, text):
@@ -21,6 +29,14 @@ def tmpfile(name, text):
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text, encoding="utf-8")
     return p
+
+
+class MakeIdTest(unittest.TestCase):
+    def test_same_table_as_editor(self):
+        """fixtures/make_id.json はエディタ（src/editor/validate.test.ts）のテストも読む。CLI とエディタで同じ id になる"""
+        for space, expected in MAKE_ID_CASES:
+            with self.subTest(space=space):
+                self.assertEqual(make_id(space), expected)
 
 
 class NormalizeTest(unittest.TestCase):
@@ -92,6 +108,146 @@ class MergeTest(unittest.TestCase):
         ]
         circles, _, _ = ic.merge(imported, [], [], "2030-01-01")
         self.assertEqual((circles[0]["name"], circles[0]["kana"]), ("名前", "なまえ"))
+
+
+    def imported(self, space, number, source=0, menus=(), **row):
+        """取り込んだ1行（id を渡さなければスペース番号から作る）"""
+        circle_id = row.pop("id", "")
+        row = {"id": circle_id or make_id(space), "space": space, **row}
+        return ic.ImportedCircle(row, list(menus), set(row), f"一覧 {number}件目", source, not circle_id)
+
+    def test_same_id_in_one_source_keeps_both_and_reports(self):
+        """同じ取り込み元の別の行が同じ id になっても、1つにまとめない（値とお品書きが黙って混ざらないように）"""
+        first = self.imported("A-01", 1, name="甲")
+        second = self.imported("A 01", 2, name="乙", menus=[("https://example.com/m", "")])
+        circles, menus, report = ic.merge([first, second], [], [], "2030-01-01")
+        self.assertEqual([(c["id"], c["space"], c["name"]) for c in circles], [("a-01", "A-01", "甲"), ("a-01", "A 01", "乙")])
+        self.assertEqual([m["id"] for m in menus], ["a-01"])
+        self.assertEqual(len(report.duplicates), 1)
+        self.assertIn("一覧 1件目（スペース A-01 から作った id）、一覧 2件目（スペース A 01 から作った id）が同じ id 'a-01' です。",
+                      report.duplicates[0])
+        self.assertEqual(report.added, ["a-01", "a-01"])  # 新しいサークルは2つ
+
+    def test_same_id_in_other_sources_is_the_same_circle(self):
+        circles, _, report = ic.merge([self.imported("A-01", 1, source=0, name="甲"),
+                                       self.imported("A-01", 1, source=1, kana="こう")], [], [], "2030-01-01")
+        self.assertEqual([(c["name"], c["kana"]) for c in circles], [("甲", "こう")])
+        self.assertEqual(report.duplicates, [])
+
+    def test_derived_id_keeps_written_id_of_same_space(self):
+        """スペース番号から作る id が今の circles.csv にないとき、同じスペース番号の行の id を使う（書いた id は変えない）"""
+        existing = [{**{c: "" for c in ic.CIRCLE_COLS}, "id": "01", "space": "壁-01", "name": "甲"},
+                    {**{c: "" for c in ic.CIRCLE_COLS}, "id": "b-01", "space": "B-01", "name": "乙"}]
+        imported = [self.imported("壁-01", 1, name="甲"), self.imported("B-01", 2, name="乙"),
+                    self.imported("エ-04", 3, id="x-1", name="丙")]
+        circles, _, report = ic.merge(imported, existing, [], "2030-01-01")
+        self.assertEqual([c["id"] for c in circles], ["01", "b-01", "x-1"])
+        self.assertEqual(report.kept_ids, ["壁-01 は '01'（作ると '壁-01'）"])
+        self.assertEqual((report.added, report.removed), (["x-1"], []))
+
+
+    def test_operator_id_for_same_made_id_is_kept_on_reimport(self):
+        """同じ取り込み元の A-01 と「A 01」（どちらも作ると a-01）。運用者が乙の id を a-01-b にしてお品書きを付けたあと、取り込み直しても保つ"""
+        existing = [row(id="a-01", space="A-01", name="甲", notes="甲メモ"), row(id="a-01-b", space="A 01", name="乙", notes="乙メモ")]
+        menus = [{"id": "a-01-b", "url": "https://example.com/m", "note": "", "checkedAt": ""}]
+        circles, _, report = ic.merge([self.imported("A-01", 1, name="甲"), self.imported("A 01", 2, name="乙")], existing, menus, "2030-01-01")
+        self.assertEqual([(c["id"], c["name"], c["notes"]) for c in circles], [("a-01", "甲", "甲メモ"), ("a-01-b", "乙", "乙メモ")])
+        self.assertEqual((report.removed, report.orphan_menus, report.duplicates), ([], [], []))
+        self.assertEqual(report.notices, ["一覧 1件目（スペース A-01）、一覧 2件目（スペース A 01）は、スペース番号から作ると同じ id 'a-01' ですが、"
+                                          "circles.csv の id（'a-01', 'a-01-b'）で区別します"])
+        self.assertEqual(report.old_rows, [0, 1])
+
+    def test_duplicate_rows_in_circles_csv_are_matched_one_by_one(self):
+        """circles.csv に同じ id の行が残っていても（id が空の A-01 と「A 01」）、行ごとに直接編集した列を保つ"""
+        existing = [row(space="A-01", name="甲", notes="甲メモ"), row(space="A 01", name="乙", notes="乙メモ")]
+        circles, _, report = ic.merge([self.imported("A-01", 1, name="甲"), self.imported("A 01", 2, name="乙")], existing, [], "2030-01-01")
+        self.assertEqual([(c["id"], c["name"], c["notes"]) for c in circles], [("a-01", "甲", "甲メモ"), ("a-01", "乙", "乙メモ")])
+        self.assertEqual(report.old_rows, [0, 1])
+        self.assertEqual(len(report.duplicates), 1)  # まだ同じ id なので、検証でエラーになると知らせる
+        self.assertEqual(report.removed, [])
+
+    def test_rows_without_id_are_never_combined(self):
+        """スペース番号から id を作れない行（「★」）は、別の取り込み元どうしでもまとめない"""
+        circles, _, report = ic.merge([self.imported("★", 1, source=0, name="甲"), self.imported("★", 1, source=1, name="乙")],
+                                      [], [], "2030-01-01")
+        self.assertEqual([(c["id"], c["name"]) for c in circles], [("", "甲"), ("", "乙")])
+        self.assertEqual(report.duplicates, [])
+
+    def test_operator_ids_for_rows_without_id_are_kept(self):
+        """「★」の2行に運用者が star-1・star-2 を付けたあと取り込み直しても、サークル名で対応付けて保つ"""
+        existing = [row(id="star-1", space="★", name="甲"), row(id="star-2", space="★", name="乙")]
+        circles, _, report = ic.merge([self.imported("★", 2, name="乙"), self.imported("★", 1, name="甲")], existing, [], "2030-01-01")
+        self.assertEqual([(c["id"], c["name"]) for c in circles], [("star-2", "乙"), ("star-1", "甲")])
+        self.assertEqual(report.removed, [])
+
+    def test_kept_id_resolves_same_made_id_without_duplicate_error(self):
+        """同じスペース番号の2行のうち、片方が既存の id を使い続けて重ならなくなったら、重複とは知らせない"""
+        existing = [row(id="01", space="壁-01", name="甲")]
+        circles, _, report = ic.merge([self.imported("壁-01", 1, name="甲"), self.imported("壁-01", 2, name="乙")], existing, [], "2030-01-01")
+        self.assertEqual([(c["id"], c["name"]) for c in circles], [("01", "甲"), ("壁-01", "乙")])
+        self.assertEqual(report.duplicates, [])
+        self.assertEqual(len(report.notices), 1)
+        self.assertIn("'01', '壁-01'", report.notices[0])
+
+    def test_kept_id_with_other_name_is_warned(self):
+        """使い続ける id の行とサークル名が違うとき（移動したサークルの ★ を別のサークルが引き継ぐ恐れ）は知らせる"""
+        existing = [row(id="01", space="壁-01", name="甲")]
+        circles, _, report = ic.merge([self.imported("壁-02", 1, name="甲"), self.imported("壁-01", 2, name="新")], existing, [], "2030-01-01")
+        self.assertEqual([(c["id"], c["name"]) for c in circles], [("壁-02", "甲"), ("01", "新")])
+        self.assertEqual(len(report.warnings), 1)
+        self.assertIn("一覧 2件目（スペース 壁-01・新）: circles.csv の行（スペース 壁-01・甲）と対応付けて id '01' を使いますが、サークル名が違います",
+                      report.warnings[0])
+
+    def test_other_name_is_warned_for_every_pair(self):
+        """id を書き換えない組でも、対応付けた行とサークル名が違えば知らせる（別のサークルが ★・メモ・お品書きを黙って引き継がないように）"""
+        cases = {
+            # 甲が A-01 から A-02 へ移り、乙が A-01 に入る（id 列は空）
+            "id 列が空": ([self.imported("A-02", 1, name="甲"), self.imported("A-01", 2, name="乙")],
+                          [row(space="A-01", name="甲", notes="甲メモ")], "一覧 2件目（スペース A-01・乙）: circles.csv の行（スペース A-01・甲）と対応付けて id 'a-01'"),
+            # 書いた id がスペース番号から作る id と同じ（手で B-01 に移した a-01 の行。乙が A-01 に入る）
+            "作る id と同じ": ([self.imported("B-01", 1, name="甲"), self.imported("A-01", 2, name="乙")],
+                             [row(id="a-01", space="B-01", name="甲")], "一覧 2件目（スペース A-01・乙）: circles.csv の行（スペース B-01・甲）と対応付けて id 'a-01'"),
+            # 2つのサークルがスペースを入れ替える（id 列は空）
+            "入れ替え": ([self.imported("A-02", 1, name="甲"), self.imported("A-01", 2, name="乙")],
+                         [row(space="A-01", name="甲"), row(space="A-02", name="乙")], "一覧 1件目（スペース A-02・甲）: circles.csv の行（スペース A-02・乙）と対応付けて id 'a-02'"),
+        }
+        for label, (imported, existing, expected) in cases.items():
+            with self.subTest(label):
+                _, _, report = ic.merge(imported, existing, [], "2030-01-01")
+                self.assertTrue(any(warning.startswith(expected) for warning in report.warnings), report.warnings)
+        _, _, report = ic.merge([self.imported("A-01", 1, name="甲")], [row(space="A-01", name="甲")], [], "2030-01-01")
+        self.assertEqual(report.warnings, [])
+
+    def test_space_written_differently_still_matches(self):
+        """取り込み元ごとにスペース番号の書き方が違っても（「A-01」と「A 01」）、既存の行と対応付けて id を保つ"""
+        circles, _, report = ic.merge([self.imported("A-01", 1, source=0, name="甲"), self.imported("A 01", 1, source=1, name="甲", kana="こう")],
+                                      [row(id="k1", space="A-01", name="甲")], [], "2030-01-01")
+        self.assertEqual([(c["id"], c["kana"]) for c in circles], [("k1", "こう")])
+        self.assertEqual((report.added, report.removed), ([], []))
+
+    def test_rows_without_id_combine_only_with_same_space_and_name(self):
+        """id のない行は、別の取り込み元でスペース番号とサークル名の両方が同じときだけまとめる"""
+        circles, _, report = ic.merge([self.imported("★", 1, source=0, name="甲"), self.imported("★", 1, source=1, name="甲", kana="こう"),
+                                       self.imported("★", 2, source=1, name="乙")], [row(id="s1", space="★", name="甲")], [], "2030-01-01")
+        self.assertEqual([(c["id"], c["name"], c["kana"]) for c in circles], [("s1", "甲", "こう"), ("", "乙", "")])
+        self.assertEqual(report.removed, [])
+
+    def test_removed_rows_show_space_and_name(self):
+        """消えた行は、同じ id の行が残っていても分かるように、スペース番号とサークル名を添える"""
+        _, _, report = ic.merge([self.imported("A-01", 1, name="甲")], [row(space="A-01", name="甲"), row(space="A 01", name="乙")], [], "2030-01-01")
+        self.assertEqual(report.removed, ["a-01（A 01・乙）"])
+
+    def test_extras_and_comments_follow_each_row(self):
+        """同じ id の行が2つあっても、ほかの列の値と「#」の行は、それぞれの行に付いたまま"""
+        table = Table(tmpfile("circles.csv", "id,space,name,memo\r\n# 甲の前\r\n,A-01,甲,甲の列\r\n# 乙の前\r\n,A 01,乙,乙の列\r\n"), ic.CIRCLE_COLS)
+        circles, _, report = ic.merge([self.imported("A 01", 2, name="乙"), self.imported("A-01", 1, name="甲")], table.data_rows(), [], "2030-01-01")
+        rows = ic.keep_extras_and_comments(table, circles, report.old_rows)
+        memo = next(col for col in table.cols if col not in ic.CIRCLE_COLS)
+        self.assertEqual(len(rows), 4)
+        self.assertIs(rows[0], table.rows[2])  # 「# 乙の前」
+        self.assertEqual((rows[1]["name"], rows[1][memo]), ("乙", "乙の列"))
+        self.assertIs(rows[2], table.rows[0])  # 「# 甲の前」
+        self.assertEqual((rows[3]["name"], rows[3][memo]), ("甲", "甲の列"))
 
 
 class CsvImporterTest(unittest.TestCase):
@@ -170,6 +326,14 @@ class SockbaseImporterTest(unittest.TestCase):
         props = html.escape(json.dumps({"circles": [1, circles]}), quote=True)
         p = tmpfile("list.html", f'<astro-island component-url="/_astro/SearchableCircleList.abc.js" props="{props}"></astro-island>')
         self.assertEqual([(r["space"], r["id"]) for r in sockbase.read({}, p)], list(cases.values()))
+
+    def test_id_is_made_like_other_importers(self):
+        """id は make_id と同じ規則（かな・漢字は残し、空白・記号は「-」）"""
+        cases = {"エ-04": "エ-04", "ロ-01,ロ-02": "ロ-01-ロ-02", "A-01, A-02": "a-01-a-02", "Ａ－０１": "a-01"}
+        circles = [[0, {"spaceName": [0, space], "circleName": [0, f"架空{n}"]}] for n, space in enumerate(cases)]
+        props = html.escape(json.dumps({"circles": [1, circles]}), quote=True)
+        p = tmpfile("list.html", f'<astro-island component-url="/_astro/SearchableCircleList.abc.js" props="{props}"></astro-island>')
+        self.assertEqual([r["id"] for r in sockbase.read({}, p)], list(cases.values()))
 
     def test_before_layout_is_refused(self):
         """配置の発表前（spaceName がすべて null）は、id を作れないので取り込まない"""

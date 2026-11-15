@@ -104,7 +104,7 @@ uv run caimawaru import <eventId> --fetch
 `uv run caimawaru circle add <eventId> space=A-10 name="…" event="…" source="…" --dry-run` で登録します（[cli.md](cli.md#イベントデータを確かめる編集する)）。
 
 - `source` 列に、その情報をどこで確かめたか（主催の告知など）を書く
-- サークルの `id` はスペース番号から作られる。公開後に変えない（利用者の ★ が外れる）
+- サークルの `id` は、id 列が空ならスペース番号から作る（`A-10` → `a-10`、`壁-01` → `壁-01`。規則は [event-data.md の「サークルの id」](event-data.md#サークルの-id)）。公開後に変えない（利用者の ★・タグ・メモが外れる）
 
 ### X アカウントを補う
 

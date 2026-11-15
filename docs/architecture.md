@@ -111,8 +111,10 @@ pnpm build:editor ───────▶ tsc ─▶ vite build --config vite.e
 - イベントデータの CSV の読み書き（`tools/caimawaru/project.py` の `CIRCLE_COLS`・`MENU_COLS`・`read_table`・`format_csv`・`make_id` と、
   `src/editor/csv.ts`・`src/editor/model.ts`）。docs/event-data.md の「CSV の書き方」（列の並び・CRLF・囲み方・空の行・`#` の行・ほかの列）。
   `src/editor/csv.test.ts` が events/example の CSV を読み直して同じバイト列になることと、それぞれの規則を確かめる
-- サークルの id（空欄ならスペース番号から作る。`tools/caimawaru/project.py` の `circle_id` と `src/editor/model.ts` の `circleId`）。
-  build・import・menu・編集コマンドはどれも `circle_id` を使う
+- サークルの id（空欄ならスペース番号から作る。`tools/caimawaru/project.py` の `circle_id`・`make_id` と `src/editor/model.ts` の `circleId`・`makeId`）。
+  build・import・menu・編集コマンドとインポーター（sockbase）はどれも `circle_id`・`make_id` を使う。作り方の例は `tools/tests/fixtures/make_id.json` にまとめ、
+  両方のテスト（`tools/tests/test_import.py`・`src/editor/validate.test.ts`）が読む。id の確認（重複・作れない id・紛らわしい書き方）は
+  `tools/caimawaru/build.py` の `_read_circles` と `src/editor/validate.ts` の `checkCircles` で、同じ規則・同じ内容の文言にする
 - X の URL の規則（`tools/caimawaru/xurl.py` の `normalize_url`・`profile_handle`・`x_handle`・`is_x_page` と `src/editor/menuMatch.ts` の
   `normalizeUrl`・`profileHandle`・`xHandleOf`・`isXPage`）。URL の前後の空白は、Python の `strip()` と JavaScript の `trim()` で対象が違うので、
   どちらも同じ文字の並び（`TRIM`）を明示して除く（`trim`・`trimUrl`）。CLI では照合（`menu.py` の `find_circles`）と検証・生成（`build.py`。x 列が照合できるか、

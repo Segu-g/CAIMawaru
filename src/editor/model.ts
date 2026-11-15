@@ -21,9 +21,13 @@ export function newRow(values: Record<string, string>, comment?: string[], extra
   return { key: nextKey++, values, ...(comment !== undefined && { comment }), ...(extra !== undefined && { extra }) };
 }
 
-/** スペース番号から id を作る（project.py の make_id と同じ。「A-03,A-04」→「a-03-a-04」）。 */
+/**
+ * スペース番号から id を作る（project.py の make_id と同じ。tools/tests/fixtures/make_id.json の表で両方を確かめる）。
+ * NFKC（全角の英数字・記号を半角に）→ 小文字 → 文字と数字以外の並びを「-」に → 前後の「-」を除く。
+ * 「A-03,A-04」→「a-03-a-04」、「エ-04」→「エ-04」、「Ａ－０１」→「a-01」。
+ */
 export function makeId(space: string): string {
-  return space.replace(/[^0-9A-Za-z]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  return space.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
 }
 
 /** サークルの id。空欄ならスペース番号から作る（build.py と同じ。menus.csv はこの id を参照する） */

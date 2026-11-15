@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -294,8 +295,18 @@ def is_http_url(value):
     return parts.scheme in ("http", "https") and bool(parts.netloc)
 
 
+# 文字（かな・漢字・英字など）と数字のどちらでもない文字の並び（Python の \w から「_」を除いたもの。エディタの /[^\p{L}\p{N}]+/u と同じ）
+_NOT_ID_CHARS = re.compile(r"[\W_]+")
+
+
 def make_id(space):
-    return re.sub(r"[^0-9A-Za-z]+", "-", space).strip("-").lower()
+    """スペース番号から id を作る（エディタの makeId と同じ。tools/tests/fixtures/make_id.json の表で両方を確かめる）。
+
+    NFKC（全角の英数字・記号を半角に）→ 小文字 → 文字と数字以外の並びを「-」に → 前後の「-」を除く。
+    「A-03,A-04」→「a-03-a-04」、「エ-04」→「エ-04」、「Ａ－０１」→「a-01」。
+    """
+    normalized = unicodedata.normalize("NFKC", space).lower()
+    return _NOT_ID_CHARS.sub("-", normalized).strip("-")
 
 
 def circle_id(row):

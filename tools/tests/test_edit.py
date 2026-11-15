@@ -422,6 +422,13 @@ class EditTest(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(self.circle_json("A-01")["menus"][0]["url"], "https://x.com/example_user/status/1234567890")
 
+    def test_add_makes_id_from_space_like_build(self):
+        _, out, _ = self.cli("circle", "add", "example", "space=エ-04", "name=架空", "--dry-run")  # 配置図にないので検証はエラー
+        self.assertIn("追加: エ-04", out)
+        code, _, err = self.cli("circle", "add", "example", "space=★", "name=架空2", "--no-build")
+        self.assertEqual(code, 1)
+        self.assertIn("スペース番号 '★' から id を作れません", err)
+
     def test_empty_query_matches_nothing(self):
         # スペースも X も空欄のサークルがあっても、空・「@」だけの指定には当たらない
         code, _, err = self.cli("circle", "add", "example", "id=nospace", "name=未配置", "--no-build")

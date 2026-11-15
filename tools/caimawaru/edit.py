@@ -305,6 +305,8 @@ def circle_add(event, fields, dry_run=False, no_build=False):
     row.update({loaded.circles.names[name]: value for name, value in values.items()})
     if not row["id"]:
         row["id"] = make_id(row["space"])
+    if not row["id"] and row["space"]:
+        raise CliError(f"スペース番号 '{row['space']}' から id を作れません（文字か数字が要ります）。id=… で id を指定してください")
     if not row["id"]:
         raise CliError("id か space を指定してください")
     if any(circle["id"] == row["id"] for circle in loaded.circle_views):

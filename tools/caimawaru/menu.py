@@ -24,14 +24,14 @@ from caimawaru.project import CIRCLE_COLS, MENU_COLS, Table, circle_id, circle_s
 from caimawaru.xurl import normalize_url, x_handle
 
 def find_circles(circles, query):
-    """検索語に一致するサークルを返す。完全一致（id・スペース・XのID）を優先し、なければサークル名の部分一致。"""
+    """検索語に一致するサークルを返す。完全一致（id・スペース・XのID）を優先し、なければサークル名の部分一致（エディタの findCircles と同じ）。"""
     text = query.strip()
     normalized_query = text.lower().lstrip("@")  # id・スペース・X の ID と比べる形（小文字、「@」なし）
     if not normalized_query:
         return []  # 空・「@」だけの指定は、スペースや X が空欄のサークルに当たらないようにする
     exact = [
         circle for circle in circles
-        if circle["id"] == normalized_query
+        if circle["id"] in (text, normalized_query)  # id は書いたとおりの形（大文字の id も）と、小文字にした形
         or circle["space"].strip().lower() == normalized_query  # 「A-01,A-02」のようにまとめた書き方そのもの
         or normalized_query in (space.lower() for space in circle_spaces(circle))  # 複数スペースのどれか
         or x_handle(circle) == normalized_query

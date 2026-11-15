@@ -1,6 +1,6 @@
 // 保存前の簡単な確認。正式な検証は Python の uv run caimawaru data <eventId>（tools/caimawaru/build.py）で、
 // ここでは入力の間違いに早く気づくための、明らかなものだけを見る。
-import { isXPage, normalizeUrl, xHandleOf } from './menuMatch';
+import { hasSpace, isXPage, normalizeUrl, xHandleOf } from './menuMatch';
 import { circleId, DATE, isDataRow, isHttpUrl, LINK_KEYS, type JsonObject, type Row } from './model';
 
 export type Issue = {
@@ -17,21 +17,48 @@ function label(values: Record<string, string>): string {
   return [s, n].filter(Boolean).join(' ') || '（名前なし）';
 }
 
+/** id の出どころ（「id 列」「スペース エ-04 から作った id」）。重複などを知らせるときに添える（build.py の id_origin と同じ） */
+export function idOrigin(values: Record<string, string>): string {
+  return values.id?.trim() ? 'id 列' : `スペース ${values.space?.trim() ?? ''} から作った id`;
+}
+
+/** id 列に書いた id の、紛らわしい書き方（空白・「,」・大文字）の警告（build.py の check_id_text と同じ）。止めはしない */
+export function idTextWarning(id: string, values: Record<string, string>): string | null {
+  if (!values.id?.trim()) return null;
+  const found = ([['空白', hasSpace(id)], ['「,」', id.includes(',')], ['大文字', id !== id.toLowerCase()]] as const)
+    .filter(([, hit]) => hit).map(([name]) => name);
+  if (!found.length) return null;
+  return `id「${id}」に${found.join('・')}が入っています（そのままでも使えます。新しく付ける id は、空白・「,」を入れず小文字にしてください。公開後は変えません）`;
+}
+
 export function checkCircles(circles: Row[]): Issue[] {
   const issues: Issue[] = [];
   const seen = new Map<string, Row>();
+  const seenLower = new Map<string, [string, Row]>();
   const err = (r: Row, message: string) => issues.push({ level: 'error', where: 'circle', key: r.key, message: `${label(r.values)}: ${message}` });
+  const warn = (r: Row, message: string) => issues.push({ level: 'warning', where: 'circle', key: r.key, message: `${label(r.values)}: ${message}` });
   for (const r of circles) {
     const v = r.values;
     if (!isDataRow(v, r.extra)) continue;
     const id = circleId(v);
     if (!id) {
-      err(r, 'id もスペース番号もありません');
+      const space = v.space?.trim();
+      err(r, space ? `スペース番号「${space}」から id を作れません（文字か数字が要ります）。id 列に id を書いてください` : 'id もスペース番号もありません');
       continue;
     }
+    const text = idTextWarning(id, v);
+    if (text) warn(r, text);
     const first = seen.get(id);
-    if (first) err(r, `id「${id}」が重複しています（${label(first.values)} と同じ）`);
-    else seen.set(id, r);
+    if (first) {
+      issues.push({ level: 'error', where: 'circle', key: r.key,
+        message: `${label(v)}（${idOrigin(v)}）: id「${id}」が ${label(first.values)}（${idOrigin(first.values)}）と重複しています。`
+          + '★・タグ・メモとお品書きが2つのサークルで混ざるので、どちらかの id 列に別の id を書いてください' });
+    } else {
+      seen.set(id, r);
+      const other = seenLower.get(id.toLowerCase());
+      if (!other) seenLower.set(id.toLowerCase(), [id, r]);
+      else if (other[0] !== id) warn(r, `id「${id}」は ${label(other[1].values)} の id「${other[0]}」と大文字・小文字だけが違います（別のサークルとして扱います）`);
+    }
     if (!v.name.trim()) err(r, 'サークル名（name）が空です');
     for (const k of LINK_KEYS) {
       const url = v[k].trim();
