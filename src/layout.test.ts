@@ -14,7 +14,7 @@ describe.each(Object.entries(generated))('%s', (_, data) => {
 
   const image = data.event.mapImage;
   it.runIf(!!image)('配置図の画像は public/ からの相対パス', () => {
-    expect(image!.src).toMatch(/^[A-Za-z0-9_-][A-Za-z0-9._-]*(\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*\.(png|jpe?g|webp|svg)$/i);
+    expect(image!.src).toMatch(/^[A-Za-z0-9_-][A-Za-z0-9._-]*(\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*\.(png|jpe?g|webp)$/i);
     for (const key of ['alt', 'caption'] as const) expect(['string', 'undefined']).toContain(typeof image![key]);
   });
 

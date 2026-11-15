@@ -137,7 +137,7 @@ uv run caimawaru import <eventId> --fetch
 `layout.json` がないイベントでは、公式の配置図の画像をそのまま載せることもできます（拡大縮小・移動・全画面表示はできるが、スペースを押してもサークルは出ない）。
 載せてよいかは、主催の方針を確かめたうえで運用者が決めます（エージェントは自分で決めて画像を足さない）。
 
-1. 画像（PNG・JPEG・WebP・SVG）を `events/<eventId>/public/data/` に置く（例: `public/data/map.webp`）。SVG はスクリプトなどを含むとエラーになる（[event-data.md](event-data.md#infomapimage)）。
+1. 画像（PNG・JPEG・WebP）を `events/<eventId>/public/data/` に置く（例: `public/data/map.webp`）。SVG・PDF などは PNG・JPEG・WebP に書き出す（[event-data.md](event-data.md#infomapimage)）。
    ファイル名は英数字・`-`・`_`・`.` だけ。差し替えるときはファイル名を変える（公開先の CDN が古い画像を返し続けることがあるため）
 2. `event.json` の `info.mapImage` に書く（[event-data.md の「info.mapImage」](event-data.md#infomapimage)）
    ```sh

@@ -110,12 +110,14 @@ describe('event.json の確認', () => {
   it('info.mapImage は src の形と拡張子だけを見る（build.py と同じ規則）', () => {
     const check = (mapImage: Json) => messages(checkEvent({ storeId: 's', title: 't', info: { name: 'n', date: '2030-01-01', venue: 'v', mapImage } }));
     expect(check({ src: 'data/map.webp' })).toEqual([]);
-    expect(check({ src: 'data/Map.SVG', alt: '説明' })).toEqual([]);
+    expect(check({ src: 'data/Map.JPEG', alt: '説明' })).toEqual([]);
     expect(check({ alt: 'x' })).toEqual(['info.mapImage.src（public/ の下の画像ファイル）がありません']);
     expect(check('data/map.png')).toEqual(['info.mapImage.src（public/ の下の画像ファイル）がありません']);
     for (const src of ['../map.png', '/map.png', 'https://example.com/map.png', 'data/配置図.png', 'data//map.png', 'data/./map.png']) {
       expect(check({ src })).toEqual([`info.mapImage.src は public/ からの相対パスで、英数字・「-」・「_」・「.」・「/」だけにしてください（例: data/map.webp）: ${src}`]);
     }
-    expect(check({ src: 'data/map.gif' })).toEqual(['info.mapImage.src は .png / .jpg / .jpeg / .webp / .svg のどれかにしてください: data/map.gif']);
+    for (const src of ['data/map.gif', 'data/map.svg', 'data/Map.SVG']) {
+      expect(check({ src })).toEqual([`info.mapImage.src は PNG・JPEG・WebP（.png / .jpg / .jpeg / .webp）にしてください。SVG などは PNG・JPEG・WebP に書き出してください: ${src}`]);
+    }
   });
 });

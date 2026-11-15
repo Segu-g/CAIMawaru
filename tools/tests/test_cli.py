@@ -5,6 +5,11 @@ import unittest
 
 from helpers import example_root, run_cli
 
+# 各形式の先頭のバイト（中身の形式の検証に使う）
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 8
+JPEG = b"\xff\xd8\xff\xe0" + b"\0" * 8
+WEBP = b"RIFF\0\0\0\0WEBPVP8 "
+
 
 class CliTest(unittest.TestCase):
     def setUp(self):
@@ -79,47 +84,66 @@ class CliTest(unittest.TestCase):
         return json.loads((self.root / "events/example/public/data/circles.json").read_text(encoding="utf-8"))
 
     def test_map_image_goes_to_circles_json(self):
-        self.write_public("data/map.svg", '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>')
-        self.set_map_image({"src": "data/map.svg", "alt": "架空の会場の配置図", "caption": "出典: 架空"})
+        self.write_public("data/map.webp", WEBP)
+        self.set_map_image({"src": "data/map.webp", "alt": "架空の会場の配置図", "caption": "出典: 架空"})
         code, out, err = self.cli("data", "example")
         self.assertEqual(code, 0, err)
         self.assertNotIn("mapImage", err)
         data = self.circles_json()
-        self.assertEqual(data["event"]["mapImage"], {"src": "data/map.svg", "alt": "架空の会場の配置図", "caption": "出典: 架空"})
+        self.assertEqual(data["event"]["mapImage"], {"src": "data/map.webp", "alt": "架空の会場の配置図", "caption": "出典: 架空"})
         self.assertNotIn("layout", data)
+        for name, content in (("data/map.png", PNG), ("data/map.jpg", JPEG), ("data/map.JPEG", JPEG)):
+            with self.subTest(name=name):
+                self.write_public(name, content)
+                self.set_map_image({"src": name, "alt": "x"})
+                code, _, err = self.cli("check", "example")
+                self.assertEqual(code, 0, err)
         # alt がない・知らないキーは警告だけ
-        self.set_map_image({"src": "data/map.svg", "width": 10})
+        self.set_map_image({"src": "data/map.webp", "width": 10})
         code, _, err = self.cli("check", "example")
         self.assertEqual(code, 0)
         self.assertIn("info.mapImage.alt", err)
         self.assertIn("info.mapImage.width は使いません", err)
 
     def test_map_image_is_not_used_with_layout(self):
-        self.write_public("data/map.png", b"")
+        self.write_public("data/map.png", PNG)
         self.set_map_image({"src": "data/map.png", "alt": "x"}, keep_layout=True)
         code, _, err = self.cli("data", "example")
         self.assertEqual(code, 0, err)
         self.assertIn("info.mapImage は使いません", err)
+        self.assertIn("public/ のファイルは公開されます", err)
         data = self.circles_json()
         self.assertNotIn("mapImage", data["event"])
         self.assertIn("cells", data["layout"])
-        # 使わないので、ファイルがなくても警告だけ
-        self.set_map_image({"src": "data/none.png"}, keep_layout=True)
-        code, _, err = self.cli("check", "example")
-        self.assertEqual(code, 0)
-        self.assertIn("info.mapImage は使いません", err)
+        # 使わないので、ファイルがない・src の形が違うのは警告だけ
+        for image in ({"src": "data/none.png"}, {"src": "../x.png"}, {"src": "data/none.svg"}, "map.png"):
+            with self.subTest(image=image):
+                self.set_map_image(image, keep_layout=True)
+                code, _, err = self.cli("check", "example")
+                self.assertEqual(code, 0, err)
+                self.assertIn("info.mapImage は使いません", err)
+        # ファイルがあれば公開されるので、形式は確かめる
+        self.write_public("data/map.svg", "<svg/>")
+        self.write_public("data/fake.png", "<html><script>alert(1)</script></html>")
+        for src, message in (("data/map.svg", "PNG・JPEG・WebP に書き出してください"), ("data/fake.png", "の中身が PNG ではありません")):
+            with self.subTest(src=src):
+                self.set_map_image({"src": src}, keep_layout=True)
+                code, _, err = self.cli("check", "example")
+                self.assertEqual(code, 1)
+                self.assertIn(message, err)
 
     def test_map_image_errors(self):
         self.write_public("data/map.gif", b"GIF89a")
-        self.write_public("data/map.png", b"")
-        (self.root / "events/example/secret.png").write_bytes(b"")
+        self.write_public("data/map.png", PNG)
+        (self.root / "events/example/secret.png").write_bytes(PNG)
         for image, message in (
             ("map.png", "info.mapImage は"),
             ({"alt": "x"}, "info.mapImage.src"),
             ({"src": "data/none.png", "alt": "x"}, "がありません"),
             ({"src": "data/MAP.png", "alt": "x"}, "大文字小文字"),  # 区別しないファイルシステムでもエラー
             ({"src": "Data/map.png", "alt": "x"}, "大文字小文字"),
-            ({"src": "data/map.gif", "alt": "x"}, ".png / .jpg"),
+            ({"src": "data/map.gif", "alt": "x"}, "PNG・JPEG・WebP（.png / .jpg / .jpeg / .webp）"),
+            ({"src": "data/map.svg", "alt": "x"}, "SVG などは PNG・JPEG・WebP に書き出してください"),  # ファイルがなくても
             ({"src": "../secret.png", "alt": "x"}, "相対パス"),
             ({"src": "/etc/x.png", "alt": "x"}, "相対パス"),
             ({"src": "https://example.com/map.png", "alt": "x"}, "相対パス"),
@@ -132,34 +156,26 @@ class CliTest(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertIn(message, err)
 
-    def test_map_image_svg_that_can_run_scripts(self):
-        self.set_map_image({"src": "data/map.svg", "alt": "x"})
-        for svg, name in (
-            ('<svg><script>alert(1)</script></svg>', "<script"),
-            ('<svg><SVG:Script xlink:href="x.js"/></svg>', "<script"),
-            ('<svg>< script>x</script></svg>', "<script"),
-            ('<svg onload="alert(1)"/>', "on…= の属性"),
-            ('<svg/ONLOAD\n=alert(1)>', "on…= の属性"),
-            ('<svg><a href="java&#x09;script:alert(1)"><rect/></a></svg>', "javascript:"),
-            ('<svg><a href="&#106;ava\nScript&colon;x"/></svg>', "javascript:"),
-            ('<svg><foreignObject><div/></foreignObject></svg>', "<foreignObject"),
-            ('<!DOCTYPE svg [<!ENTITY j "x">]><svg>&j;</svg>', "<!ENTITY"),
+    def test_map_image_content_must_match_extension(self):
+        """名前だけ変えた HTML・SVG など、中身が拡張子の形式でないファイルはエラー（ブラウザが中身から形式を推測することがあるため）。"""
+        for name, content, message in (
+            ("data/map.png", "<html><script>alert(1)</script></html>", "の中身が PNG ではありません（画像でないか、使えない形式）"),
+            ("data/map.png", '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>', "の中身が PNG ではありません"),
+            ("data/map.png", b"", "の中身が PNG ではありません"),
+            ("data/map.webp", b"RIFF\0\0\0\0AVI LIST", "の中身が WebP ではありません"),
+            ("data/map.jpg", PNG, "の中身が JPEG ではありません（PNG）"),
+            ("data/map.webp", b"GIF89a", "の中身が WebP ではありません"),
         ):
-            with self.subTest(svg=svg):
-                self.write_public("data/map.svg", svg)
+            with self.subTest(name=name, content=content):
+                self.write_public(name, content)
+                self.set_map_image({"src": name, "alt": "x"})
                 code, _, err = self.cli("check", "example")
                 self.assertEqual(code, 1)
-                self.assertIn(name, err)
-        self.write_public("data/map.svg", "<svg>".encode("utf-16"))
-        self.assertIn("UTF-8", self.cli("check", "example")[2])
-        # ふつうの SVG（文字の中の on・style）は通す
-        self.write_public("data/map.svg", '<svg xmlns="http://www.w3.org/2000/svg"><text style="font:1px">once on = </text></svg>')
-        code, _, err = self.cli("check", "example")
-        self.assertEqual(code, 0, err)
+                self.assertIn(message, err)
 
     def test_map_image_symlink_outside_public(self):
         (self.root / "events/example/public/data").mkdir(parents=True)
-        (self.root / "events/example/secret.png").write_bytes(b"")
+        (self.root / "events/example/secret.png").write_bytes(PNG)
         try:
             (self.root / "events/example/public/data/link.png").symlink_to(self.root / "events/example/secret.png")
         except OSError:

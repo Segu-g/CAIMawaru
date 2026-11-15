@@ -3,7 +3,7 @@ import type { MapImage as MapImageInfo } from '../types';
 import { fitView, viewBox, type Size } from '../mapView';
 import { usePanZoom } from '../usePanZoom';
 
-// 画像の大きさが取れないとき（大きさを書いていない SVG など）に仮に使う大きさ。縦横比は画像のまま描く
+// 画像の大きさが取れないときに仮に使う大きさ。縦横比は画像のまま描く
 const FALLBACK_SIZE: Size = { w: 1000, h: 1000 };
 
 const DEFAULT_ALT = '会場の配置図（画像）';
@@ -20,6 +20,20 @@ export default function MapImage({ image }: Props) {
   const alt = image.alt || DEFAULT_ALT;
   const [natural, setNatural] = useState<Size | 'error'>();
   const [full, setFull] = useState(false);
+  // 全画面表示。開くたびに履歴を1つ積み、スマホの「戻る」で閉じられるようにする（App のお品書きのシートと同じ）
+  const openFull = () => {
+    history.pushState({ mapFull: true }, '');
+    setFull(true);
+  };
+  const closeFull = () => {
+    if (history.state?.mapFull) history.back(); // popstate で閉じる
+    else setFull(false);
+  };
+  useEffect(() => {
+    const onPop = () => setFull(!!history.state?.mapFull);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   const fullButton = useRef<HTMLButtonElement>(null);
   const wasFull = useRef(false);
   // 閉じたら「全画面で見る」にフォーカスを戻す（押してもフォーカスが移らないブラウザがあるため、自分で戻す）。
@@ -49,17 +63,17 @@ export default function MapImage({ image }: Props) {
       <div className="map-legend map-caption">
         {image.caption && <span>{image.caption}</span>}
         {natural && natural !== 'error' && (
-          <button ref={fullButton} type="button" aria-haspopup="dialog" onClick={() => setFull(true)}>全画面で見る</button>
+          <button ref={fullButton} type="button" aria-haspopup="dialog" onClick={openFull}>全画面で見る</button>
         )}
       </div>
       {full && natural && natural !== 'error' && (
-        <FullScreen url={url} size={natural} alt={alt} caption={image.caption} onClose={() => setFull(false)} />
+        <FullScreen url={url} size={natural} alt={alt} caption={image.caption} onClose={closeFull} />
       )}
     </div>
   );
 }
 
-// 全画面表示。✕・Esc で閉じる（<dialog> の showModal で、開いている間はフォーカスが中にとどまる）
+// 全画面表示。✕・Esc・スマホの「戻る」で閉じる（<dialog> の showModal で、開いている間はフォーカスが中にとどまる）
 function FullScreen({ url, size, alt, caption, onClose }: { url: string; size: Size; alt: string; caption?: string; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {

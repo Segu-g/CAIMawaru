@@ -6,7 +6,6 @@
 
 circles.json はページ（src/）との唯一の境界。形は src/types.ts の CircleData。
 """
-import html
 import json
 import os
 import re
@@ -31,20 +30,11 @@ SLOTS_TEXT = f"{SLOTS[0]}〜{SLOTS[-1]}"
 # 元データのファイル（file）が必須の取り込み元の type
 FILE_SOURCE_TYPES = ("csv", "json")
 # 配置図の画像（info.mapImage.src）。events/<eventId>/public/ からの相対パスで、そのまま URL の一部になる
-MAP_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp", ".svg")
 MAP_IMAGE_SRC = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*")
 MAP_IMAGE_KEYS = ("src", "alt", "caption")
-# SVG の中で、スクリプトを動かせるもの（表示名, 正規表現, 空白・制御文字を除いてから探すか）。
-# 元の文字列と、文字参照（&#106; など）を戻した文字列の両方で探す。javascript: は「java&#x09;script:」などの揺れがあるので空白を除く
-_SVG_TAG = r"<\s*/?\s*(?:[\w.-]+\s*:\s*)?"  # 名前空間の接頭辞（<svg:script）も
-_SVG_SPACES = re.compile(r"[\x00-\x20\x7f-\xa0\u1680\u2000-\u200f\u2028-\u202f\u205f\u3000\ufeff]+")
-SVG_FORBIDDEN = (
-    ("<script", re.compile(_SVG_TAG + r"script\b", re.I), False),
-    ("<foreignObject", re.compile(_SVG_TAG + r"foreignobject\b", re.I), False),
-    ("on…= の属性", re.compile(r"[\s\"'/](?:[\w.-]+:)?on[a-z]+\s*=", re.I), False),
-    ("javascript:", re.compile(r"javascript:", re.I), True),
-    ("<!ENTITY", re.compile(r"<!\s*entity", re.I), False),  # 独自の実体で上の文字列を組み立てられるため
-)
+# 使える形式（拡張子 → 形式の名前）。SVG はスクリプトを動かせるので受け付けない
+MAP_IMAGE_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG", ".webp": "WebP"}
+MAP_IMAGE_FORMATS_TEXT = "PNG・JPEG・WebP"
 
 
 @dataclass
@@ -183,39 +173,68 @@ def _is_listed(public, src):
     return True
 
 
-def svg_problems(text):
-    """SVG の中で、スクリプトを動かせるもの（<script・on…= の属性・javascript:・<foreignObject・<!ENTITY）の一覧。
+def image_format(head):
+    """ファイルの先頭のバイトから分かる画像の形式（PNG・JPEG・WebP）。どれでもなければ None。"""
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "PNG"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "JPEG"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "WebP"
+    return None
 
-    大文字小文字・空白・改行・文字参照（&#106; など）の書き方の揺れを、そろえてから探す。
+
+def _check_map_image_src(event, src, result, where, used):
+    """info.mapImage.src と、それが指すファイルを検証する。
+
+    使わないとき（used=False。layout.json があるイベント）も、public/ にファイルがあれば公開されるので、ファイルの形式だけは確かめる。
     """
-    texts = (text, html.unescape(text))
-    squeezed = tuple(_SVG_SPACES.sub("", t) for t in texts)
-    return [name for name, pattern, squeeze in SVG_FORBIDDEN if any(pattern.search(t) for t in (squeezed if squeeze else texts))]
-
-
-def _check_svg(path, result, where, shown):
-    try:
-        text = path.read_bytes().decode("utf-8-sig")
-    except UnicodeDecodeError:
-        result.errors.append(f"{where}: info.mapImage の SVG {shown} は UTF-8 で書いてください（中身を確かめられないため）")
+    if not MAP_IMAGE_SRC.fullmatch(src):
+        if used:
+            result.errors.append(f"{where}: info.mapImage.src は public/ からの相対パスで、英数字・「-」・「_」・「.」・「/」だけにしてください"
+                                 f"（例: data/map.webp）: {src}")
         return
-    found = svg_problems(text)
-    if found:
-        result.errors.append(f"{where}: info.mapImage の SVG {shown} にスクリプトを動かせるもの（{'・'.join(found)}）があります。"
-                             "取り除くか、PNG・WebP にしてください")
+    public = (event.dir / "public").resolve()
+    path = (public / src).resolve()
+    shown = event.rel(event.dir / "public" / src)
+    if not path.is_relative_to(public):
+        if used:
+            result.errors.append(f"{where}: info.mapImage.src が {event.rel(public)}/ の外を指しています: {src}")
+        return
+    exists = path.is_file() and _is_listed(public, src)
+    expected = MAP_IMAGE_FORMATS.get(os.path.splitext(src)[1].lower())
+    if expected is None:
+        if used or exists:
+            result.errors.append(f"{where}: info.mapImage.src は {MAP_IMAGE_FORMATS_TEXT}（{' / '.join(MAP_IMAGE_FORMATS)}）にしてください。"
+                                 f"SVG などは {MAP_IMAGE_FORMATS_TEXT} に書き出してください: {src}")
+        return
+    if not exists:
+        if used:
+            result.errors.append(f"{where}: info.mapImage.src のファイル {shown} がありません（大文字小文字も同じ名前にしてください）")
+        return
+    # 名前だけ変えた HTML・SVG などを止める（ブラウザは中身から形式を推測することがあるため）
+    with open(path, "rb") as f:
+        actual = image_format(f.read(16))
+    if actual != expected:
+        result.errors.append(f"{where}: info.mapImage.src のファイル {shown} の中身が {expected} ではありません"
+                             f"（{actual or '画像でないか、使えない形式'}）。{MAP_IMAGE_FORMATS_TEXT} に書き出したファイルにしてください")
 
 
 def _check_map_image(event, info, result, where):
     """info.mapImage（配置図の画像）を検証する。ファイルは events/<eventId>/public/ の下にあること。
 
     ページは src を自分の URL からの相対パスとして読むので、public/ の外を指す・URL に使えない文字を含むものはエラーにする。
-    layout.json があるイベントでは画像は使わない（検証せずに警告し、circles.json に入れない）。
+    layout.json があるイベントでは画像は使わない（警告し、circles.json に入れない）。src が public/ のファイルを指していれば、その形式だけ確かめる。
     """
     if "mapImage" not in info:
         return
     if event.layout_json.exists():
-        result.warnings.append(f"{where}: {event.rel(event.layout_json)} があるので info.mapImage は使いません（配置図は描き起こしだけを出します）")
-        del info["mapImage"]
+        image = info.pop("mapImage")
+        result.warnings.append(f"{where}: {event.rel(event.layout_json)} があるので info.mapImage は使いません（配置図は描き起こしだけを出します）。"
+                               "使わなくても、public/ のファイルは公開されます")
+        src = image.get("src") if isinstance(image, dict) else None
+        if isinstance(src, str) and src:
+            _check_map_image_src(event, src, result, where, used=False)
         return
     image = info["mapImage"]
     if not isinstance(image, dict):
@@ -233,22 +252,7 @@ def _check_map_image(event, info, result, where):
     if not isinstance(src, str) or not src:
         result.errors.append(f"{where}: info.mapImage.src（public/ の下の画像ファイル）がありません")
         return
-    if not MAP_IMAGE_SRC.fullmatch(src):
-        result.errors.append(f"{where}: info.mapImage.src は public/ からの相対パスで、英数字・「-」・「_」・「.」・「/」だけにしてください"
-                             f"（例: data/map.webp）: {src}")
-        return
-    if not src.lower().endswith(MAP_IMAGE_EXTENSIONS):
-        result.errors.append(f"{where}: info.mapImage.src は {' / '.join(MAP_IMAGE_EXTENSIONS)} のどれかにしてください: {src}")
-        return
-    public = (event.dir / "public").resolve()
-    path = (public / src).resolve()
-    shown = event.rel(event.dir / "public" / src)
-    if not path.is_relative_to(public):
-        result.errors.append(f"{where}: info.mapImage.src が {event.rel(public)}/ の外を指しています: {src}")
-    elif not path.is_file() or not _is_listed(public, src):
-        result.errors.append(f"{where}: info.mapImage.src のファイル {shown} がありません（大文字小文字も同じ名前にしてください）")
-    elif src.lower().endswith(".svg"):
-        _check_svg(path, result, where, shown)
+    _check_map_image_src(event, src, result, where, used=True)
 
 
 def check_config(event, result):
